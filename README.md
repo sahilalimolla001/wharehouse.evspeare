@@ -28,7 +28,15 @@ The older static prototype remains in the root files (`index.html`, `styles.css`
 
 ## Production
 
-Commercial deployment is now set up for Render Blueprint from the repository root:
+Commercial deployment can use alwaysdata or Render.
+
+For alwaysdata:
+
+```text
+DEPLOY_ALWAYSDATA.md
+```
+
+For Render Blueprint from the repository root:
 
 ```text
 render.yaml
