@@ -1,0 +1,17 @@
+{
+  "name": "Evsphere Warehouse Staff",
+  "short_name": "EW Staff",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f7f4",
+  "theme_color": "#0f766e",
+  "description": "Mobile warehouse staff app for scanning, stock movement, picking, packing, and dispatch.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

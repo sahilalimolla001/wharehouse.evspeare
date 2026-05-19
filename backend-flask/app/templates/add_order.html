@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block page_title %}Add Order{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-3">
+        <label class="form-label">Order Number</label>
+        <input class="form-control" name="order_number" placeholder="Auto if empty">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Customer Name</label>
+        <input class="form-control" name="customer_name" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Customer Phone</label>
+        <input class="form-control" name="customer_phone">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Product</label>
+        <select class="form-select" name="product_id" required>
+          {% for product in products %}
+            <option value="{{ product.id }}">{{ product.sku }} / {{ product.name }} / Available {{ product.available_quantity }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Quantity</label>
+        <input class="form-control" name="quantity" type="number" min="1" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Priority</label>
+        <select class="form-select" name="priority">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Assign To</label>
+        <select class="form-select" name="assigned_to_id">
+          <option value="">Unassigned</option>
+          {% for user in staff %}
+            <option value="{{ user.id }}">{{ user.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Customer Address</label>
+        <textarea class="form-control" name="customer_address" rows="3"></textarea>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Create Order</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

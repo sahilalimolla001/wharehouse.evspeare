@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block page_title %}Products{% endblock %}
+
+{% block content %}
+  {% set can_manage_products = current_user_can("manager") %}
+  <section class="panel">
+    <div class="panel-heading">
+      <form class="d-flex gap-2" method="get">
+        <input class="form-control" name="q" placeholder="Search product or SKU" value="{{ q }}">
+        <button class="btn btn-outline-dark" type="submit">Search</button>
+      </form>
+      {% if can_manage_products %}
+        <div class="d-flex gap-2">
+          <form method="post" action="{{ url_for('products.import_images') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-dark" type="submit">Import Images</button>
+          </form>
+          <a class="btn btn-primary" href="{{ url_for('products.product_form') }}">Add Product</a>
+        </div>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Description</th>
+            <th>Value</th>
+            {% if can_manage_products %}
+              <th class="text-end">Actions</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for product in products %}
+            <tr>
+              <td><strong>{{ product.sku }}</strong></td>
+              <td>
+                <div class="product-cell">
+                  {% if product.image_url %}
+                    <img class="product-thumb" src="{{ url_for('api.api_product_image', product_id=product.id) }}" alt="{{ product.name }}" loading="lazy">
+                  {% endif %}
+                  <span>{{ product.name }}</span>
+                </div>
+              </td>
+              <td>{{ product.description or "-" }}</td>
+              <td>{{ product.purchase_price|money }}</td>
+              {% if can_manage_products %}
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-dark" href="{{ url_for('products.product_form', product_id=product.id) }}">Edit</a>
+                </td>
+              {% endif %}
+            </tr>
+          {% else %}
+            <tr><td colspan="{{ 5 if can_manage_products else 4 }}" class="text-secondary">No products yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

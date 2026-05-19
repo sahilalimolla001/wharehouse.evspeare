@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <h2>Settings</h2>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="integration-box">
+          <strong>Database</strong>
+          <span>{{ integrations.database }}</span>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="integration-box">
+          <strong>Image Storage</strong>
+          <span>{{ integrations.google_storage }}</span>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="integration-box">
+          <strong>Google Sheet Sync</strong>
+          <span>{{ integrations.google_sheets }}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

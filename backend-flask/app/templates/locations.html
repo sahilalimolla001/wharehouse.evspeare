@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block page_title %}Warehouse Locations{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <h2>Rack / Shelf / Bin</h2>
+      {% if current_user_can("manager") %}
+        <a class="btn btn-primary" href="{{ url_for('stock.add_location') }}">Add Location</a>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Zone</th><th>Rack</th><th>Shelf</th><th>Bin</th><th>Barcode</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for location in locations %}
+            <tr>
+              <td>{{ location.zone }}</td>
+              <td>{{ location.rack }}</td>
+              <td>{{ location.shelf }}</td>
+              <td>{{ location.bin_code }}</td>
+              <td><code>{{ location.barcode }}</code></td>
+              <td>{{ "Active" if location.is_active else "Inactive" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-secondary">No locations yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

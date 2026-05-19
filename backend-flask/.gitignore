@@ -1,0 +1,10 @@
+.env
+*.db
+*.sqlite
+*.sqlite3
+*.log
+__pycache__/
+*.pyc
+instance/
+google-service-account*.json
+service-account*.json

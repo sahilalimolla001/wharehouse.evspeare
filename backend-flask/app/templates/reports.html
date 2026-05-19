@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block page_title %}Reports{% endblock %}
+
+{% block content %}
+  <section class="metric-grid">
+    <article class="metric-card"><span>Current Stock Value</span><strong>{{ stock_value|money }}</strong></article>
+    <article class="metric-card warning"><span>Low Stock Report</span><strong>{{ low_stock|length }}</strong></article>
+    <article class="metric-card"><span>Supplier Report</span><strong>{{ supplier_count }}</strong></article>
+    <article class="metric-card"><span>Total Stock In</span><strong>{{ total_stock_in }}</strong></article>
+    <article class="metric-card"><span>Total Stock Out</span><strong>{{ total_stock_out }}</strong></article>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-heading">
+      <h2>Export</h2>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary" href="{{ url_for('reports.current_stock_csv') }}">Download Current Stock CSV</a>
+        <form method="post" action="{{ url_for('reports.export_google_sheet') }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-primary" type="submit">Sync Google Sheet Now</button>
+        </form>
+      </div>
+    </div>
+    <p class="text-secondary mb-0">Google Sheet auto-sync runs after stock in, stock out, and mobile location updates. This button manually refreshes the same sheet.</p>
+  </section>
+{% endblock %}

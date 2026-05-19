@@ -1,0 +1,297 @@
+from datetime import datetime
+from decimal import Decimal
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from .extensions import db
+
+
+class TimestampMixin:
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class User(TimestampMixin, db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(180), unique=True, nullable=False, index=True)
+    phone = db.Column(db.String(30))
+    role = db.Column(db.String(30), default="staff", nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    stock_ins = db.relationship("StockIn", back_populates="received_by", foreign_keys="StockIn.received_by_id")
+    stock_outs = db.relationship("StockOut", back_populates="dispatched_by", foreign_keys="StockOut.dispatched_by_id")
+    activity_logs = db.relationship("ActivityLog", back_populates="user")
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f"<User {self.email}>"
+
+
+class Category(TimestampMixin, db.Model):
+    __tablename__ = "categories"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), unique=True, nullable=False)
+    description = db.Column(db.Text)
+
+    products = db.relationship("Product", back_populates="category")
+
+    def __repr__(self):
+        return f"<Category {self.name}>"
+
+
+class Supplier(TimestampMixin, db.Model):
+    __tablename__ = "suppliers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False, index=True)
+    phone = db.Column(db.String(30))
+    email = db.Column(db.String(180))
+    address = db.Column(db.Text)
+    gst_number = db.Column(db.String(40))
+    notes = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    products = db.relationship("Product", back_populates="supplier")
+    stock_ins = db.relationship("StockIn", back_populates="supplier")
+
+    def __repr__(self):
+        return f"<Supplier {self.name}>"
+
+
+class WarehouseLocation(TimestampMixin, db.Model):
+    __tablename__ = "warehouse_locations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    zone = db.Column(db.String(30), nullable=False)
+    rack = db.Column(db.String(30), nullable=False)
+    shelf = db.Column(db.String(30), nullable=False)
+    bin_code = db.Column(db.String(30), nullable=False)
+    barcode = db.Column(db.String(80), unique=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    inventory_items = db.relationship("Inventory", back_populates="location")
+
+    __table_args__ = (
+        db.UniqueConstraint("zone", "rack", "shelf", "bin_code", name="uq_location_path"),
+    )
+
+    @property
+    def full_code(self):
+        return f"Zone {self.zone} / Rack {self.rack} / Shelf {self.shelf} / Bin {self.bin_code}"
+
+    def __repr__(self):
+        return f"<WarehouseLocation {self.full_code}>"
+
+
+class Product(TimestampMixin, db.Model):
+    __tablename__ = "products"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(180), nullable=False)
+    sku = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    brand = db.Column(db.String(120))
+    unit = db.Column(db.String(30), default="pcs", nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"))
+    supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"))
+    purchase_price = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    selling_price = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    minimum_stock = db.Column(db.Integer, default=0, nullable=False)
+    description = db.Column(db.Text)
+    image_url = db.Column(db.String(500))
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    category = db.relationship("Category", back_populates="products")
+    supplier = db.relationship("Supplier", back_populates="products")
+    inventory_items = db.relationship("Inventory", back_populates="product", cascade="all, delete-orphan")
+    stock_ins = db.relationship("StockIn", back_populates="product")
+    stock_outs = db.relationship("StockOut", back_populates="product")
+    order_items = db.relationship("OrderItem", back_populates="product")
+    barcodes = db.relationship("Barcode", back_populates="product", cascade="all, delete-orphan")
+
+    @property
+    def total_quantity(self):
+        return sum(item.quantity for item in self.inventory_items)
+
+    @property
+    def available_quantity(self):
+        return sum(item.available_quantity for item in self.inventory_items)
+
+    @property
+    def stock_value(self):
+        return Decimal(self.purchase_price or 0) * self.total_quantity
+
+    @property
+    def is_low_stock(self):
+        return self.total_quantity <= self.minimum_stock
+
+    def __repr__(self):
+        return f"<Product {self.sku}>"
+
+
+class Inventory(TimestampMixin, db.Model):
+    __tablename__ = "inventory"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey("warehouse_locations.id"), nullable=False)
+    quantity = db.Column(db.Integer, default=0, nullable=False)
+    reserved_quantity = db.Column(db.Integer, default=0, nullable=False)
+
+    product = db.relationship("Product", back_populates="inventory_items")
+    location = db.relationship("WarehouseLocation", back_populates="inventory_items")
+
+    __table_args__ = (
+        db.UniqueConstraint("product_id", "location_id", name="uq_inventory_product_location"),
+    )
+
+    @property
+    def available_quantity(self):
+        return max(self.quantity - self.reserved_quantity, 0)
+
+    def __repr__(self):
+        return f"<Inventory product={self.product_id} location={self.location_id} qty={self.quantity}>"
+
+
+class StockIn(TimestampMixin, db.Model):
+    __tablename__ = "stock_ins"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"))
+    location_id = db.Column(db.Integer, db.ForeignKey("warehouse_locations.id"), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    unit_cost = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    invoice_number = db.Column(db.String(120))
+    received_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    notes = db.Column(db.Text)
+    received_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    product = db.relationship("Product", back_populates="stock_ins")
+    supplier = db.relationship("Supplier", back_populates="stock_ins")
+    location = db.relationship("WarehouseLocation")
+    received_by = db.relationship("User", back_populates="stock_ins", foreign_keys=[received_by_id])
+
+    def __repr__(self):
+        return f"<StockIn product={self.product_id} qty={self.quantity}>"
+
+
+class StockOut(TimestampMixin, db.Model):
+    __tablename__ = "stock_outs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"))
+    location_id = db.Column(db.Integer, db.ForeignKey("warehouse_locations.id"), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.String(40), default="sale", nullable=False)
+    dispatched_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    notes = db.Column(db.Text)
+    dispatched_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    product = db.relationship("Product", back_populates="stock_outs")
+    order = db.relationship("Order", back_populates="stock_outs")
+    location = db.relationship("WarehouseLocation")
+    dispatched_by = db.relationship("User", back_populates="stock_outs", foreign_keys=[dispatched_by_id])
+
+    def __repr__(self):
+        return f"<StockOut product={self.product_id} qty={self.quantity}>"
+
+
+class Order(TimestampMixin, db.Model):
+    __tablename__ = "orders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_number = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    external_source = db.Column(db.String(80), index=True)
+    external_order_id = db.Column(db.String(120), index=True)
+    source_payload = db.Column(db.Text)
+    customer_name = db.Column(db.String(160), nullable=False)
+    customer_phone = db.Column(db.String(30))
+    customer_address = db.Column(db.Text)
+    status = db.Column(db.String(40), default="pending", nullable=False)
+    priority = db.Column(db.String(20), default="normal", nullable=False)
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    expected_dispatch_date = db.Column(db.Date)
+    completed_at = db.Column(db.DateTime)
+
+    assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    items = db.relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    stock_outs = db.relationship("StockOut", back_populates="order")
+
+    __table_args__ = (
+        db.UniqueConstraint("external_source", "external_order_id", name="uq_order_external_reference"),
+    )
+
+    @property
+    def total_items(self):
+        return sum(item.quantity for item in self.items)
+
+    @property
+    def total_value(self):
+        return sum(Decimal(item.unit_price or 0) * item.quantity for item in self.items)
+
+    def __repr__(self):
+        return f"<Order {self.order_number}>"
+
+
+class OrderItem(TimestampMixin, db.Model):
+    __tablename__ = "order_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    picked_quantity = db.Column(db.Integer, default=0, nullable=False)
+    packed_quantity = db.Column(db.Integer, default=0, nullable=False)
+    unit_price = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+
+    order = db.relationship("Order", back_populates="items")
+    product = db.relationship("Product", back_populates="order_items")
+
+    def __repr__(self):
+        return f"<OrderItem order={self.order_id} product={self.product_id}>"
+
+
+class Barcode(TimestampMixin, db.Model):
+    __tablename__ = "barcodes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    code = db.Column(db.String(160), unique=True, nullable=False, index=True)
+    barcode_type = db.Column(db.String(30), default="QR", nullable=False)
+    payload = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    product = db.relationship("Product", back_populates="barcodes")
+
+    def __repr__(self):
+        return f"<Barcode {self.code}>"
+
+
+class ActivityLog(TimestampMixin, db.Model):
+    __tablename__ = "activity_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    action = db.Column(db.String(80), nullable=False)
+    entity_type = db.Column(db.String(80))
+    entity_id = db.Column(db.Integer)
+    message = db.Column(db.String(255), nullable=False)
+    meta_json = db.Column(db.Text)
+
+    user = db.relationship("User", back_populates="activity_logs")
+
+    def __repr__(self):
+        return f"<ActivityLog {self.action}>"

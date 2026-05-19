@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block page_title %}{{ "Edit Product" if product else "Add Product" }}{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="post" class="row g-3" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-4">
+        <label class="form-label">SKU / Barcode</label>
+        <input class="form-control" name="sku" required value="{{ product.sku if product else '' }}">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Product Name</label>
+        <input class="form-control" name="name" required value="{{ product.name if product else '' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Category</label>
+        <select class="form-select" name="category_id">
+          <option value="">Select category</option>
+          {% for category in categories %}
+            <option value="{{ category.id }}" {% if product and product.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Supplier</label>
+        <select class="form-select" name="supplier_id">
+          <option value="">Select supplier</option>
+          {% for supplier in suppliers %}
+            <option value="{{ supplier.id }}" {% if product and product.supplier_id == supplier.id %}selected{% endif %}>{{ supplier.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Brand</label>
+        <input class="form-control" name="brand" value="{{ product.brand if product else '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Unit</label>
+        <input class="form-control" name="unit" value="{{ product.unit if product else 'pcs' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Purchase Price</label>
+        <input class="form-control" name="purchase_price" type="number" step="0.01" value="{{ product.purchase_price if product else 0 }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Selling Price</label>
+        <input class="form-control" name="selling_price" type="number" step="0.01" value="{{ product.selling_price if product else 0 }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Minimum Stock Alert</label>
+        <input class="form-control" name="minimum_stock" type="number" value="{{ product.minimum_stock if product else 0 }}">
+      </div>
+      <div class="col-md-12">
+        <label class="form-label">Image URL / Google Cloud Storage URL</label>
+        <input class="form-control" name="image_url" value="{{ product.image_url if product else '' }}">
+        <div class="form-text">Manual URL use karo, ya niche file upload karo.</div>
+      </div>
+      <div class="col-md-12">
+        <label class="form-label">Upload Product Image To Google Cloud Storage</label>
+        <input class="form-control" name="image_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+      </div>
+      <div class="col-md-12">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" name="description" rows="3">{{ product.description if product else '' }}</textarea>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save Product</button>
+        <a class="btn btn-outline-dark" href="{{ url_for('products.products') }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

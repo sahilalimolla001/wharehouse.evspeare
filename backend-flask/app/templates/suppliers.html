@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block page_title %}Suppliers{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <h2>Supplier Management</h2>
+      <a class="btn btn-primary" href="{{ url_for('suppliers.add_supplier') }}">Add Supplier</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>GST</th><th>Products</th></tr></thead>
+        <tbody>
+          {% for supplier in suppliers %}
+            <tr>
+              <td>{{ supplier.name }}</td>
+              <td>{{ supplier.phone or "-" }}</td>
+              <td>{{ supplier.email or "-" }}</td>
+              <td>{{ supplier.gst_number or "-" }}</td>
+              <td>{{ supplier.products|length }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-secondary">No suppliers yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total Products</span>
+      <strong>{{ total_products }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Total Stock Value</span>
+      <strong>{{ total_stock_value|money }}</strong>
+    </article>
+    <article class="metric-card warning">
+      <span>Low Stock Items</span>
+      <strong>{{ low_stock_items|length }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Today Stock In</span>
+      <strong>{{ today_stock_in }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Today Stock Out</span>
+      <strong>{{ today_stock_out }}</strong>
+    </article>
+    <article class="metric-card warning">
+      <span>Pending Orders</span>
+      <strong>{{ pending_orders }}</strong>
+    </article>
+    <article class="metric-card success">
+      <span>Completed Orders</span>
+      <strong>{{ completed_orders }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Total Stock Units</span>
+      <strong>{{ total_stock_units }}</strong>
+    </article>
+  </section>
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-6">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Low Stock Items</h2>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('products.products') }}">View products</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>SKU</th><th>Product</th><th>Qty</th><th>Min</th></tr></thead>
+            <tbody>
+              {% for product in low_stock_items %}
+                <tr>
+                  <td>{{ product.sku }}</td>
+                  <td>{{ product.name }}</td>
+                  <td>{{ product.total_quantity }}</td>
+                  <td>{{ product.minimum_stock }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="4" class="text-secondary">No low stock item.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-6">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Top Selling Products</h2>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('reports.reports') }}">Reports</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>SKU</th><th>Product</th><th>Sold</th></tr></thead>
+            <tbody>
+              {% for row in top_selling_rows %}
+                <tr><td>{{ row.sku }}</td><td>{{ row.name }}</td><td>{{ row.sold_qty }}</td></tr>
+              {% else %}
+                <tr><td colspan="3" class="text-secondary">No stock out yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block page_title %}Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <form class="d-flex gap-2" method="get">
+        <input class="form-control" name="q" placeholder="Search SKU, product, brand, or location" value="{{ q }}">
+        <button class="btn btn-outline-dark" type="submit">Search</button>
+        {% if q %}
+          <a class="btn btn-outline-secondary" href="{{ url_for('stock.inventory') }}">Clear</a>
+        {% endif %}
+      </form>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary" href="{{ url_for('stock.stock_in') }}">Stock In</a>
+        <a class="btn btn-outline-danger" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>SKU</th><th>Product</th><th>Bin ID</th><th>Qty</th><th>Reserved</th><th>Available</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in inventory_rows %}
+            <tr>
+              <td>{{ row.product.sku }}</td>
+              <td>{{ row.product.name }}</td>
+              <td>{{ row.location.bin_code }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.reserved_quantity }}</td>
+              <td>{{ row.available_quantity }}</td>
+              <td>
+                {% if row.product.is_low_stock %}
+                  <span class="badge text-bg-warning">Low</span>
+                {% else %}
+                  <span class="badge text-bg-success">OK</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="text-secondary">{{ "No inventory found." if q else "No inventory yet." }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block page_title %}Stock In{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="post" class="row g-3" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-4">
+        <label class="form-label">Product</label>
+        <select class="form-select" name="product_id" required>
+          {% for product in products %}
+            <option value="{{ product.id }}">{{ product.sku }} / {{ product.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Supplier</label>
+        <select class="form-select" name="supplier_id">
+          <option value="">No supplier</option>
+          {% for supplier in suppliers %}
+            <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Warehouse Location</label>
+        <select class="form-select" name="location_id" required>
+          {% for location in locations %}
+            <option value="{{ location.id }}">{{ location.full_code }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Quantity</label>
+        <input class="form-control" name="quantity" type="number" min="1" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Unit Cost</label>
+        <input class="form-control" name="unit_cost" type="number" step="0.01">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Purchase Invoice</label>
+        <input class="form-control" name="invoice_number">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Note</label>
+        <input class="form-control" name="notes">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Product Photo</label>
+        <input class="form-control" name="image_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        <div class="form-text">Photo Google Cloud mein selected product SKU ke filename se save hogi.</div>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Save Stock In</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

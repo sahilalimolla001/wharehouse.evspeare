@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block page_title %}Users / Staff{% endblock %}
+
+{% block content %}
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <section class="panel">
+        <h2>Add Staff</h2>
+        <form method="post" class="d-grid gap-3">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input class="form-control" name="full_name" placeholder="Full name" required>
+          <input class="form-control" name="email" type="email" placeholder="Email" required>
+          <input class="form-control" name="phone" placeholder="Phone">
+          <select class="form-select" name="role">
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+            <option value="staff">Warehouse Staff</option>
+            <option value="picker">Picker</option>
+            <option value="packer">Packer</option>
+            <option value="delivery">Delivery Staff</option>
+          </select>
+          <input class="form-control" name="password" type="password" placeholder="Password" value="staff123">
+          <button class="btn btn-primary" type="submit">Save User</button>
+        </form>
+      </section>
+    </div>
+    <div class="col-lg-8">
+      <section class="panel">
+        <h2>Team</h2>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for user in users %}
+                <tr>
+                  <td>{{ user.full_name }}</td>
+                  <td>{{ user.email }}</td>
+                  <td>{{ user.phone or "-" }}</td>
+                  <td>{{ role_label(user.role) }}</td>
+                  <td>{{ "Active" if user.is_active else "Inactive" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

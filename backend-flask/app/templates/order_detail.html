@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block page_title %}Order {{ order.order_number }}{% endblock %}
+
+{% block content %}
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Pick List</h2>
+          <span class="badge text-bg-secondary">{{ order.status|title }}</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>SKU</th><th>Product</th><th>Qty</th><th>Picked</th><th>Packed</th></tr></thead>
+            <tbody>
+              {% for item in order.items %}
+                <tr>
+                  <td>{{ item.product.sku }}</td>
+                  <td>{{ item.product.name }}</td>
+                  <td>{{ item.quantity }}</td>
+                  <td>{{ item.picked_quantity }}</td>
+                  <td>{{ item.packed_quantity }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-4">
+      <section class="panel">
+        <h2>Dispatch Status</h2>
+        <p class="text-secondary mb-1">{{ order.customer_name }}</p>
+        <p class="text-secondary">{{ order.customer_phone or "-" }}</p>
+        {% if current_user_can("manager", "staff", "picker", "packer", "delivery") %}
+          <form method="post" action="{{ url_for('orders.update_order_status', order_id=order.id) }}" class="d-grid gap-2">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <select class="form-select" name="status">
+              {% for status in ["pending", "picking", "packed", "dispatched", "completed", "cancelled"] %}
+                <option value="{{ status }}" {% if order.status == status %}selected{% endif %}>{{ status|title }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-primary" type="submit">Update Status</button>
+          </form>
+        {% else %}
+          <p class="text-secondary mb-0">View-only access.</p>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+{% endblock %}

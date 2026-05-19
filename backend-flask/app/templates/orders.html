@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block page_title %}Orders{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <h2>Order Management</h2>
+      {% if current_user_can("manager", "staff") %}
+        <a class="btn btn-primary" href="{{ url_for('orders.add_order') }}">Add Order</a>
+      {% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Priority</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for order in orders %}
+            <tr>
+              <td>{{ order.order_number }}</td>
+              <td>{{ order.customer_name }}</td>
+              <td>{{ order.total_items }}</td>
+              <td>{{ order.priority|title }}</td>
+              <td><span class="badge text-bg-secondary">{{ order.status|title }}</span></td>
+              <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=order.id) }}">Open</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-secondary">No orders yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

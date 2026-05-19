@@ -1,0 +1,101 @@
+from functools import wraps
+
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+
+from ..models import User
+
+auth_bp = Blueprint("auth", __name__)
+
+ROLE_LABELS = {
+    "admin": "Admin",
+    "manager": "Manager",
+    "staff": "Warehouse Staff",
+    "picker": "Picker",
+    "packer": "Packer",
+    "delivery": "Delivery Staff",
+}
+
+
+def get_current_user():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    return User.query.filter_by(id=user_id, is_active=True).first()
+
+
+def user_has_role(user, *roles):
+    if not user or not user.is_active:
+        return False
+    if not roles:
+        return True
+    allowed_roles = {role for role in roles if role}
+    return user.role == "admin" or user.role in allowed_roles
+
+
+def current_user_can(*roles):
+    return user_has_role(get_current_user(), *roles)
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if not get_current_user():
+            return redirect(url_for("auth.login", next=request.path))
+        return view(*args, **kwargs)
+
+    return wrapped_view
+
+
+def role_required(*roles):
+    def decorator(view):
+        @wraps(view)
+        def wrapped_view(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                return redirect(url_for("auth.login", next=request.path))
+            if not user_has_role(user, *roles):
+                flash("You do not have permission to open that page.", "warning")
+                return redirect(url_for("dashboard.dashboard"))
+            return view(*args, **kwargs)
+
+        return wrapped_view
+
+    return decorator
+
+
+@auth_bp.app_context_processor
+def inject_current_user():
+    return {
+        "current_user": get_current_user(),
+        "current_user_can": current_user_can,
+        "role_label": lambda role: ROLE_LABELS.get(role, str(role or "").title()),
+    }
+
+
+@auth_bp.route("/")
+def home():
+    if get_current_user():
+        return redirect(url_for("dashboard.dashboard"))
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        user = User.query.filter_by(email=email, is_active=True).first()
+        if user and user.check_password(password):
+            session["user_id"] = user.id
+            session["user_role"] = user.role
+            flash("Welcome back.", "success")
+            return redirect(request.args.get("next") or url_for("dashboard.dashboard"))
+        flash("Invalid email or password.", "danger")
+    return render_template("login.html")
+
+
+@auth_bp.route("/logout")
+def logout():
+    session.clear()
+    flash("Logged out.", "info")
+    return redirect(url_for("auth.login"))

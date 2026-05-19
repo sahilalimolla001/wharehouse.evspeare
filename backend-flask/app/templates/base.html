@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+  </head>
+  <body>
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <a class="brand" href="{{ url_for('dashboard.dashboard') }}">
+          <span>EW</span>
+          <strong>Evsphere</strong>
+        </a>
+        <nav class="nav flex-column gap-1">
+          <a class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}" href="{{ url_for('dashboard.dashboard') }}">Dashboard</a>
+          <a class="nav-link {% if request.endpoint in ['products.products', 'products.product_form'] %}active{% endif %}" href="{{ url_for('products.products') }}">Products</a>
+          {% if current_user_can("manager") %}
+            <a class="nav-link {% if request.endpoint in ['suppliers.suppliers', 'suppliers.add_supplier'] %}active{% endif %}" href="{{ url_for('suppliers.suppliers') }}">Suppliers</a>
+          {% endif %}
+          {% if current_user_can("manager", "staff") %}
+            <a class="nav-link {% if request.endpoint == 'stock.stock_in' %}active{% endif %}" href="{{ url_for('stock.stock_in') }}">Stock In</a>
+            <a class="nav-link {% if request.endpoint == 'stock.stock_out' %}active{% endif %}" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
+          {% endif %}
+          <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
+          <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
+          <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
+          {% if current_user_can("manager") %}
+            <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}">Reports</a>
+          {% endif %}
+          {% if current_user_can("admin") %}
+            <a class="nav-link {% if request.endpoint == 'users.users' %}active{% endif %}" href="{{ url_for('users.users') }}">Users</a>
+            <a class="nav-link {% if request.endpoint == 'users.settings' %}active{% endif %}" href="{{ url_for('users.settings') }}">Settings</a>
+          {% endif %}
+        </nav>
+      </aside>
+
+      <main class="admin-main">
+        <header class="admin-topbar">
+          <div>
+            <p class="section-kicker">Warehouse Admin</p>
+            <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            {% if current_user %}
+              <span class="user-pill">{{ current_user.full_name }} / {{ role_label(current_user.role) }}</span>
+              <a class="btn btn-outline-dark btn-sm" href="{{ url_for('auth.logout') }}">Logout</a>
+            {% endif %}
+          </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-stack">
+              {% for category, message in messages %}
+                <div class="alert alert-{{ category }} mb-2">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

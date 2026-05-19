@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Add Supplier{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-6">
+        <label class="form-label">Supplier Name</label>
+        <input class="form-control" name="name" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Phone</label>
+        <input class="form-control" name="phone">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">GST / Details</label>
+        <input class="form-control" name="gst_number">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input class="form-control" name="email" type="email">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Address</label>
+        <input class="form-control" name="address">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes" rows="3"></textarea>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Save Supplier</button>
+        <a class="btn btn-outline-dark" href="{{ url_for('suppliers.suppliers') }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Stock Out{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-6">
+        <label class="form-label">Available Inventory</label>
+        <select class="form-select" name="inventory_id" required>
+          {% for row in inventory_rows %}
+            <option value="{{ row.id }}">{{ row.product.sku }} / {{ row.product.name }} / {{ row.location.full_code }} / Qty {{ row.available_quantity }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Quantity</label>
+        <input class="form-control" name="quantity" type="number" min="1" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Reason</label>
+        <select class="form-select" name="reason">
+          <option value="sale">Sale</option>
+          <option value="damage">Damage</option>
+          <option value="return">Return</option>
+          <option value="transfer">Transfer</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Note</label>
+        <input class="form-control" name="notes">
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Save Stock Out</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

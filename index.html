@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="hi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f766e" />
+    <title>Evsphere Warehouse</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">EW</div>
+          <div>
+            <p class="eyebrow">Warehouse Suite</p>
+            <h1>Evsphere</h1>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Sections">
+          <button class="nav-item active" type="button" data-view="dashboard" aria-label="Dashboard">
+            <span data-icon="layout-dashboard"></span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" type="button" data-view="inventory" aria-label="Inventory">
+            <span data-icon="boxes"></span>
+            <span>Inventory</span>
+          </button>
+          <button class="nav-item" type="button" data-view="movements" aria-label="Stock Movements">
+            <span data-icon="repeat"></span>
+            <span>Movements</span>
+          </button>
+          <button class="nav-item" type="button" data-view="orders" aria-label="Orders">
+            <span data-icon="clipboard-list"></span>
+            <span>Orders</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-panel">
+          <p class="panel-label">Today</p>
+          <strong id="today-date">--</strong>
+          <span id="warehouse-status">System ready</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operations Control</p>
+            <h2 id="view-title">Warehouse Dashboard</h2>
+          </div>
+          <div class="top-actions">
+            <label class="search-field">
+              <span data-icon="search"></span>
+              <input id="global-search" type="search" placeholder="Search SKU, item, location" autocomplete="off" />
+            </label>
+            <button class="icon-button" id="export-button" type="button" title="Export data" aria-label="Export data">
+              <span data-icon="download"></span>
+            </button>
+          </div>
+        </header>
+
+        <section class="hero-band" aria-label="Warehouse overview">
+          <img src="assets/warehouse-banner.png" alt="Organized warehouse racks and loading lanes" />
+          <div class="hero-overlay">
+            <p class="eyebrow">Live Store</p>
+            <strong id="hero-stock-value">-- units</strong>
+            <span id="hero-alert-copy">All zones updated</span>
+          </div>
+        </section>
+
+        <section class="view active" id="dashboard-view" data-view-panel="dashboard">
+          <div class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-icon" data-icon="package"></div>
+              <p>Total Stock</p>
+              <strong id="stat-stock">0</strong>
+              <span>units available</span>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon warning" data-icon="triangle-alert"></div>
+              <p>Low Stock</p>
+              <strong id="stat-low">0</strong>
+              <span>items need attention</span>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon success" data-icon="truck"></div>
+              <p>Pending Orders</p>
+              <strong id="stat-orders">0</strong>
+              <span>dispatch queue</span>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon info" data-icon="map-pin"></div>
+              <p>Active Zones</p>
+              <strong id="stat-zones">0</strong>
+              <span>storage locations</span>
+            </article>
+          </div>
+
+          <div class="dashboard-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Priority</p>
+                  <h3>Low Stock Items</h3>
+                </div>
+                <button class="text-button" type="button" data-view-jump="inventory">Open inventory</button>
+              </div>
+              <div class="compact-list" id="low-stock-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Recent</p>
+                  <h3>Stock Activity</h3>
+                </div>
+                <button class="text-button" type="button" data-view-jump="movements">Open movements</button>
+              </div>
+              <div class="timeline" id="activity-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="inventory-view" data-view-panel="inventory">
+          <div class="work-grid">
+            <section class="panel form-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Stock Master</p>
+                  <h3 id="product-form-title">Add Product</h3>
+                </div>
+                <button class="icon-button soft" id="reset-product-form" type="button" title="Clear form" aria-label="Clear product form">
+                  <span data-icon="rotate-ccw"></span>
+                </button>
+              </div>
+
+              <form id="product-form" class="form-grid">
+                <input type="hidden" id="product-id" />
+                <label>
+                  SKU
+                  <input id="product-sku" type="text" required placeholder="SKU-1001" />
+                </label>
+                <label>
+                  Product Name
+                  <input id="product-name" type="text" required placeholder="Item name" />
+                </label>
+                <label>
+                  Category
+                  <select id="product-category">
+                    <option>Electronics</option>
+                    <option>Packaging</option>
+                    <option>Hardware</option>
+                    <option>Grocery</option>
+                    <option>Furniture</option>
+                    <option>Other</option>
+                  </select>
+                </label>
+                <label>
+                  Location
+                  <input id="product-location" type="text" required placeholder="Aisle A-01" />
+                </label>
+                <label>
+                  Quantity
+                  <input id="product-qty" type="number" min="0" step="1" required placeholder="120" />
+                </label>
+                <label>
+                  Reorder Level
+                  <input id="product-reorder" type="number" min="0" step="1" required placeholder="30" />
+                </label>
+                <label class="full-span">
+                  Supplier
+                  <input id="product-supplier" type="text" placeholder="Supplier name" />
+                </label>
+                <button class="primary-button full-span" type="submit">
+                  <span data-icon="save"></span>
+                  Save Product
+                </button>
+              </form>
+            </section>
+
+            <section class="panel table-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Inventory</p>
+                  <h3>Stock Register</h3>
+                </div>
+                <div class="segmented-control" aria-label="Inventory filter">
+                  <button class="active" type="button" data-filter="all">All</button>
+                  <button type="button" data-filter="low">Low</button>
+                  <button type="button" data-filter="ok">OK</button>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Item</th>
+                      <th>Qty</th>
+                      <th>Location</th>
+                      <th>Status</th>
+                      <th class="actions-col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inventory-table"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="movements-view" data-view-panel="movements">
+          <div class="work-grid">
+            <section class="panel form-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Entry</p>
+                  <h3>Stock In / Out</h3>
+                </div>
+              </div>
+
+              <form id="movement-form" class="form-grid">
+                <label class="full-span">
+                  Product
+                  <select id="movement-product" required></select>
+                </label>
+                <label>
+                  Type
+                  <select id="movement-type">
+                    <option value="in">Stock In</option>
+                    <option value="out">Stock Out</option>
+                  </select>
+                </label>
+                <label>
+                  Quantity
+                  <input id="movement-qty" type="number" min="1" step="1" required placeholder="25" />
+                </label>
+                <label class="full-span">
+                  Note
+                  <input id="movement-note" type="text" placeholder="PO, invoice, damage, return" />
+                </label>
+                <button class="primary-button full-span" type="submit">
+                  <span data-icon="plus"></span>
+                  Add Movement
+                </button>
+              </form>
+            </section>
+
+            <section class="panel table-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Ledger</p>
+                  <h3>Movement History</h3>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>SKU</th>
+                      <th>Type</th>
+                      <th>Qty</th>
+                      <th>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody id="movement-table"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="orders-view" data-view-panel="orders">
+          <div class="work-grid">
+            <section class="panel form-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Dispatch</p>
+                  <h3>Create Order</h3>
+                </div>
+              </div>
+
+              <form id="order-form" class="form-grid">
+                <label class="full-span">
+                  Customer
+                  <input id="order-customer" type="text" required placeholder="Customer name" />
+                </label>
+                <label class="full-span">
+                  Product
+                  <select id="order-product" required></select>
+                </label>
+                <label>
+                  Quantity
+                  <input id="order-qty" type="number" min="1" step="1" required placeholder="10" />
+                </label>
+                <label>
+                  Priority
+                  <select id="order-priority">
+                    <option>Normal</option>
+                    <option>High</option>
+                    <option>Urgent</option>
+                  </select>
+                </label>
+                <button class="primary-button full-span" type="submit">
+                  <span data-icon="clipboard-plus"></span>
+                  Save Order
+                </button>
+              </form>
+            </section>
+
+            <section class="panel table-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Orders</p>
+                  <h3>Dispatch Board</h3>
+                </div>
+              </div>
+              <div class="order-board" id="order-board"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <nav class="mobile-nav" aria-label="Mobile navigation">
+        <button class="mobile-nav-item active" type="button" data-view="dashboard" aria-label="Dashboard">
+          <span data-icon="layout-dashboard"></span>
+        </button>
+        <button class="mobile-nav-item" type="button" data-view="inventory" aria-label="Inventory">
+          <span data-icon="boxes"></span>
+        </button>
+        <button class="mobile-nav-item" type="button" data-view="movements" aria-label="Movements">
+          <span data-icon="repeat"></span>
+        </button>
+        <button class="mobile-nav-item" type="button" data-view="orders" aria-label="Orders">
+          <span data-icon="clipboard-list"></span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

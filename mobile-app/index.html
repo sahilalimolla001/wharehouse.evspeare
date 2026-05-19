@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f766e">
+    <title>Evsphere Picker</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <section class="auth-gate active" id="auth-gate">
+      <form class="login-panel" id="login-form">
+        <div>
+          <p class="section-kicker">Evsphere Quick Commerce</p>
+          <h1>Picker Login</h1>
+        </div>
+        <label>Staff Email
+          <input id="login-email" type="email" autocomplete="username" required>
+        </label>
+        <label>Password
+          <input id="login-password" type="password" autocomplete="current-password" required>
+        </label>
+        <details class="advanced-login">
+          <summary>API Settings</summary>
+          <label>API URL
+            <input id="api-base" value="http://127.0.0.1:5000/api">
+          </label>
+        </details>
+        <button class="primary" type="submit">Start Picking</button>
+      </form>
+    </section>
+
+    <div class="mobile-shell">
+      <header class="app-header">
+        <div>
+          <p id="header-kicker">Picker App</p>
+          <h1 id="screen-title">Orders</h1>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" id="sync-btn" type="button">Sync</button>
+          <button class="icon-btn" id="logout-btn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="screen active" id="orders-screen">
+          <div class="status-strip">
+            <article><span>Pending</span><strong id="m-pending">0</strong></article>
+            <article><span>Picking</span><strong id="m-picking">0</strong></article>
+            <article><span>Packed</span><strong id="m-packed">0</strong></article>
+          </div>
+
+          <div class="section-head">
+            <h2>Pick Queue</h2>
+            <button id="refresh-orders" type="button">Refresh</button>
+          </div>
+          <div class="card-list" id="order-queue"></div>
+        </section>
+
+        <section class="screen" id="pick-screen">
+          <div class="active-order" id="active-order-card"></div>
+          <div class="scan-box compact">
+            <video id="scanner-video" playsinline muted></video>
+            <div class="scan-line"></div>
+          </div>
+          <div class="button-row">
+            <button class="primary" id="start-scan" type="button">Start Scan</button>
+            <button id="stop-scan" type="button">Stop</button>
+          </div>
+          <label>Manual SKU / Barcode
+            <span class="scan-input"><input id="manual-code" placeholder="SKU-1001 or barcode"><button id="manual-scan" type="button">Find</button></span>
+          </label>
+          <div class="result-card" id="scan-result">Scan item barcode to match the active order.</div>
+          <div class="card-list" id="pick-items"></div>
+          <div class="action-bar">
+            <button id="back-to-orders" type="button">Back</button>
+            <button class="primary" id="mark-packed" type="button">Mark Packed</button>
+          </div>
+        </section>
+
+        <section class="screen" id="dispatch-screen">
+          <div class="section-head">
+            <h2>Ready To Ship</h2>
+            <button data-refresh-orders type="button">Refresh</button>
+          </div>
+          <div class="card-list" id="dispatch-list"></div>
+        </section>
+
+        <section class="screen" id="stock-screen">
+          <form id="stock-in-form" class="form-card">
+            <h2>Stock In</h2>
+            <label>Product SKU / Barcode
+              <span class="scan-input"><input name="product" required placeholder="SKU-1001"><button type="button" data-scan-fill="#stock-in-form [name='product']">Scan</button></span>
+            </label>
+            <div class="product-preview hidden" id="stock-product-preview">Scan SKU to load product.</div>
+            <div class="stock-details hidden" id="stock-details">
+              <label>Location Barcode / ID
+                <span class="scan-input"><input name="location" required disabled placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#stock-in-form [name='location']">Scan</button></span>
+              </label>
+              <label>Quantity
+                <input name="quantity" type="number" min="1" required disabled>
+              </label>
+            </div>
+            <button class="primary" type="submit">Save Stock In</button>
+          </form>
+        </section>
+
+        <section class="screen" id="move-screen">
+          <form id="location-form" class="form-card">
+            <h2>Move Stock</h2>
+            <label>Product SKU / Barcode
+              <span class="scan-input"><input name="product" required placeholder="SKU-1001"><button type="button" data-scan-fill="#location-form [name='product']">Scan</button></span>
+            </label>
+            <label>From Location
+              <span class="scan-input"><input name="from_location" required placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#location-form [name='from_location']">Scan</button></span>
+            </label>
+            <label>To Location
+              <span class="scan-input"><input name="to_location" required placeholder="LOC:B-1-2-03"><button type="button" data-scan-fill="#location-form [name='to_location']">Scan</button></span>
+            </label>
+            <label>Quantity
+              <input name="quantity" type="number" min="1" required>
+            </label>
+            <button class="primary" type="submit">Move Stock</button>
+          </form>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Picker navigation">
+        <button class="active" data-screen="orders-screen" type="button">Orders</button>
+        <button data-screen="dispatch-screen" type="button">Ship</button>
+        <button data-screen="stock-screen" type="button">Stock</button>
+        <button data-screen="move-screen" type="button">Move</button>
+      </nav>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
