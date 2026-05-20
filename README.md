@@ -61,6 +61,13 @@ Security checks and launch requirements are documented in:
 backend-flask/PRODUCTION_CHECKLIST.md
 ```
 
+Customer website integration:
+
+```text
+CUSTOMER_WEBSITE_INTEGRATION.md
+CUSTOMER_ORDER_INTEGRATION.md
+```
+
 Before using real warehouse data on any host, run:
 
 ```powershell

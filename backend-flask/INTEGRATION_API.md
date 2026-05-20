@@ -4,6 +4,12 @@ Use this API when another website, marketplace, or ecommerce backend needs to se
 
 Do this from the other website's backend or webhook handler. Do not expose `INTEGRATION_API_KEY` in frontend JavaScript.
 
+For customer website checkout examples, see:
+
+```text
+../CUSTOMER_ORDER_INTEGRATION.md
+```
+
 ## Endpoint
 
 ```text
