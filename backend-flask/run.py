@@ -71,6 +71,16 @@ def create_admin():
 @app.cli.command("create-staff")
 def create_staff():
     """Create or update a staff/mobile user from STAFF_EMAIL and STAFF_PASSWORD."""
+    create_staff_user(required=True)
+
+
+@app.cli.command("create-staff-if-configured")
+def create_staff_if_configured():
+    """Create or update a staff/mobile user only when STAFF_EMAIL is configured."""
+    create_staff_user(required=False)
+
+
+def create_staff_user(required=True):
     db.create_all()
     staff_email = os.getenv("STAFF_EMAIL", "").strip().lower()
     staff_password = os.getenv("STAFF_PASSWORD", "")
@@ -78,6 +88,9 @@ def create_staff():
     staff_role = os.getenv("STAFF_ROLE", "picker").strip().lower() or "picker"
     allowed_roles = {"admin", "manager", "staff", "picker", "packer", "delivery"}
     if not staff_email or not staff_password:
+        if not required:
+            print("STAFF_EMAIL or STAFF_PASSWORD not set; skipping staff user.")
+            return
         print("Set STAFF_EMAIL and STAFF_PASSWORD before running create-staff.")
         raise SystemExit(1)
     if staff_role not in allowed_roles:

@@ -1,5 +1,6 @@
 const configuredApiBase = normalizeApiBase(window.WAREHOUSE_API_BASE || "");
 const savedApiBase = normalizeApiBase(localStorage.getItem("warehouseMobileApi") || "");
+const configuredApiCandidates = Array.isArray(window.WAREHOUSE_API_CANDIDATES) ? window.WAREHOUSE_API_CANDIDATES : [];
 
 const store = {
   apiBase: initialApiBase(),
@@ -17,10 +18,11 @@ let scanReturnScreen = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   $("#api-base").value = store.apiBase;
   bindNavigation();
   bindActions();
+  await autoConnectApi();
   initializeSession();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
@@ -113,6 +115,7 @@ async function login(event) {
     await refreshAll();
   } catch (error) {
     lockApp();
+    setApiStatus(error.message, false);
     toast(error.message);
   }
 }
@@ -122,9 +125,7 @@ async function testApiConnection() {
   localStorage.setItem("warehouseMobileApi", store.apiBase);
   setApiStatus("Checking API...", false);
   try {
-    const response = await fetch(`${store.apiBase}/health`, { credentials: "include" });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.ok !== true) throw new Error(`API health failed (${response.status})`);
+    await testApiBase(store.apiBase);
     setApiStatus("API connected.", true);
     toast("API connected.");
   } catch (error) {
@@ -553,6 +554,7 @@ function replaceOrder(order) {
 }
 
 async function apiFetch(path, options = {}) {
+  if (!store.apiBase) throw new Error("API URL not set. Open API Settings.");
   const isFormData = options.body instanceof FormData;
   const init = {
     method: options.method || "GET",
@@ -563,7 +565,12 @@ async function apiFetch(path, options = {}) {
   if (store.token && options.auth !== false) init.headers.Authorization = `Bearer ${store.token}`;
   if (options.body) init.body = isFormData ? options.body : JSON.stringify(options.body);
 
-  const response = await fetch(`${store.apiBase}${path}`, init);
+  let response;
+  try {
+    response = await fetch(`${store.apiBase}${path}`, init);
+  } catch {
+    throw new Error(`API connection failed. Check API URL: ${store.apiBase}`);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     if (response.status === 401 && options.auth !== false) logout(false);
@@ -582,8 +589,89 @@ function initialApiBase() {
   return savedApiBase || configuredApiBase || fallback;
 }
 
+async function autoConnectApi() {
+  const candidates = apiBaseCandidates();
+  if (!candidates.length) return;
+  setApiStatus("Connecting to warehouse...", false);
+  for (const candidate of candidates) {
+    try {
+      await testApiBase(candidate);
+      store.apiBase = candidate;
+      $("#api-base").value = candidate;
+      localStorage.setItem("warehouseMobileApi", candidate);
+      setApiStatus("API connected automatically.", true);
+      return;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  setApiStatus("API not connected. Paste backend /api URL and press Test API.", false);
+}
+
+function apiBaseCandidates() {
+  const queryApi = new URLSearchParams(location.search).get("api");
+  const candidates = [
+    queryApi,
+    configuredApiBase,
+    ...configuredApiCandidates,
+    savedApiBase,
+    ...inferredApiBases(),
+    "http://127.0.0.1:5000/api",
+  ];
+  return Array.from(new Set(candidates.map(normalizeApiBase).filter(Boolean)));
+}
+
+function inferredApiBases() {
+  if (!location.hostname || ["localhost", "127.0.0.1"].includes(location.hostname)) return [];
+
+  const bases = [`${location.origin}/api`];
+  const replacements = [
+    ["mobile", "backend"],
+    ["picker", "backend"],
+    ["staff", "backend"],
+  ];
+  for (const [from, to] of replacements) {
+    if (location.hostname.includes(from)) {
+      bases.push(`${location.protocol}//${location.hostname.replace(from, to)}${location.port ? `:${location.port}` : ""}/api`);
+    }
+  }
+  return bases;
+}
+
+async function testApiBase(apiBase) {
+  if (!apiBase) throw new Error("API URL not set");
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${apiBase}/health`, {
+      cache: "no-store",
+      credentials: "omit",
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok !== true) throw new Error(`API health failed (${response.status})`);
+    return data;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function normalizeApiBase(value) {
-  return String(value || "").trim().replace(/\/$/, "");
+  const cleaned = String(value || "").trim().replace(/\/+$/, "");
+  if (!cleaned) return "";
+  try {
+    const url = new URL(cleaned);
+    if (!url.pathname || url.pathname === "/") return `${url.origin}/api`;
+  } catch {
+    return cleaned;
+  }
+  return cleaned;
+}
+
+function clearSavedApi() {
+  localStorage.removeItem("warehouseMobileApi");
+  store.apiBase = configuredApiBase || "";
+  $("#api-base").value = store.apiBase;
 }
 
 function isLocalApiBase(value) {

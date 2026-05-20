@@ -3,6 +3,7 @@ import secrets
 from datetime import datetime, time
 
 from functools import wraps
+from urllib.parse import urlparse
 
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, session, url_for
 from sqlalchemy import func
@@ -23,7 +24,7 @@ api_bp = Blueprint("api", __name__)
 def add_api_headers(response):
     origin = request.headers.get("Origin")
     allowed_origins = current_app.config.get("API_ALLOWED_ORIGINS", [])
-    if origin and (origin in allowed_origins or (not current_app.config.get("IS_PRODUCTION") and not allowed_origins)):
+    if origin and is_allowed_api_origin(origin, allowed_origins):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
     elif not origin and not current_app.config.get("IS_PRODUCTION"):
@@ -35,6 +36,15 @@ def add_api_headers(response):
     response.headers["Access-Control-Allow-Headers"] = ", ".join(allowed_headers)
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
     return response
+
+
+def is_allowed_api_origin(origin, allowed_origins):
+    if origin in allowed_origins or (not current_app.config.get("IS_PRODUCTION") and not allowed_origins):
+        return True
+    if current_app.config.get("API_ALLOW_RAILWAY_ORIGINS"):
+        hostname = urlparse(origin).hostname or ""
+        return hostname.endswith(".up.railway.app")
+    return False
 
 
 @api_bp.route("/health")

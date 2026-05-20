@@ -49,6 +49,7 @@ SESSION_COOKIE_SECURE=true
 SESSION_COOKIE_SAMESITE=None
 TRUST_PROXY_HEADERS=true
 API_ALLOWED_ORIGINS=https://${{warehouse-mobile.RAILWAY_PUBLIC_DOMAIN}},https://${{warehouse-backend.RAILWAY_PUBLIC_DOMAIN}}
+API_ALLOW_RAILWAY_ORIGINS=true
 ALLOW_INSECURE_USER_HEADER=false
 INTEGRATION_API_KEY=replace-with-a-strong-random-integration-key
 ADMIN_EMAIL=owner@your-company.com
@@ -129,6 +130,8 @@ STAFF_ROLE=picker
 python -m flask --app run.py create-staff
 ```
 
+If these `STAFF_*` variables are present during backend redeploy, Railway will also create or reset that picker automatically.
+
 After login works, run this in the backend service shell if you want a final production check:
 
 ```sh
@@ -139,6 +142,7 @@ python -m flask --app run.py validate-production
 
 - Mobile build shows `printf ... config.js`: open `warehouse-mobile` -> Settings -> Build and delete the Build Command. Keep Root Directory `/mobile-app` and Config File `/mobile-app/railway.json`, then redeploy.
 - Mobile app cannot connect: confirm `WAREHOUSE_API_BASE=https://your-backend-domain.up.railway.app/api`, confirm backend `API_ALLOWED_ORIGINS` includes the mobile domain, then use the mobile login screen `API Settings` -> `Test API`.
+- Picker app auto-connects by trying `WAREHOUSE_API_BASE`, saved API URL, same-origin `/api`, and Railway-style `mobile -> backend` domain. Keep `API_ALLOW_RAILWAY_ORIGINS=true` on the backend for Railway public domains.
 - Mobile login works then immediately logs out: redeploy the latest backend and mobile code. The app now uses a bearer token after login so it does not depend only on cross-domain cookies.
 - `problem processing` in Variables: generate public domains first, confirm service names, or paste literal URLs instead of `${{...}}` references.
 - `validate-production` fails: check all required backend variables.
