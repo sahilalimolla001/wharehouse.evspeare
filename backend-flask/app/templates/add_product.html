@@ -6,8 +6,8 @@
     <form method="post" class="row g-3" enctype="multipart/form-data">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="col-md-4">
-        <label class="form-label">SKU / Barcode</label>
-        <input class="form-control" name="sku" required value="{{ product.sku if product else '' }}">
+        <label class="form-label">SKU Number / Barcode</label>
+        <input class="form-control" name="sku" required inputmode="numeric" placeholder="1001" value="{{ product.sku if product else '' }}">
       </div>
       <div class="col-md-8">
         <label class="form-label">Product Name</label>

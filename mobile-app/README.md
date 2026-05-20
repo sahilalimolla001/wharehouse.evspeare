@@ -6,7 +6,7 @@ This is a browser-based PWA shell for warehouse staff.
 
 - API login
 - Barcode / QR scan with `BarcodeDetector` when the browser supports it
-- Manual SKU / barcode fallback
+- Manual SKU number / barcode fallback
 - Stock in
 - Stock out
 - Pick list

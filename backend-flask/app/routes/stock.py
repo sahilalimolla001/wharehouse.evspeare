@@ -6,6 +6,7 @@ from ..utils.barcode import build_location_barcode
 from ..utils.customer_website import notify_product_change
 from ..utils.google_storage import upload_product_image
 from ..utils.google_sheets import auto_sync_current_stock_sheet
+from ..utils.sku import normalize_sku
 from ..utils.stock import issue_stock, receive_stock
 from .auth import get_current_user, login_required, role_required
 
@@ -19,9 +20,11 @@ def inventory():
     query = Inventory.query.join(Product).join(WarehouseLocation)
     if q:
         like = f"%{q}%"
+        sku_like = f"%{normalize_sku(q)}%"
         query = query.filter(
             (Product.name.ilike(like))
             | (Product.sku.ilike(like))
+            | (Product.sku.ilike(sku_like))
             | (Product.brand.ilike(like))
             | (WarehouseLocation.barcode.ilike(like))
             | (WarehouseLocation.zone.ilike(like))

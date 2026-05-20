@@ -503,7 +503,7 @@ async function loadStockProductPreview(code) {
   try {
     const data = await apiFetch(`/scan/${encodeURIComponent(code)}`);
     if (data.type !== "product") {
-      resetStockProductPreview("Scan a product SKU or barcode first.");
+      resetStockProductPreview("Scan a product SKU number or barcode first.");
       return;
     }
     const product = data.product;
@@ -533,7 +533,7 @@ async function loadStockProductPreview(code) {
   }
 }
 
-function resetStockProductPreview(message = "Scan SKU to load product.") {
+function resetStockProductPreview(message = "Scan SKU number to load product.") {
   const preview = $("#stock-product-preview");
   preview.classList.toggle("hidden", !message);
   preview.classList.add("product-preview--message");

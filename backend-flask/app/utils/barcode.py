@@ -1,8 +1,10 @@
 import json
 
+from .sku import normalize_sku
+
 
 def build_product_barcode(product):
-    return f"SKU:{product.sku}"
+    return normalize_sku(product.sku) or product.sku
 
 
 def build_location_barcode(location):

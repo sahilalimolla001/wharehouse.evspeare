@@ -24,7 +24,7 @@ Redeploy backend after changing it.
 
 ## Payload
 
-The customer website cart must send warehouse SKUs. The product feed already gives each product `sku`.
+The customer website cart must send warehouse SKU numbers. The product feed already gives each product `sku`.
 
 ```json
 {
@@ -37,7 +37,7 @@ The customer website cart must send warehouse SKUs. The product feed already giv
   "priority": "normal",
   "items": [
     {
-      "sku": "SKU-1001",
+      "sku": "1001",
       "quantity": 2,
       "unit_price": 2400
     }
@@ -169,7 +169,7 @@ $body = @{
   customer_name = "Test Customer"
   customer_phone = "+91 90000 00000"
   customer_address = "Test Address"
-  items = @(@{ sku = "SKU-1001"; quantity = 1; unit_price = 2400 })
+  items = @(@{ sku = "1001"; quantity = 1; unit_price = 2400 })
 } | ConvertTo-Json -Depth 5
 
 Invoke-RestMethod `

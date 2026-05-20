@@ -5,6 +5,7 @@ from ..models import Barcode, Category, Product, Supplier
 from ..utils.barcode import build_product_barcode, product_payload
 from ..utils.customer_website import notify_product_change
 from ..utils.google_storage import import_product_images_by_sku, upload_product_image
+from ..utils.sku import normalize_sku, sku_lookup_candidates
 from .auth import login_required, role_required
 
 products_bp = Blueprint("products", __name__)
@@ -17,7 +18,9 @@ def products():
     query = Product.query.filter_by(is_active=True)
     if q:
         like = f"%{q}%"
-        query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)) | (Product.brand.ilike(like)))
+        sku_q = normalize_sku(q)
+        sku_like = f"%{sku_q}%"
+        query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)) | (Product.sku.ilike(sku_like)) | (Product.brand.ilike(like)))
     products_list = query.order_by(Product.name).all()
     return render_template("products.html", products=products_list, q=q)
 
@@ -58,12 +61,16 @@ def product_form(product_id=None):
     suppliers = Supplier.query.filter_by(is_active=True).order_by(Supplier.name).all()
 
     if request.method == "POST":
-        sku = request.form.get("sku", "").strip()
-        existing = Product.query.filter(Product.sku == sku)
+        sku = normalize_sku(request.form.get("sku"))
+        if not sku or not sku.isdigit():
+            flash("SKU me sirf number hona chahiye. Example: 1001", "danger")
+            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+
+        existing = Product.query.filter(Product.sku.in_(sku_lookup_candidates(sku)))
         if product:
             existing = existing.filter(Product.id != product.id)
         if existing.first():
-            flash("SKU already exists.", "danger")
+            flash("SKU number already exists.", "danger")
             return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
 
         if not product:

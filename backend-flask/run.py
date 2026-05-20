@@ -7,6 +7,7 @@ from app.utils.barcode import build_location_barcode, build_product_barcode, pro
 from app.utils.database_url import parse_database_url
 from app.utils.google_sheets import auto_sync_current_stock_sheet
 from app.utils.google_storage import test_storage_connection
+from app.utils.sku import normalize_sku, sku_lookup_candidates
 from app.utils.stock import receive_stock
 from config import Config
 
@@ -155,9 +156,9 @@ def seed_demo():
     db.session.flush()
     location.barcode = location.barcode or build_location_barcode(location)
 
-    product = Product.query.filter_by(sku="SKU-1001").first() or Product(
+    product = Product.query.filter(Product.sku.in_(sku_lookup_candidates("1001"))).first() or Product(
         name="Barcode Scanner",
-        sku="SKU-1001",
+        sku="1001",
         brand="ScanPro",
         unit="pcs",
         category=categories["Electronics"],
@@ -186,6 +187,32 @@ def seed_demo():
 
     db.session.commit()
     print("Demo data ready. Login: admin@warehouse.local / admin123")
+
+
+@app.cli.command("normalize-product-skus")
+def normalize_product_skus():
+    """Convert existing product SKUs like SKU-1001 to 1001."""
+    changed = 0
+    skipped = 0
+    for product in Product.query.order_by(Product.id).all():
+        normalized_sku = normalize_sku(product.sku)
+        if not normalized_sku or normalized_sku == product.sku:
+            continue
+        conflict = Product.query.filter(Product.id != product.id, Product.sku.in_(sku_lookup_candidates(normalized_sku))).first()
+        if conflict:
+            print(f"Skipped {product.sku}: conflicts with product #{conflict.id} ({conflict.sku})")
+            skipped += 1
+            continue
+        product.sku = normalized_sku
+        code = build_product_barcode(product)
+        barcode = Barcode.query.filter_by(code=code).first()
+        if not barcode:
+            db.session.add(Barcode(product=product, code=code, payload=product_payload(product)))
+        elif barcode.product_id == product.id:
+            barcode.payload = product_payload(product)
+        changed += 1
+    db.session.commit()
+    print(f"Normalized {changed} product SKU(s). Skipped {skipped} conflict(s).")
 
 
 @app.cli.command("pgadmin-info")

@@ -14,6 +14,7 @@ from ..models import Barcode, Inventory, Order, OrderItem, Product, StockIn, Sto
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
+from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import user_has_role
 
@@ -173,7 +174,8 @@ def api_products():
     query = Product.query.filter_by(is_active=True)
     if q:
         like = f"%{q}%"
-        query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)))
+        sku_like = f"%{normalize_sku(q)}%"
+        query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)) | (Product.sku.ilike(sku_like)))
     return jsonify({"products": [serialize_product(product) for product in query.order_by(Product.name).limit(50).all()]})
 
 
@@ -185,7 +187,8 @@ def api_public_products():
     query = Product.query.filter_by(is_active=True)
     if q:
         like = f"%{q}%"
-        query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)))
+        sku_like = f"%{normalize_sku(q)}%"
+        query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)) | (Product.sku.ilike(sku_like)))
 
     products = query.order_by(Product.name).limit(limit).all()
     response = jsonify(
@@ -281,7 +284,7 @@ def api_import_order():
 def api_stock_in():
     data = request.form if request.form else (request.get_json(silent=True) or {})
     try:
-        product = find_product(required=True, identifier=data.get("product") or data.get("product_id") or data.get("sku") or data.get("barcode"))
+        product = find_product_from_payload(data, required=True)
         location = find_or_create_stock_in_location(data.get("location") or data.get("location_id") or data.get("location_barcode"))
         entry = receive_stock(
             product_id=product.id,
@@ -310,7 +313,7 @@ def api_stock_in():
 def api_stock_out():
     data = request.get_json(silent=True) or {}
     try:
-        product = find_product(required=True, identifier=data.get("product") or data.get("product_id") or data.get("sku") or data.get("barcode"))
+        product = find_product_from_payload(data, required=True)
         location = find_location(required=True, identifier=data.get("location") or data.get("location_id") or data.get("location_barcode"))
         entry = issue_stock(
             product_id=product.id,
@@ -335,7 +338,7 @@ def api_stock_out():
 def api_location_update():
     data = request.get_json(silent=True) or {}
     try:
-        product = find_product(required=True, identifier=data.get("product") or data.get("product_id") or data.get("sku") or data.get("barcode"))
+        product = find_product_from_payload(data, required=True)
         from_location = find_location(required=True, identifier=data.get("from_location") or data.get("from_location_id"))
         to_location = find_location(required=True, identifier=data.get("to_location") or data.get("to_location_id"))
         quantity = int(data.get("quantity", 0))
@@ -659,8 +662,7 @@ def create_order_from_integration(data):
     for item in items:
         if not isinstance(item, dict):
             raise ValueError("Each item must be an object")
-        product_identifier = item.get("product_id") or item.get("sku") or item.get("product_sku") or item.get("barcode")
-        product = find_product(identifier=product_identifier, required=True)
+        product = find_product_from_payload(item, required=True)
         quantity = positive_int(item.get("quantity"), "quantity")
         unit_price = numeric_or_default(item.get("unit_price"), product.selling_price)
         order.items.append(OrderItem(product_id=product.id, quantity=quantity, unit_price=unit_price))
@@ -765,24 +767,43 @@ def int_or_default(value, default):
         return default
 
 
+def find_product_from_payload(data, required=False):
+    if isinstance(data, dict):
+        try:
+            product_id = int_or_none(data.get("product_id"))
+        except (TypeError, ValueError):
+            product_id = None
+        if product_id:
+            product = Product.query.get(product_id)
+            if product:
+                return product
+
+    identifier = None
+    if isinstance(data, dict):
+        identifier = data.get("product") or data.get("sku") or data.get("product_sku") or data.get("barcode")
+    return find_product(identifier=identifier, required=required)
+
+
 def find_product(identifier=None, required=False):
     if identifier is None:
         if required:
             raise ValueError("Product is required")
         return None
     identifier = str(identifier).strip()
-    if identifier.isdigit():
-        product = Product.query.get(int(identifier))
+    candidates = sku_lookup_candidates(identifier)
+    for candidate in candidates:
+        product = Product.query.filter_by(sku=candidate).first()
         if product:
             return product
-    product = Product.query.filter_by(sku=identifier).first()
-    if product:
-        return product
-    barcode = Barcode.query.filter_by(code=identifier, is_active=True).first()
-    if barcode:
-        return barcode.product
-    if identifier.startswith("SKU:"):
-        return Product.query.filter_by(sku=identifier.removeprefix("SKU:")).first()
+    for candidate in candidates:
+        barcode = Barcode.query.filter_by(code=candidate, is_active=True).first()
+        if barcode:
+            return barcode.product
+    normalized = normalize_sku(identifier)
+    if normalized and normalized.isdigit():
+        product = Product.query.get(int(normalized))
+        if product:
+            return product
     if required:
         raise ValueError("Product not found")
     return None

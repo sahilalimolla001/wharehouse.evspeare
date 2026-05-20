@@ -39,7 +39,7 @@ X-Integration-Key: YOUR_INTEGRATION_API_KEY
   "assigned_to_email": "picker@your-company.com",
   "items": [
     {
-      "sku": "SKU-1001",
+      "sku": "1001",
       "quantity": 2,
       "unit_price": 2400
     }
@@ -53,6 +53,7 @@ X-Integration-Key: YOUR_INTEGRATION_API_KEY
 - `customer_name`: customer name.
 - `items`: non-empty list of products.
 - `items[].sku` or `items[].product_id` or `items[].barcode`.
+- SKU values should be the number only, for example `1001`. Legacy values like `SKU-1001` are still accepted.
 - `items[].quantity`: greater than zero.
 
 ## Duplicate Safety
@@ -72,7 +73,7 @@ curl -X POST "https://your-backend.onrender.com/api/integrations/orders" \
     "customer_phone": "+91 90000 00000",
     "customer_address": "Delhi, India",
     "items": [
-      {"sku": "SKU-1001", "quantity": 1}
+      {"sku": "1001", "quantity": 1}
     ]
   }'
 ```

@@ -70,8 +70,8 @@
             <button class="primary" id="start-scan" type="button">Start Scan</button>
             <button id="stop-scan" type="button">Stop</button>
           </div>
-          <label>Manual SKU / Barcode
-            <span class="scan-input"><input id="manual-code" placeholder="SKU-1001 or barcode"><button id="manual-scan" type="button">Find</button></span>
+          <label>Manual SKU Number / Barcode
+            <span class="scan-input"><input id="manual-code" inputmode="numeric" placeholder="1001 or barcode"><button id="manual-scan" type="button">Find</button></span>
           </label>
           <div class="result-card" id="scan-result">Scan item barcode to match the active order.</div>
           <div class="card-list" id="pick-items"></div>
@@ -92,10 +92,10 @@
         <section class="screen" id="stock-screen">
           <form id="stock-in-form" class="form-card">
             <h2>Stock In</h2>
-            <label>Product SKU / Barcode
-              <span class="scan-input"><input name="product" required placeholder="SKU-1001"><button type="button" data-scan-fill="#stock-in-form [name='product']">Scan</button></span>
+            <label>Product SKU Number / Barcode
+              <span class="scan-input"><input name="product" required inputmode="numeric" placeholder="1001"><button type="button" data-scan-fill="#stock-in-form [name='product']">Scan</button></span>
             </label>
-            <div class="product-preview hidden" id="stock-product-preview">Scan SKU to load product.</div>
+            <div class="product-preview hidden" id="stock-product-preview">Scan SKU number to load product.</div>
             <div class="stock-details hidden" id="stock-details">
               <label>Location Barcode / ID
                 <span class="scan-input"><input name="location" required disabled placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#stock-in-form [name='location']">Scan</button></span>
@@ -111,8 +111,8 @@
         <section class="screen" id="move-screen">
           <form id="location-form" class="form-card">
             <h2>Move Stock</h2>
-            <label>Product SKU / Barcode
-              <span class="scan-input"><input name="product" required placeholder="SKU-1001"><button type="button" data-scan-fill="#location-form [name='product']">Scan</button></span>
+            <label>Product SKU Number / Barcode
+              <span class="scan-input"><input name="product" required inputmode="numeric" placeholder="1001"><button type="button" data-scan-fill="#location-form [name='product']">Scan</button></span>
             </label>
             <label>From Location
               <span class="scan-input"><input name="from_location" required placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#location-form [name='from_location']">Scan</button></span>
