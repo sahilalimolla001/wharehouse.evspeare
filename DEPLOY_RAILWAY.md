@@ -116,6 +116,19 @@ Login with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
 If login says `Invalid email or password`, update `ADMIN_EMAIL` and `ADMIN_PASSWORD` in backend Variables, then redeploy `warehouse-backend`. The pre-deploy command runs `create-admin` and resets the admin login from those variables.
 
+For mobile picker login, create a user from Admin -> Users, or set these backend variables temporarily and run the command in the backend shell:
+
+```text
+STAFF_EMAIL=picker@your-company.com
+STAFF_PASSWORD=strong-picker-password
+STAFF_NAME=Picker User
+STAFF_ROLE=picker
+```
+
+```sh
+python -m flask --app run.py create-staff
+```
+
 After login works, run this in the backend service shell if you want a final production check:
 
 ```sh

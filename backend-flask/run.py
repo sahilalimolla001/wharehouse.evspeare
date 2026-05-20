@@ -68,6 +68,41 @@ def create_admin():
     print(f"{message}: {admin_email}")
 
 
+@app.cli.command("create-staff")
+def create_staff():
+    """Create or update a staff/mobile user from STAFF_EMAIL and STAFF_PASSWORD."""
+    db.create_all()
+    staff_email = os.getenv("STAFF_EMAIL", "").strip().lower()
+    staff_password = os.getenv("STAFF_PASSWORD", "")
+    staff_name = os.getenv("STAFF_NAME", "Warehouse Staff").strip() or "Warehouse Staff"
+    staff_role = os.getenv("STAFF_ROLE", "picker").strip().lower() or "picker"
+    allowed_roles = {"admin", "manager", "staff", "picker", "packer", "delivery"}
+    if not staff_email or not staff_password:
+        print("Set STAFF_EMAIL and STAFF_PASSWORD before running create-staff.")
+        raise SystemExit(1)
+    if staff_role not in allowed_roles:
+        print(f"STAFF_ROLE must be one of: {', '.join(sorted(allowed_roles))}")
+        raise SystemExit(1)
+    if Config.IS_PRODUCTION and staff_password in {"admin123", "staff123", "password", "changeme"}:
+        print("Refusing weak production staff password. Set a strong STAFF_PASSWORD.")
+        raise SystemExit(1)
+
+    staff = User.query.filter_by(email=staff_email).first()
+    if not staff:
+        staff = User(full_name=staff_name, email=staff_email, role=staff_role)
+        db.session.add(staff)
+        message = "Created staff user"
+    else:
+        staff.full_name = staff_name
+        staff.role = staff_role
+        staff.is_active = True
+        message = "Updated staff user"
+
+    staff.set_password(staff_password)
+    db.session.commit()
+    print(f"{message}: {staff_email} ({staff_role})")
+
+
 @app.cli.command("seed-demo")
 def seed_demo():
     """Seed categories, suppliers, locations, products, and inventory."""

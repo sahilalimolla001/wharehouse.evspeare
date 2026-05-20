@@ -130,6 +130,14 @@ python -m flask --app run.py init-db
 
 Do not run `seed-demo` against a real production database. `init-db` creates the first admin from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
+To create or reset a mobile picker/staff login from environment variables:
+
+```powershell
+python -m flask --app run.py create-staff
+```
+
+Set `STAFF_EMAIL`, `STAFF_PASSWORD`, `STAFF_NAME`, and `STAFF_ROLE=picker` before running it.
+
 For Google Sheet sync, `GOOGLE_APPS_SCRIPT_WEBHOOK_URL` is the simplest option. If it is empty, the app falls back to the service-account Google Sheets API setup. Use either `GOOGLE_APPLICATION_CREDENTIALS` for a local JSON key file, or `GOOGLE_APPLICATION_CREDENTIALS_JSON` for raw/base64 service-account JSON in hosted environments.
 
 To test Google Cloud Storage locally:
