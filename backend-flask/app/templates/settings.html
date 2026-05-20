@@ -15,12 +15,20 @@
         <div class="integration-box">
           <strong>Image Storage</strong>
           <span>{{ integrations.google_storage }}</span>
+          <form method="post" action="{{ url_for('users.test_google_storage_settings') }}" class="mt-2">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-dark" type="submit">Test Storage</button>
+          </form>
         </div>
       </div>
       <div class="col-md-4">
         <div class="integration-box">
           <strong>Google Sheet Sync</strong>
           <span>{{ integrations.google_sheets }}</span>
+          <form method="post" action="{{ url_for('users.test_google_sheet_settings') }}" class="mt-2">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-dark" type="submit">Test Sheet</button>
+          </form>
         </div>
       </div>
     </div>

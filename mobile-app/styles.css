@@ -184,6 +184,18 @@ input[type="file"] {
   margin-top: 8px;
 }
 
+.api-status {
+  min-height: 22px;
+  margin-top: 8px;
+  color: #b42318;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.api-status.ok {
+  color: var(--primary);
+}
+
 .status-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

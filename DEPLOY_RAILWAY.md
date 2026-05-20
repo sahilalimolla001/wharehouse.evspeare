@@ -88,6 +88,7 @@ WAREHOUSE_API_BASE=https://${{warehouse-backend.RAILWAY_PUBLIC_DOMAIN}}/api
 ```
 
 The mobile Dockerfile writes this value into `config.js` at startup.
+The mobile app also stores this URL in the browser. If it was opened earlier with a wrong API URL, open `API Settings`, paste the backend `/api` URL, and press `Test API`.
 
 If Railway cannot process the reference variable, paste the final backend URL literally:
 
@@ -124,11 +125,42 @@ python -m flask --app run.py validate-production
 ## 6. If Deploy Fails
 
 - Mobile build shows `printf ... config.js`: open `warehouse-mobile` -> Settings -> Build and delete the Build Command. Keep Root Directory `/mobile-app` and Config File `/mobile-app/railway.json`, then redeploy.
+- Mobile app cannot connect: confirm `WAREHOUSE_API_BASE=https://your-backend-domain.up.railway.app/api`, confirm backend `API_ALLOWED_ORIGINS` includes the mobile domain, then use the mobile login screen `API Settings` -> `Test API`.
+- Mobile login works then immediately logs out: redeploy the latest backend and mobile code. The app now uses a bearer token after login so it does not depend only on cross-domain cookies.
 - `problem processing` in Variables: generate public domains first, confirm service names, or paste literal URLs instead of `${{...}}` references.
 - `validate-production` fails: check all required backend variables.
 - Database error: confirm `DATABASE_URL=${{Postgres.DATABASE_URL}}` and the Postgres service name.
 - Mobile cannot login: confirm `WAREHOUSE_API_BASE` and `API_ALLOWED_ORIGINS`.
 - Cookie/session issue on mobile: keep `SESSION_COOKIE_SAMESITE=None` and `SESSION_COOKIE_SECURE=true`.
 - Product image uploads fail: configure Google Cloud Storage variables or leave uploads disabled.
+
+## 7. Google Cloud And Sheets
+
+For Google Cloud Storage product images, set these backend variables:
+
+```text
+GOOGLE_APPLICATION_CREDENTIALS_JSON=raw-or-base64-service-account-json
+GOOGLE_CLOUD_PROJECT=your-google-cloud-project-id
+GOOGLE_CLOUD_STORAGE_BUCKET=your-bucket-name
+GOOGLE_CLOUD_STORAGE_PRODUCTS_PREFIX=products
+GOOGLE_CLOUD_STORAGE_PUBLIC=false
+```
+
+For Google Sheets sync, set:
+
+```text
+GOOGLE_SHEETS_SPREADSHEET_ID=your-sheet-id
+GOOGLE_SHEETS_RANGE=CurrentStock!A:H
+GOOGLE_SHEETS_AUTO_SYNC=true
+```
+
+Share the Google Sheet with the service account `client_email`. For images imported from the bucket, upload files under the prefix with names matching product SKUs, for example:
+
+```text
+products/SKU-1001.jpg
+products/SKU-1002.png
+```
+
+Then open Admin -> Products -> `Import Images`. Open Admin -> Settings -> `Test Storage` and `Test Sheet` to see the exact Google error if permissions or variables are wrong.
 
 Do not run `seed-demo` on a real production database.

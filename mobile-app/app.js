@@ -1,6 +1,10 @@
+const configuredApiBase = normalizeApiBase(window.WAREHOUSE_API_BASE || "");
+const savedApiBase = normalizeApiBase(localStorage.getItem("warehouseMobileApi") || "");
+
 const store = {
-  apiBase: localStorage.getItem("warehouseMobileApi") || window.WAREHOUSE_API_BASE || "http://127.0.0.1:5000/api",
+  apiBase: initialApiBase(),
   user: JSON.parse(localStorage.getItem("warehouseMobileUser") || "null"),
+  token: localStorage.getItem("warehouseMobileToken") || "",
   orders: [],
   activeOrderId: Number(localStorage.getItem("warehouseActiveOrderId") || 0),
 };
@@ -32,6 +36,7 @@ function bindNavigation() {
 
 function bindActions() {
   $("#login-form").addEventListener("submit", login);
+  $("#test-api").addEventListener("click", testApiConnection);
   $("#logout-btn").addEventListener("click", logout);
   $("#sync-btn").addEventListener("click", refreshAll);
   $("#refresh-orders").addEventListener("click", refreshAll);
@@ -88,7 +93,7 @@ async function initializeSession() {
 
 async function login(event) {
   event.preventDefault();
-  store.apiBase = $("#api-base").value.trim().replace(/\/$/, "");
+  store.apiBase = normalizeApiBase($("#api-base").value);
   localStorage.setItem("warehouseMobileApi", store.apiBase);
   try {
     const data = await apiFetch("/login", {
@@ -100,7 +105,9 @@ async function login(event) {
       auth: false,
     });
     store.user = data.user;
+    store.token = data.token || "";
     localStorage.setItem("warehouseMobileUser", JSON.stringify(store.user));
+    if (store.token) localStorage.setItem("warehouseMobileToken", store.token);
     unlockApp();
     toast(`Welcome ${store.user.name}`);
     await refreshAll();
@@ -110,11 +117,29 @@ async function login(event) {
   }
 }
 
+async function testApiConnection() {
+  store.apiBase = normalizeApiBase($("#api-base").value);
+  localStorage.setItem("warehouseMobileApi", store.apiBase);
+  setApiStatus("Checking API...", false);
+  try {
+    const response = await fetch(`${store.apiBase}/health`, { credentials: "include" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok !== true) throw new Error(`API health failed (${response.status})`);
+    setApiStatus("API connected.", true);
+    toast("API connected.");
+  } catch (error) {
+    setApiStatus(`API not connected: ${error.message}`, false);
+    toast("API not connected.");
+  }
+}
+
 async function logout(callApi = true) {
   if (callApi) await apiFetch("/logout", { method: "POST", auth: false }).catch(() => {});
   store.user = null;
+  store.token = "";
   store.activeOrderId = 0;
   localStorage.removeItem("warehouseMobileUser");
+  localStorage.removeItem("warehouseMobileToken");
   localStorage.removeItem("warehouseActiveOrderId");
   stopScanner();
   lockApp();
@@ -535,6 +560,7 @@ async function apiFetch(path, options = {}) {
     headers: {},
   };
   if (!isFormData) init.headers["Content-Type"] = "application/json";
+  if (store.token && options.auth !== false) init.headers.Authorization = `Bearer ${store.token}`;
   if (options.body) init.body = isFormData ? options.body : JSON.stringify(options.body);
 
   const response = await fetch(`${store.apiBase}${path}`, init);
@@ -544,6 +570,35 @@ async function apiFetch(path, options = {}) {
     throw new Error(data.message || `API error ${response.status}`);
   }
   return data;
+}
+
+function initialApiBase() {
+  const fallback = "http://127.0.0.1:5000/api";
+  const remotePage = location.hostname && !["localhost", "127.0.0.1"].includes(location.hostname);
+  if (configuredApiBase && (!savedApiBase || (remotePage && isLocalApiBase(savedApiBase)))) {
+    localStorage.setItem("warehouseMobileApi", configuredApiBase);
+    return configuredApiBase;
+  }
+  return savedApiBase || configuredApiBase || fallback;
+}
+
+function normalizeApiBase(value) {
+  return String(value || "").trim().replace(/\/$/, "");
+}
+
+function isLocalApiBase(value) {
+  try {
+    const url = new URL(value);
+    return ["localhost", "127.0.0.1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function setApiStatus(message, ok) {
+  const node = $("#api-status");
+  node.textContent = message;
+  node.classList.toggle("ok", ok);
 }
 
 function escapeHtml(value) {

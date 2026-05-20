@@ -6,6 +6,7 @@ from functools import wraps
 
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, session, url_for
 from sqlalchemy import func
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
 from ..models import Barcode, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, WarehouseLocation
@@ -101,7 +102,7 @@ def api_login():
         return jsonify({"ok": False, "message": "Invalid email or password"}), 401
     session["user_id"] = user.id
     session["user_role"] = user.role
-    return jsonify({"ok": True, "user": serialize_user(user)})
+    return jsonify({"ok": True, "user": serialize_user(user), "token": create_api_token(user)})
 
 
 @api_bp.post("/logout")
@@ -451,6 +452,10 @@ def current_api_user_id():
 
 
 def current_api_user():
+    bearer_user = current_bearer_user()
+    if bearer_user:
+        return bearer_user
+
     user_id = session.get("user_id")
     if user_id:
         return User.query.filter_by(id=user_id, is_active=True).first()
@@ -460,6 +465,38 @@ def current_api_user():
     if header_user_id and header_user_id.isdigit():
         return User.query.filter_by(id=int(header_user_id), is_active=True).first()
     return None
+
+
+def current_bearer_user():
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization[7:].strip()
+    if not token:
+        return None
+    try:
+        data = api_token_serializer().loads(token, salt="warehouse-mobile-api", max_age=api_token_max_age())
+    except (BadSignature, SignatureExpired):
+        return None
+    user_id = data.get("user_id")
+    if not user_id:
+        return None
+    return User.query.filter_by(id=user_id, is_active=True).first()
+
+
+def create_api_token(user):
+    return api_token_serializer().dumps({"user_id": user.id}, salt="warehouse-mobile-api")
+
+
+def api_token_serializer():
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
+
+
+def api_token_max_age():
+    lifetime = current_app.config.get("PERMANENT_SESSION_LIFETIME")
+    if lifetime and hasattr(lifetime, "total_seconds"):
+        return int(lifetime.total_seconds())
+    return 12 * 60 * 60
 
 
 def can_manage_all_orders(user):

@@ -2,6 +2,8 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 
 from ..extensions import db
 from ..models import User
+from ..utils.google_sheets import auto_sync_current_stock_sheet
+from ..utils.google_storage import test_storage_connection
 from .auth import role_required
 
 users_bp = Blueprint("users", __name__)
@@ -36,3 +38,23 @@ def settings():
         "google_sheets": "Connected" if current_app.config.get("GOOGLE_APPS_SCRIPT_WEBHOOK_URL") or current_app.config.get("GOOGLE_SHEETS_SPREADSHEET_ID") else "Not configured",
     }
     return render_template("settings.html", integrations=integrations)
+
+
+@users_bp.post("/settings/test-google-storage")
+@role_required("admin")
+def test_google_storage_settings():
+    try:
+        result = test_storage_connection()
+        flash(f"Google Cloud Storage connected: {result['bucket']}", "success")
+    except Exception as error:
+        flash(f"Google Cloud Storage test failed: {error}", "danger")
+    return redirect(url_for("users.settings"))
+
+
+@users_bp.post("/settings/test-google-sheet")
+@role_required("admin")
+def test_google_sheet_settings():
+    result = auto_sync_current_stock_sheet("settings_test")
+    category = "success" if result.get("ok") else "warning" if result.get("skipped") else "danger"
+    flash(result.get("message", "Google Sheet test finished."), category)
+    return redirect(url_for("users.settings"))
