@@ -38,6 +38,36 @@ def init_db():
         print("Database already initialized")
 
 
+@app.cli.command("create-admin")
+def create_admin():
+    """Create or update the admin user from ADMIN_EMAIL and ADMIN_PASSWORD."""
+    db.create_all()
+    admin_email = os.getenv("ADMIN_EMAIL", "" if Config.IS_PRODUCTION else "admin@warehouse.local").strip().lower()
+    admin_password = os.getenv("ADMIN_PASSWORD", "" if Config.IS_PRODUCTION else "admin123")
+    admin_name = os.getenv("ADMIN_NAME", "Admin User").strip() or "Admin User"
+    if not admin_email or not admin_password:
+        print("Set ADMIN_EMAIL and ADMIN_PASSWORD before running create-admin.")
+        raise SystemExit(1)
+    if Config.IS_PRODUCTION and admin_password in {"admin123", "password", "changeme"}:
+        print("Refusing weak production admin password. Set a strong ADMIN_PASSWORD.")
+        raise SystemExit(1)
+
+    admin = User.query.filter_by(email=admin_email).first()
+    if not admin:
+        admin = User(full_name=admin_name, email=admin_email, role="admin")
+        db.session.add(admin)
+        message = "Created admin user"
+    else:
+        admin.full_name = admin_name
+        admin.role = "admin"
+        admin.is_active = True
+        message = "Updated admin user"
+
+    admin.set_password(admin_password)
+    db.session.commit()
+    print(f"{message}: {admin_email}")
+
+
 @app.cli.command("seed-demo")
 def seed_demo():
     """Seed categories, suppliers, locations, products, and inventory."""
