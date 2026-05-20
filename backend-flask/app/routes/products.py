@@ -13,7 +13,7 @@ products_bp = Blueprint("products", __name__)
 @login_required
 def products():
     q = request.args.get("q", "").strip()
-    query = Product.query
+    query = Product.query.filter_by(is_active=True)
     if q:
         like = f"%{q}%"
         query = query.filter((Product.name.ilike(like)) | (Product.sku.ilike(like)) | (Product.brand.ilike(like)))
