@@ -29,6 +29,9 @@ git push
    - Service name: `warehouse-mobile`
    - Root Directory: `/mobile-app`
    - Config File: `/mobile-app/railway.json`
+   - Builder: Dockerfile
+   - Build Command: leave empty
+   - Start Command: leave empty
 
 The backend config runs migrations, creates the first admin if needed, starts Gunicorn on Railway's `$PORT`, and checks `/api/health`.
 Run `validate-production` manually after domains and variables are final. Keeping it out of Railway's pre-deploy step prevents first deploy failures while public domains are still being created.
@@ -118,6 +121,7 @@ python -m flask --app run.py validate-production
 
 ## 6. If Deploy Fails
 
+- Mobile build shows `printf ... config.js`: open `warehouse-mobile` -> Settings -> Build and delete the Build Command. Keep Root Directory `/mobile-app` and Config File `/mobile-app/railway.json`, then redeploy.
 - `problem processing` in Variables: generate public domains first, confirm service names, or paste literal URLs instead of `${{...}}` references.
 - `validate-production` fails: check all required backend variables.
 - Database error: confirm `DATABASE_URL=${{Postgres.DATABASE_URL}}` and the Postgres service name.

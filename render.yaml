@@ -59,7 +59,7 @@ services:
     name: evsphere-warehouse-mobile
     runtime: static
     rootDir: mobile-app
-    buildCommand: sh -c 'printf "window.WAREHOUSE_API_BASE = \"%s\";\n" "$WAREHOUSE_API_BASE" > config.js'
+    buildCommand: sh -c 'echo "window.WAREHOUSE_API_BASE = \"$WAREHOUSE_API_BASE\";" > config.js'
     staticPublishPath: .
     envVars:
       - key: WAREHOUSE_API_BASE
