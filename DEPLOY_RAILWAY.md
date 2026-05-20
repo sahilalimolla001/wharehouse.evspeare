@@ -33,7 +33,7 @@ git push
    - Build Command: leave empty
    - Start Command: leave empty
 
-The backend config runs migrations, creates the first admin if needed, starts Gunicorn on Railway's `$PORT`, and checks `/api/health`.
+The backend config runs migrations, creates or updates the admin from `ADMIN_EMAIL` and `ADMIN_PASSWORD`, starts Gunicorn on Railway's `$PORT`, and checks `/api/health`.
 Run `validate-production` manually after domains and variables are final. Keeping it out of Railway's pre-deploy step prevents first deploy failures while public domains are still being created.
 
 ## 3. Backend Variables
@@ -112,6 +112,8 @@ https://<mobile-domain>/
 ```
 
 Login with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+
+If login says `Invalid email or password`, update `ADMIN_EMAIL` and `ADMIN_PASSWORD` in backend Variables, then redeploy `warehouse-backend`. The pre-deploy command runs `create-admin` and resets the admin login from those variables.
 
 After login works, run this in the backend service shell if you want a final production check:
 

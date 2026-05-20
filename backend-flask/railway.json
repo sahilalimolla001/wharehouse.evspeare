@@ -5,7 +5,7 @@
     "buildCommand": "pip install -r requirements.txt"
   },
   "deploy": {
-    "preDeployCommand": "python -m flask --app run.py db upgrade && python -m flask --app run.py init-db",
+    "preDeployCommand": "python -m flask --app run.py db upgrade && python -m flask --app run.py create-admin",
     "startCommand": "gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120 --access-logfile - --error-logfile - run:app",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 300,
