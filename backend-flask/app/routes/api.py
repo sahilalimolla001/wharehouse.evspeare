@@ -10,6 +10,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
 from ..models import Barcode, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, WarehouseLocation
+from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
@@ -287,7 +288,8 @@ def api_stock_in():
             product.image_url = upload_product_image(uploaded_file, sku=product.sku)
         db.session.commit()
         sync_result = auto_sync_current_stock_sheet("api_stock_in")
-        return jsonify({"ok": True, "stock_in": {"id": entry.id}, "product": serialize_product(product), "google_sheet": sync_result})
+        push_result = notify_product_change(product, "stock.changed")
+        return jsonify({"ok": True, "stock_in": {"id": entry.id}, "product": serialize_product(product), "google_sheet": sync_result, "customer_website": push_result})
     except (RuntimeError, ValueError, TypeError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
@@ -311,7 +313,8 @@ def api_stock_out():
         )
         db.session.commit()
         sync_result = auto_sync_current_stock_sheet("api_stock_out")
-        return jsonify({"ok": True, "stock_out": {"id": entry.id}, "product": serialize_product(product), "google_sheet": sync_result})
+        push_result = notify_product_change(product, "stock.changed")
+        return jsonify({"ok": True, "stock_out": {"id": entry.id}, "product": serialize_product(product), "google_sheet": sync_result, "customer_website": push_result})
     except (ValueError, TypeError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
@@ -346,7 +349,8 @@ def api_location_update():
         )
         db.session.commit()
         sync_result = auto_sync_current_stock_sheet("api_location_update")
-        return jsonify({"ok": True, "product": serialize_product(product), "google_sheet": sync_result})
+        push_result = notify_product_change(product, "stock.changed")
+        return jsonify({"ok": True, "product": serialize_product(product), "google_sheet": sync_result, "customer_website": push_result})
     except (ValueError, TypeError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400

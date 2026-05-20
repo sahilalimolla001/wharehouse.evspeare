@@ -3,6 +3,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from ..extensions import db
 from ..models import Inventory, Product, Supplier, WarehouseLocation
 from ..utils.barcode import build_location_barcode
+from ..utils.customer_website import notify_product_change
 from ..utils.google_storage import upload_product_image
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.stock import issue_stock, receive_stock
@@ -58,9 +59,11 @@ def stock_in():
                 product.image_url = upload_product_image(uploaded_file, sku=product.sku)
             db.session.commit()
             sync_result = auto_sync_current_stock_sheet("stock_in")
+            push_result = notify_product_change(product, "stock.changed")
             flash("Stock in saved and inventory increased.", "success")
             if not sync_result["ok"] and not sync_result["skipped"]:
                 flash(f"Google Sheet auto-sync failed: {sync_result['message']}", "warning")
+            flash_customer_push_result(push_result)
             return redirect(url_for("stock.inventory"))
         except ValueError as error:
             db.session.rollback()
@@ -88,9 +91,11 @@ def stock_out():
             )
             db.session.commit()
             sync_result = auto_sync_current_stock_sheet("stock_out")
+            push_result = notify_product_change(inventory_row.product, "stock.changed")
             flash("Stock out saved and inventory decreased.", "success")
             if not sync_result["ok"] and not sync_result["skipped"]:
                 flash(f"Google Sheet auto-sync failed: {sync_result['message']}", "warning")
+            flash_customer_push_result(push_result)
             return redirect(url_for("stock.inventory"))
         except ValueError as error:
             db.session.rollback()
@@ -126,3 +131,12 @@ def add_location():
 
 def int_or_none(value):
     return int(value) if value else None
+
+
+def flash_customer_push_result(result):
+    if result.get("skipped"):
+        return
+    if result.get("ok"):
+        flash("Customer website updated.", "success")
+    else:
+        flash(result.get("message", "Customer website update failed."), "warning")

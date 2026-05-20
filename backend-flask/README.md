@@ -115,6 +115,9 @@ GOOGLE_SHEETS_RANGE=Sheet1!A:H
 GOOGLE_SHEETS_AUTO_SYNC=true
 GOOGLE_APPS_SCRIPT_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
 GOOGLE_APPS_SCRIPT_TOKEN=change-this-token
+CUSTOMER_PRODUCT_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/products
+CUSTOMER_PRODUCT_WEBHOOK_TOKEN=strong-shared-secret
+CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT=10
 ```
 
 Before accepting real warehouse data:

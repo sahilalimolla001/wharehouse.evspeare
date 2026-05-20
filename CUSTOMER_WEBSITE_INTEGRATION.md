@@ -82,3 +82,54 @@ API_ALLOWED_ORIGINS=https://your-customer-website.com
 ```
 
 The `setInterval` keeps the customer website refreshed every 30 seconds, so Stock In, product edits, image changes, and price updates show without manual export.
+
+## Optional Push Webhook
+
+If the customer website has a backend API, the warehouse can push product changes to it whenever a product is added, edited, archived, or stock quantity changes.
+
+Set these variables on the warehouse backend:
+
+```text
+CUSTOMER_PRODUCT_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/products
+CUSTOMER_PRODUCT_WEBHOOK_TOKEN=strong-shared-secret
+CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT=10
+```
+
+The warehouse sends:
+
+```http
+POST /api/warehouse/products
+Authorization: Bearer strong-shared-secret
+Content-Type: application/json
+X-Warehouse-Event: product.saved
+```
+
+Example payload:
+
+```json
+{
+  "event": "product.saved",
+  "source": "evsphere-warehouse",
+  "feed_url": "https://your-backend-domain.com/api/public/products",
+  "product": {
+    "id": 1,
+    "sku": "SKU-1001",
+    "name": "Product name",
+    "description": "Product details",
+    "value": 2499.0,
+    "available_quantity": 12,
+    "in_stock": true,
+    "is_active": true,
+    "image_url": "https://your-backend-domain.com/api/public/products/1/image"
+  }
+}
+```
+
+Supported events:
+
+- `product.saved`
+- `product.archived`
+- `stock.changed`
+- `product.test`
+
+If the customer website is only static HTML/JavaScript, use the public product feed above instead of webhook push.

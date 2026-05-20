@@ -3,6 +3,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from ..extensions import db
 from ..models import Barcode, Category, Product, Supplier
 from ..utils.barcode import build_product_barcode, product_payload
+from ..utils.customer_website import notify_product_change
 from ..utils.google_storage import import_product_images_by_sku, upload_product_image
 from .auth import login_required, role_required
 
@@ -96,7 +97,9 @@ def product_form(product_id=None):
             db.session.add(Barcode(product_id=product.id, code=code, payload=product_payload(product)))
 
         db.session.commit()
+        push_result = notify_product_change(product, "product.saved")
         flash("Product saved.", "success")
+        flash_customer_push_result(push_result)
         return redirect(url_for("products.products"))
 
     return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
@@ -108,7 +111,9 @@ def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
     product.is_active = False
     db.session.commit()
+    push_result = notify_product_change(product, "product.archived")
     flash("Product archived.", "info")
+    flash_customer_push_result(push_result)
     return redirect(url_for("products.products"))
 
 
@@ -121,3 +126,12 @@ def numeric_or_zero(value):
         return float(value or 0)
     except ValueError:
         return 0
+
+
+def flash_customer_push_result(result):
+    if result.get("skipped"):
+        return
+    if result.get("ok"):
+        flash("Customer website updated.", "success")
+    else:
+        flash(result.get("message", "Customer website update failed."), "warning")

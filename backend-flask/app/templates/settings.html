@@ -31,6 +31,16 @@
           </form>
         </div>
       </div>
+      <div class="col-md-4">
+        <div class="integration-box">
+          <strong>Customer Website Push</strong>
+          <span>{{ integrations.customer_website }}</span>
+          <form method="post" action="{{ url_for('users.test_customer_website_settings') }}" class="mt-2">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-dark" type="submit">Test Website Push</button>
+          </form>
+        </div>
+      </div>
     </div>
   </section>
 {% endblock %}

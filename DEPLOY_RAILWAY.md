@@ -163,4 +163,24 @@ products/SKU-1002.png
 
 Then open Admin -> Products -> `Import Images`. Open Admin -> Settings -> `Test Storage` and `Test Sheet` to see the exact Google error if permissions or variables are wrong.
 
+## 8. Customer Website Product Push
+
+If your customer website has a backend endpoint, add these backend variables:
+
+```text
+CUSTOMER_PRODUCT_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/products
+CUSTOMER_PRODUCT_WEBHOOK_TOKEN=strong-shared-secret
+CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT=10
+```
+
+After redeploy, open Admin -> Settings -> `Test Website Push`.
+
+If the customer website is static only, do not use a webhook. Use:
+
+```text
+GET https://your-backend-domain.up.railway.app/api/public/products
+```
+
+and refresh it from the customer website frontend.
+
 Do not run `seed-demo` on a real production database.

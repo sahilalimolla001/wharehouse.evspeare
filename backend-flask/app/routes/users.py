@@ -1,7 +1,8 @@
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
-from ..models import User
+from ..models import Product, User
+from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import test_storage_connection
 from .auth import role_required
@@ -36,6 +37,7 @@ def settings():
         "database": "Connected" if current_app.config.get("SQLALCHEMY_DATABASE_URI") else "Not configured",
         "google_storage": "Connected" if current_app.config.get("GOOGLE_CLOUD_STORAGE_BUCKET") else "Not configured",
         "google_sheets": "Connected" if current_app.config.get("GOOGLE_APPS_SCRIPT_WEBHOOK_URL") or current_app.config.get("GOOGLE_SHEETS_SPREADSHEET_ID") else "Not configured",
+        "customer_website": "Connected" if current_app.config.get("CUSTOMER_PRODUCT_WEBHOOK_URL") else "Feed only",
     }
     return render_template("settings.html", integrations=integrations)
 
@@ -57,4 +59,18 @@ def test_google_sheet_settings():
     result = auto_sync_current_stock_sheet("settings_test")
     category = "success" if result.get("ok") else "warning" if result.get("skipped") else "danger"
     flash(result.get("message", "Google Sheet test finished."), category)
+    return redirect(url_for("users.settings"))
+
+
+@users_bp.post("/settings/test-customer-website")
+@role_required("admin")
+def test_customer_website_settings():
+    product = Product.query.filter_by(is_active=True).order_by(Product.updated_at.desc()).first()
+    if not product:
+        flash("Add at least one active product before testing customer website push.", "warning")
+        return redirect(url_for("users.settings"))
+
+    result = notify_product_change(product, "product.test")
+    category = "success" if result.get("ok") else "warning" if result.get("skipped") else "danger"
+    flash(result.get("message", "Customer website test finished."), category)
     return redirect(url_for("users.settings"))
