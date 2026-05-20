@@ -6,7 +6,7 @@ from functools import wraps
 from urllib.parse import urlparse
 
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, session, url_for
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
@@ -372,7 +372,7 @@ def api_pick_list():
     user = current_api_user()
     query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
     if user and not can_manage_all_orders(user):
-        query = query.filter(Order.assigned_to_id == user.id)
+        query = query.filter(or_(Order.assigned_to_id == user.id, Order.assigned_to_id.is_(None)))
     orders = query.order_by(Order.priority.desc(), Order.created_at).all()
     return jsonify({"orders": [serialize_order(order) for order in orders]})
 
@@ -388,6 +388,8 @@ def api_order_status(order_id):
     status = data.get("status", "").strip().lower()
     if status not in allowed:
         return jsonify({"ok": False, "message": "Invalid order status"}), 400
+    if status == "picking" and not order.assigned_to_id:
+        order.assigned_to_id = current_api_user_id()
     order.status = status
     if status == "completed":
         order.completed_at = datetime.utcnow()
@@ -412,21 +414,30 @@ def api_order_item_pick(order_id, item_id):
     if quantity < 0 or quantity > item.quantity:
         return jsonify({"ok": False, "message": "Picked quantity must be between 0 and ordered quantity"}), 400
 
-    item.picked_quantity = quantity
-    if order.status == "pending":
-        order.status = "picking"
-    if all(order_item.picked_quantity >= order_item.quantity for order_item in order.items):
-        order.status = "packed" if data.get("auto_pack") else "picking"
+    try:
+        item.picked_quantity = quantity
+        if not order.assigned_to_id:
+            order.assigned_to_id = current_api_user_id()
+        if order.status == "pending":
+            order.status = "picking"
+        if all(order_item.picked_quantity >= order_item.quantity for order_item in order.items):
+            order.status = "packed" if data.get("auto_pack") else "picking"
 
-    log_activity(
-        "item_pick",
-        f"Picked {quantity}/{item.quantity} for {item.product.sku}",
-        user_id=current_api_user_id(),
-        entity_type="OrderItem",
-        entity_id=item.id,
-    )
-    db.session.commit()
-    return jsonify({"ok": True, "order": serialize_order(order)})
+        sync_order_product_pick_stock(order, item.product_id)
+        log_activity(
+            "item_pick",
+            f"Picked {quantity}/{item.quantity} for {item.product.sku}",
+            user_id=current_api_user_id(),
+            entity_type="OrderItem",
+            entity_id=item.id,
+        )
+        db.session.commit()
+        sync_result = auto_sync_current_stock_sheet("order_pick")
+        push_result = notify_product_change(item.product, "stock.changed")
+        return jsonify({"ok": True, "order": serialize_order(order), "google_sheet": sync_result, "customer_website": push_result})
+    except ValueError as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
 
 
 @api_bp.post("/orders/<int:order_id>/items/<int:item_id>/pack")
@@ -518,7 +529,79 @@ def can_manage_all_orders(user):
 
 
 def can_access_order(user, order):
-    return bool(user and (can_manage_all_orders(user) or order.assigned_to_id == user.id))
+    return bool(user and (can_manage_all_orders(user) or order.assigned_to_id in {None, user.id}))
+
+
+def sync_order_product_pick_stock(order, product_id):
+    desired_quantity = sum(item.picked_quantity for item in order.items if item.product_id == product_id)
+    issued_quantity = (
+        db.session.query(func.coalesce(func.sum(StockOut.quantity), 0))
+        .filter_by(order_id=order.id, product_id=product_id, reason="order_pick")
+        .scalar()
+        or 0
+    )
+    delta = int(desired_quantity) - int(issued_quantity)
+    if delta > 0:
+        issue_order_pick_stock(order, product_id, delta)
+    elif delta < 0:
+        restore_order_pick_stock(order, product_id, abs(delta))
+
+
+def issue_order_pick_stock(order, product_id, quantity):
+    remaining = quantity
+    inventory_rows = (
+        Inventory.query.filter_by(product_id=product_id)
+        .filter(Inventory.quantity > Inventory.reserved_quantity)
+        .order_by(Inventory.quantity.desc(), Inventory.id)
+        .all()
+    )
+    for inventory in inventory_rows:
+        if remaining <= 0:
+            break
+        take = min(remaining, inventory.available_quantity)
+        if take <= 0:
+            continue
+        issue_stock(
+            product_id=product_id,
+            location_id=inventory.location_id,
+            quantity=take,
+            reason="order_pick",
+            order_id=order.id,
+            dispatched_by_id=current_api_user_id(),
+            notes=f"Picked for order {order.order_number}",
+        )
+        remaining -= take
+    if remaining > 0:
+        raise ValueError("Not enough available stock for this order item")
+
+
+def restore_order_pick_stock(order, product_id, quantity):
+    remaining = quantity
+    stock_outs = (
+        StockOut.query.filter_by(order_id=order.id, product_id=product_id, reason="order_pick")
+        .order_by(StockOut.dispatched_at.desc(), StockOut.id.desc())
+        .all()
+    )
+    for stock_out in stock_outs:
+        if remaining <= 0:
+            break
+        restore_quantity = min(remaining, stock_out.quantity)
+        inventory = get_or_create_inventory(product_id, stock_out.location_id)
+        inventory.quantity += restore_quantity
+        stock_out.quantity -= restore_quantity
+        remaining -= restore_quantity
+        if stock_out.quantity <= 0:
+            db.session.delete(stock_out)
+    if remaining > 0:
+        raise ValueError("Picked stock restore failed")
+    log_activity(
+        "order_pick_restore",
+        f"Restored {quantity} picked units for order {order.order_number}",
+        user_id=current_api_user_id(),
+        entity_type="Order",
+        entity_id=order.id,
+        meta={"product_id": product_id, "quantity": quantity},
+    )
 
 
 def create_order_from_integration(data):

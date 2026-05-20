@@ -14,6 +14,8 @@ let videoStream = null;
 let scanTimer = null;
 let scanFillTarget = null;
 let scanReturnScreen = null;
+let refreshTimer = null;
+let stockPreviewTimer = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -49,6 +51,7 @@ function bindActions() {
   $("#back-to-orders").addEventListener("click", () => showScreen("orders-screen"));
   $("#mark-packed").addEventListener("click", markActiveOrderPacked);
   $("#stock-in-form").addEventListener("submit", (event) => submitStock(event, "stock-in"));
+  $('#stock-in-form [name="product"]').addEventListener("input", scheduleStockProductPreview);
   $('#stock-in-form [name="product"]').addEventListener("change", () => loadStockProductPreview($('#stock-in-form [name="product"]').value.trim()));
   $('#stock-in-form [name="product"]').addEventListener("blur", () => loadStockProductPreview($('#stock-in-form [name="product"]').value.trim()));
   $("#location-form").addEventListener("submit", submitLocationUpdate);
@@ -150,15 +153,30 @@ async function logout(callApi = true) {
 function lockApp() {
   $("#auth-gate").classList.add("active");
   $(".mobile-shell").setAttribute("aria-hidden", "true");
+  stopAutoRefresh();
 }
 
 function unlockApp() {
   $("#auth-gate").classList.remove("active");
   $(".mobile-shell").removeAttribute("aria-hidden");
+  startAutoRefresh();
 }
 
 async function refreshAll() {
   await Promise.all([loadDashboard(), loadOrders()]);
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = window.setInterval(() => {
+    if (store.user) refreshAll().catch(() => {});
+  }, 15000);
+}
+
+function stopAutoRefresh() {
+  if (!refreshTimer) return;
+  window.clearInterval(refreshTimer);
+  refreshTimer = null;
 }
 
 async function loadDashboard() {
@@ -468,6 +486,13 @@ async function submitStock(event, endpoint) {
   } catch (error) {
     toast(error.message);
   }
+}
+
+function scheduleStockProductPreview() {
+  window.clearTimeout(stockPreviewTimer);
+  stockPreviewTimer = window.setTimeout(() => {
+    loadStockProductPreview($('#stock-in-form [name="product"]').value.trim());
+  }, 350);
 }
 
 async function loadStockProductPreview(code) {

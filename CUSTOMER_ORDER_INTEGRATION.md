@@ -186,4 +186,6 @@ After success, open:
 Warehouse Admin -> Orders
 ```
 
-The order will appear as `pending`, and the mobile picker app will show it in the pick queue.
+The order will appear as `pending`, and the mobile picker app will show it in the pick queue. If the order has no `assigned_to_email`, it still appears for picker users as an unassigned order. When a picker starts it, the order is assigned to that picker.
+
+When the picker increases an item picked quantity, warehouse inventory is reduced immediately from available stock and a `StockOut` entry is created with reason `order_pick`. If picked quantity is reduced before packing, the stock is restored.

@@ -106,6 +106,8 @@ Supplier se maal aaya
 - Users and staff roles
 - Mobile scan, stock movement, packing, dispatch, and location update
 
+Customer website orders posted to `/api/integrations/orders` appear in the mobile pick queue. Picking an order item automatically creates warehouse stock-out records and reduces inventory.
+
 ## Database Tables
 
 - User
