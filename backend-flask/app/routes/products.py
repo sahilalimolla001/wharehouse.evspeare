@@ -1,4 +1,5 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
+from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
 from ..models import Barcode, Category, Product, Supplier
@@ -96,14 +97,24 @@ def product_form(product_id=None):
                 return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
         else:
             product.image_url = request.form.get("image_url", "").strip()
-        db.session.flush()
+        try:
+            db.session.flush()
 
-        code = build_product_barcode(product)
-        barcode = Barcode.query.filter_by(product_id=product.id, code=code).first()
-        if not barcode:
-            db.session.add(Barcode(product_id=product.id, code=code, payload=product_payload(product)))
+            code = build_product_barcode(product)
+            barcode = Barcode.query.filter_by(code=code).first()
+            if barcode and barcode.product_id != product.id:
+                raise IntegrityError("Barcode already exists", {}, None)
+            if not barcode:
+                db.session.add(Barcode(product_id=product.id, code=code, payload=product_payload(product)))
+            elif barcode.product_id == product.id:
+                barcode.payload = product_payload(product)
 
-        db.session.commit()
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash("SKU number already exists. Product duplicate save nahi hua.", "danger")
+            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+
         push_result = notify_product_change(product, "product.saved")
         flash("Product saved.", "success")
         flash_customer_push_result(push_result)
