@@ -31,6 +31,7 @@ git push
    - Config File: `/mobile-app/railway.json`
 
 The backend config runs migrations, creates the first admin if needed, starts Gunicorn on Railway's `$PORT`, and checks `/api/health`.
+Run `validate-production` manually after domains and variables are final. Keeping it out of Railway's pre-deploy step prevents first deploy failures while public domains are still being created.
 
 ## 3. Backend Variables
 
@@ -52,6 +53,14 @@ ADMIN_PASSWORD=replace-with-a-strong-password
 ADMIN_NAME=Owner Admin
 GOOGLE_SHEETS_AUTO_SYNC=true
 ```
+
+If Railway shows `problem processing` while saving variables, the service reference is not resolving yet. First generate public domains for both services, then either keep the reference variables above or paste the final domains literally:
+
+```text
+API_ALLOWED_ORIGINS=https://your-mobile-domain.up.railway.app,https://your-backend-domain.up.railway.app
+```
+
+Also confirm your service names are exactly `warehouse-backend`, `warehouse-mobile`, and `Postgres` if you use the reference syntax.
 
 Optional, only if you use Google uploads or Sheets:
 
@@ -77,6 +86,12 @@ WAREHOUSE_API_BASE=https://${{warehouse-backend.RAILWAY_PUBLIC_DOMAIN}}/api
 
 The mobile Dockerfile writes this value into `config.js` at startup.
 
+If Railway cannot process the reference variable, paste the final backend URL literally:
+
+```text
+WAREHOUSE_API_BASE=https://your-backend-domain.up.railway.app/api
+```
+
 ## 5. Public URLs
 
 For both `warehouse-backend` and `warehouse-mobile`:
@@ -95,8 +110,15 @@ https://<mobile-domain>/
 
 Login with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
+After login works, run this in the backend service shell if you want a final production check:
+
+```sh
+python -m flask --app run.py validate-production
+```
+
 ## 6. If Deploy Fails
 
+- `problem processing` in Variables: generate public domains first, confirm service names, or paste literal URLs instead of `${{...}}` references.
 - `validate-production` fails: check all required backend variables.
 - Database error: confirm `DATABASE_URL=${{Postgres.DATABASE_URL}}` and the Postgres service name.
 - Mobile cannot login: confirm `WAREHOUSE_API_BASE` and `API_ALLOWED_ORIGINS`.
