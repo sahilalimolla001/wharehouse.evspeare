@@ -329,6 +329,64 @@ input[type="file"] {
   display: grid;
 }
 
+.bin-card-top,
+.inventory-item {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+}
+
+.bin-card-top {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.bin-card-top span,
+.inventory-item span,
+.bin-hints {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.bin-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.bin-hints code,
+.bin-card code {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: #e6ece9;
+  color: var(--ink);
+}
+
+.inventory-item {
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.inventory-item .product-preview-thumb {
+  width: 70px;
+}
+
+.inventory-item-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.inventory-item-info strong {
+  overflow-wrap: anywhere;
+}
+
 .pick-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -470,7 +528,7 @@ input[type="file"] {
   right: 8px;
   bottom: 8px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--line);

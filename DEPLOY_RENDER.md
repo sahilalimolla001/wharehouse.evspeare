@@ -37,7 +37,7 @@ During Blueprint creation, Render asks for values marked `sync: false`.
 Required:
 
 ```text
-API_ALLOWED_ORIGINS=https://evsphere-warehouse-mobile.onrender.com,https://evsphere-warehouse-backend.onrender.com
+API_ALLOWED_ORIGINS=https://evsphere-warehouse-mobile.onrender.com,https://evsphere-warehouse-backend.onrender.com,https://evspeare.up.railway.app
 ADMIN_EMAIL=owner@your-company.com
 ADMIN_PASSWORD=use-a-strong-password
 ADMIN_NAME=Owner Admin

@@ -266,6 +266,28 @@ def api_locations():
     return jsonify({"locations": [serialize_location(location) for location in locations]})
 
 
+@api_bp.get("/location-inventory/<path:identifier>")
+@api_role_required("manager", "staff", "picker", "packer")
+def api_location_inventory(identifier):
+    try:
+        location = find_location(identifier=identifier, required=True)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 404
+    rows = (
+        Inventory.query.join(Product)
+        .filter(Inventory.location_id == location.id, Inventory.quantity > 0, Product.is_active.is_(True))
+        .order_by(Product.name, Product.sku)
+        .all()
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "location": serialize_location(location),
+            "items": [serialize_inventory_item(row) for row in rows],
+        }
+    )
+
+
 @api_bp.post("/integrations/orders")
 @integration_key_required
 def api_import_order():
@@ -426,7 +448,11 @@ def api_order_item_pick(order_id, item_id):
         if all(order_item.picked_quantity >= order_item.quantity for order_item in order.items):
             order.status = "packed" if data.get("auto_pack") else "picking"
 
-        sync_order_product_pick_stock(order, item.product_id)
+        sync_order_product_pick_stock(
+            order,
+            item.product_id,
+            location_identifier=data.get("location") or data.get("location_id") or data.get("location_barcode"),
+        )
         log_activity(
             "item_pick",
             f"Picked {quantity}/{item.quantity} for {item.product.sku}",
@@ -535,7 +561,7 @@ def can_access_order(user, order):
     return bool(user and (can_manage_all_orders(user) or order.assigned_to_id in {None, user.id}))
 
 
-def sync_order_product_pick_stock(order, product_id):
+def sync_order_product_pick_stock(order, product_id, location_identifier=None):
     desired_quantity = sum(item.picked_quantity for item in order.items if item.product_id == product_id)
     issued_quantity = (
         db.session.query(func.coalesce(func.sum(StockOut.quantity), 0))
@@ -545,12 +571,28 @@ def sync_order_product_pick_stock(order, product_id):
     )
     delta = int(desired_quantity) - int(issued_quantity)
     if delta > 0:
-        issue_order_pick_stock(order, product_id, delta)
+        issue_order_pick_stock(order, product_id, delta, location_identifier=location_identifier)
     elif delta < 0:
         restore_order_pick_stock(order, product_id, abs(delta))
 
 
-def issue_order_pick_stock(order, product_id, quantity):
+def issue_order_pick_stock(order, product_id, quantity, location_identifier=None):
+    if location_identifier:
+        location = find_location(identifier=location_identifier, required=True)
+        inventory = Inventory.query.filter_by(product_id=product_id, location_id=location.id).first()
+        if not inventory or inventory.available_quantity < quantity:
+            raise ValueError("Not enough available stock in scanned bin for this order item")
+        issue_stock(
+            product_id=product_id,
+            location_id=location.id,
+            quantity=quantity,
+            reason="order_pick",
+            order_id=order.id,
+            dispatched_by_id=current_api_user_id(),
+            notes=f"Picked for order {order.order_number} from scanned bin",
+        )
+        return
+
     remaining = quantity
     inventory_rows = (
         Inventory.query.filter_by(product_id=product_id)
@@ -922,6 +964,17 @@ def serialize_product(product):
             }
             for item in product.inventory_items
         ],
+    }
+
+
+def serialize_inventory_item(inventory):
+    return {
+        "inventory_id": inventory.id,
+        "quantity": inventory.quantity,
+        "reserved_quantity": inventory.reserved_quantity,
+        "available_quantity": inventory.available_quantity,
+        "product": serialize_product(inventory.product),
+        "location": serialize_location(inventory.location),
     }
 
 

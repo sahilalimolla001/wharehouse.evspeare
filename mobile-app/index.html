@@ -62,6 +62,7 @@
 
         <section class="screen" id="pick-screen">
           <div class="active-order" id="active-order-card"></div>
+          <div class="result-card bin-card" id="pick-bin-card">Scan bin barcode first.</div>
           <div class="scan-box compact">
             <video id="scanner-video" playsinline muted></video>
             <div class="scan-line"></div>
@@ -70,7 +71,7 @@
             <button class="primary" id="start-scan" type="button">Start Scan</button>
             <button id="stop-scan" type="button">Stop</button>
           </div>
-          <label>Manual SKU Number / Barcode
+          <label><span id="pick-manual-label">Manual Bin / Product Barcode</span>
             <span class="scan-input"><input id="manual-code" inputmode="numeric" placeholder="1001 or barcode"><button id="manual-scan" type="button">Find</button></span>
           </label>
           <div class="result-card" id="scan-result">Scan item barcode to match the active order.</div>
@@ -111,20 +112,35 @@
         <section class="screen" id="move-screen">
           <form id="location-form" class="form-card">
             <h2>Move Stock</h2>
-            <label>Product SKU Number / Barcode
-              <span class="scan-input"><input name="product" required inputmode="numeric" placeholder="1001"><button type="button" data-scan-fill="#location-form [name='product']">Scan</button></span>
-            </label>
-            <label>From Location
+            <label>From Bin
               <span class="scan-input"><input name="from_location" required placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#location-form [name='from_location']">Scan</button></span>
             </label>
-            <label>To Location
-              <span class="scan-input"><input name="to_location" required placeholder="LOC:B-1-2-03"><button type="button" data-scan-fill="#location-form [name='to_location']">Scan</button></span>
-            </label>
-            <label>Quantity
-              <input name="quantity" type="number" min="1" required>
-            </label>
+            <div class="product-preview product-preview--message" id="move-bin-preview">Scan from bin to show available items.</div>
+            <div class="card-list" id="move-bin-items"></div>
+            <div class="stock-details hidden" id="move-details">
+              <input name="product" type="hidden">
+              <div class="result-card" id="move-selected-item">Select an item from the scanned bin.</div>
+              <label>To Bin
+                <span class="scan-input"><input name="to_location" required disabled placeholder="LOC:B-1-2-03"><button type="button" data-scan-fill="#location-form [name='to_location']">Scan</button></span>
+              </label>
+              <label>Quantity
+                <input name="quantity" type="number" min="1" required disabled>
+              </label>
+            </div>
             <button class="primary" type="submit">Move Stock</button>
           </form>
+        </section>
+
+        <section class="screen" id="inventory-screen">
+          <form id="inventory-lookup-form" class="form-card">
+            <h2>View Inventory</h2>
+            <label>Bin Barcode / ID
+              <span class="scan-input"><input name="location" required placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#inventory-lookup-form [name='location']">Scan</button></span>
+            </label>
+            <button class="primary" type="submit">View Bin Items</button>
+          </form>
+          <div class="result-card" id="inventory-bin-card">Scan bin to see what items are inside.</div>
+          <div class="card-list" id="inventory-items"></div>
         </section>
       </main>
 
@@ -133,6 +149,7 @@
         <button data-screen="dispatch-screen" type="button">Ship</button>
         <button data-screen="stock-screen" type="button">Stock</button>
         <button data-screen="move-screen" type="button">Move</button>
+        <button data-screen="inventory-screen" type="button">Inventory</button>
       </nav>
     </div>
 

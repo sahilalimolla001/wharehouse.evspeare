@@ -8,6 +8,10 @@ const store = {
   token: localStorage.getItem("warehouseMobileToken") || "",
   orders: [],
   activeOrderId: Number(localStorage.getItem("warehouseActiveOrderId") || 0),
+  activePickLocation: null,
+  activePickInventory: [],
+  inventoryView: null,
+  moveInventory: [],
 };
 
 let videoStream = null;
@@ -55,6 +59,14 @@ function bindActions() {
   $('#stock-in-form [name="product"]').addEventListener("change", () => loadStockProductPreview($('#stock-in-form [name="product"]').value.trim()));
   $('#stock-in-form [name="product"]').addEventListener("blur", () => loadStockProductPreview($('#stock-in-form [name="product"]').value.trim()));
   $("#location-form").addEventListener("submit", submitLocationUpdate);
+  $('#location-form [name="from_location"]').addEventListener("change", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
+  $('#location-form [name="from_location"]').addEventListener("blur", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
+  $("#inventory-lookup-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadInventoryView($('#inventory-lookup-form [name="location"]').value.trim());
+  });
+  $('#inventory-lookup-form [name="location"]').addEventListener("change", () => loadInventoryView($('#inventory-lookup-form [name="location"]').value.trim()));
+  $('#inventory-lookup-form [name="location"]').addEventListener("blur", () => loadInventoryView($('#inventory-lookup-form [name="location"]').value.trim()));
   $$("[data-scan-fill]").forEach((button) => {
     button.addEventListener("click", () => {
       scanFillTarget = button.dataset.scanFill;
@@ -74,6 +86,7 @@ function showScreen(screenId) {
     "dispatch-screen": "Dispatch",
     "stock-screen": "Stock In",
     "move-screen": "Move Stock",
+    "inventory-screen": "View Inventory",
   };
   $("#screen-title").textContent = titles[screenId] || "Picker";
   if (screenId !== "pick-screen") stopScanner();
@@ -142,9 +155,12 @@ async function logout(callApi = true) {
   store.user = null;
   store.token = "";
   store.activeOrderId = 0;
+  store.activePickLocation = null;
+  store.activePickInventory = [];
   localStorage.removeItem("warehouseMobileUser");
   localStorage.removeItem("warehouseMobileToken");
   localStorage.removeItem("warehouseActiveOrderId");
+  localStorage.removeItem("warehouseActivePickLocation");
   stopScanner();
   lockApp();
   toast("Logged out.");
@@ -247,6 +263,7 @@ function orderCardHtml(order) {
 async function startOrder(orderId) {
   store.activeOrderId = orderId;
   localStorage.setItem("warehouseActiveOrderId", String(orderId));
+  resetActivePickBin();
   const order = activeOrder();
   if (order && order.status === "pending") {
     await apiFetch(`/orders/${order.id}/status`, { method: "POST", body: { status: "picking" } });
@@ -264,7 +281,10 @@ function renderActiveOrder() {
   const order = activeOrder();
   if (!order) {
     $("#active-order-card").innerHTML = `<div class="empty-state">Select an order from the queue.</div>`;
+    $("#pick-bin-card").innerHTML = `Scan bin barcode first.`;
     $("#pick-items").innerHTML = "";
+    $("#scan-result").textContent = "Select an order first.";
+    $("#pick-manual-label").textContent = "Manual Bin / Product Barcode";
     $("#mark-packed").disabled = true;
     return;
   }
@@ -284,25 +304,89 @@ function renderActiveOrder() {
       </div>
     </article>
   `;
-  $("#pick-items").innerHTML = order.items.map(pickItemHtml).join("");
+
+  renderPickBinCard(order);
+  const itemsForBin = pickItemsForActiveBin(order);
+  if (!store.activePickLocation) {
+    $("#pick-manual-label").textContent = "Manual Bin Barcode";
+    $("#manual-code").placeholder = "LOC:A-2-4-08";
+    $("#scan-result").textContent = "Scan bin first. Product scan will open after bin is selected.";
+    $("#pick-items").innerHTML = `<div class="empty-state">Bin scan ke baad product list dikhegi.</div>`;
+  } else {
+    $("#pick-manual-label").textContent = "Manual SKU Number / Barcode";
+    $("#manual-code").placeholder = "1001 or barcode";
+    $("#scan-result").textContent = "Scan product barcode from this bin.";
+    $("#pick-items").innerHTML = itemsForBin.length
+      ? itemsForBin.map((item) => pickItemHtml(item, binInventoryForProduct(item.product.id))).join("")
+      : `<div class="empty-state">Is bin me active order ka item nahi mila. Dusra bin scan karein.</div>`;
+  }
   $("#pick-items").querySelectorAll("[data-pick-item]").forEach((button) => {
     button.addEventListener("click", () => updatePickedQuantity(Number(button.dataset.pickItem), Number(button.dataset.quantity)));
+  });
+  $("#pick-bin-card").querySelector("[data-change-bin]")?.addEventListener("click", () => {
+    resetActivePickBin();
+    renderActiveOrder();
+    toast("Scan another bin.");
   });
   $("#mark-packed").disabled = !order.items.every((item) => item.picked_quantity >= item.quantity);
 }
 
-function pickItemHtml(item) {
+function renderPickBinCard(order) {
+  if (!store.activePickLocation) {
+    const binHints = order.items
+      .flatMap((item) => item.product.locations || [])
+      .filter((row) => Number(row.available_quantity || 0) > 0)
+      .slice(0, 4);
+    $("#pick-bin-card").innerHTML = `
+      <strong>Step 1: Scan bin</strong><br>
+      <span>Order item pick karne se pehle bin barcode scan karein.</span>
+      ${
+        binHints.length
+          ? `<div class="bin-hints">${binHints.map((row) => `<code>${escapeHtml(row.location.barcode || row.location.id)}</code>`).join("")}</div>`
+          : ""
+      }
+    `;
+    return;
+  }
+
+  const matchingItems = pickItemsForActiveBin(order);
+  $("#pick-bin-card").innerHTML = `
+    <div class="bin-card-top">
+      <div>
+        <strong>${escapeHtml(store.activePickLocation.full_code)}</strong>
+        <span><code>${escapeHtml(store.activePickLocation.barcode || store.activePickLocation.id)}</code> / ${matchingItems.length} order item(s)</span>
+      </div>
+      <button type="button" data-change-bin>Change Bin</button>
+    </div>
+  `;
+}
+
+function pickItemsForActiveBin(order) {
+  if (!store.activePickLocation) return [];
+  return order.items.filter((item) => {
+    const inventory = binInventoryForProduct(item.product.id);
+    return item.picked_quantity > 0 || (inventory && Number(inventory.available_quantity || 0) > 0);
+  });
+}
+
+function binInventoryForProduct(productId) {
+  return store.activePickInventory.find((item) => item.product.id === productId);
+}
+
+function pickItemHtml(item, inventory = null) {
   const done = item.picked_quantity >= item.quantity;
+  const binAvailable = Number(inventory?.available_quantity || 0);
   return `
     <article class="pick-item ${done ? "done" : ""}" data-product-sku="${escapeHtml(item.product.sku)}" data-item-id="${item.id}">
       <div>
         <strong>${escapeHtml(item.product.sku)}</strong>
         <span>${escapeHtml(item.product.name)}</span>
+        ${inventory ? `<span>Bin available: ${binAvailable}</span>` : ""}
       </div>
       <div class="qty-control">
         <button type="button" data-pick-item="${item.id}" data-quantity="${Math.max(item.picked_quantity - 1, 0)}">-</button>
         <strong>${item.picked_quantity}/${item.quantity}</strong>
-        <button type="button" data-pick-item="${item.id}" data-quantity="${Math.min(item.picked_quantity + 1, item.quantity)}">+</button>
+        <button type="button" data-pick-item="${item.id}" data-quantity="${Math.min(item.picked_quantity + 1, item.quantity)}" ${done || binAvailable <= 0 ? "disabled" : ""}>+</button>
       </div>
     </article>
   `;
@@ -311,9 +395,19 @@ function pickItemHtml(item) {
 async function updatePickedQuantity(itemId, quantity) {
   const order = activeOrder();
   if (!order) return;
+  const item = order.items.find((orderItem) => orderItem.id === itemId);
+  if (!item) return;
+  const increasing = quantity > item.picked_quantity;
+  if (increasing && !store.activePickLocation) {
+    toast("Product pick karne se pehle bin scan karein.");
+    return;
+  }
   try {
-    const data = await apiFetch(`/orders/${order.id}/items/${itemId}/pick`, { method: "POST", body: { quantity } });
+    const body = { quantity };
+    if (store.activePickLocation) body.location = store.activePickLocation.barcode || store.activePickLocation.id;
+    const data = await apiFetch(`/orders/${order.id}/items/${itemId}/pick`, { method: "POST", body });
     replaceOrder(data.order);
+    if (store.activePickLocation) await loadActivePickInventory(store.activePickLocation.barcode || store.activePickLocation.id);
     renderActiveOrder();
   } catch (error) {
     toast(error.message);
@@ -424,13 +518,36 @@ async function scanCode(code) {
   try {
     const data = await apiFetch(`/scan/${encodeURIComponent(code)}`);
     if (scanFillTarget) {
+      const targetNeedsLocation = scanFillTarget.includes("location");
+      const targetNeedsProduct = scanFillTarget.includes("product");
+      if (targetNeedsLocation && data.type !== "location") {
+        toast("Location/bin barcode scan karein.");
+        return;
+      }
+      if (targetNeedsProduct && data.type !== "product") {
+        toast("Product SKU/barcode scan karein.");
+        return;
+      }
       fillScanTarget(data.type === "location" ? data.location.barcode || data.location.id : data.product.sku);
+      return;
+    }
+    if ($(".screen.active")?.id === "pick-screen" && activeOrder() && !store.activePickLocation) {
+      if (data.type !== "location") {
+        $("#scan-result").textContent = "Pehle bin barcode scan karein.";
+        toast("First scan bin.");
+        return;
+      }
+      await activatePickBin(data.location.barcode || data.location.id);
       return;
     }
     if (data.type === "product") {
       await matchPickedProduct(data.product);
     } else if (data.type === "location") {
-      $("#scan-result").innerHTML = `<strong>${escapeHtml(data.location.full_code)}</strong><br><code>${escapeHtml(data.location.barcode)}</code>`;
+      if ($(".screen.active")?.id === "pick-screen" && activeOrder()) {
+        await activatePickBin(data.location.barcode || data.location.id);
+      } else {
+        $("#scan-result").innerHTML = `<strong>${escapeHtml(data.location.full_code)}</strong><br><code>${escapeHtml(data.location.barcode)}</code>`;
+      }
     }
   } catch (error) {
     $("#scan-result").textContent = error.message;
@@ -444,15 +561,53 @@ async function matchPickedProduct(product) {
     toast("Select an order first.");
     return;
   }
+  if (!store.activePickLocation) {
+    $("#scan-result").textContent = "Scan bin first, then scan product.";
+    toast("First scan bin.");
+    return;
+  }
   const item = order.items.find((orderItem) => orderItem.product.id === product.id || orderItem.product.sku === product.sku);
   if (!item) {
     $("#scan-result").innerHTML = `<strong>${escapeHtml(product.sku)}</strong><br>Not in active order.`;
     toast("Item not in this order.");
     return;
   }
+  const inventory = binInventoryForProduct(product.id);
+  if (!inventory || Number(inventory.available_quantity || 0) <= 0) {
+    $("#scan-result").innerHTML = `<strong>${escapeHtml(product.sku)}</strong><br>Not available in scanned bin.`;
+    toast("Item scanned bin me available nahi hai.");
+    return;
+  }
   const nextQuantity = Math.min(item.picked_quantity + 1, item.quantity);
   await updatePickedQuantity(item.id, nextQuantity);
-  $("#scan-result").innerHTML = `<strong>${escapeHtml(product.sku)}</strong><br>Picked ${nextQuantity}/${item.quantity}`;
+  $("#scan-result").innerHTML = `<strong>${escapeHtml(product.sku)}</strong><br>Picked ${nextQuantity}/${item.quantity} from scanned bin`;
+}
+
+async function activatePickBin(identifier) {
+  try {
+    await loadActivePickInventory(identifier);
+    $("#manual-code").value = "";
+    $("#scan-result").textContent = "Bin selected. Now scan product barcode.";
+    renderActiveOrder();
+    toast("Bin selected. Product scan karein.");
+  } catch (error) {
+    resetActivePickBin();
+    $("#scan-result").textContent = error.message;
+    toast(error.message);
+  }
+}
+
+async function loadActivePickInventory(identifier) {
+  const data = await apiFetch(`/location-inventory/${encodeURIComponent(identifier)}`);
+  store.activePickLocation = data.location;
+  store.activePickInventory = data.items || [];
+  return data;
+}
+
+function resetActivePickBin() {
+  store.activePickLocation = null;
+  store.activePickInventory = [];
+  localStorage.removeItem("warehouseActivePickLocation");
 }
 
 function fillScanTarget(value) {
@@ -463,6 +618,12 @@ function fillScanTarget(value) {
   }
   if (scanFillTarget === '#stock-in-form [name=\'product\']') {
     loadStockProductPreview(value);
+  }
+  if (scanFillTarget === '#inventory-lookup-form [name=\'location\']') {
+    loadInventoryView(value);
+  }
+  if (scanFillTarget === '#location-form [name=\'from_location\']') {
+    loadMoveBinInventory(value);
   }
   const returnScreen = scanReturnScreen;
   scanFillTarget = null;
@@ -543,6 +704,115 @@ function resetStockProductPreview(message = "Scan SKU number to load product.") 
   $('#stock-in-form [name="quantity"]').disabled = true;
 }
 
+async function loadInventoryView(identifier) {
+  if (!identifier) {
+    $("#inventory-bin-card").textContent = "Scan bin to see what items are inside.";
+    $("#inventory-items").innerHTML = "";
+    return;
+  }
+  try {
+    const data = await apiFetch(`/location-inventory/${encodeURIComponent(identifier)}`);
+    store.inventoryView = data;
+    $("#inventory-bin-card").innerHTML = `
+      <strong>${escapeHtml(data.location.full_code)}</strong><br>
+      <code>${escapeHtml(data.location.barcode || data.location.id)}</code> / ${data.items.length} item(s)
+    `;
+    $("#inventory-items").innerHTML = inventoryItemsHtml(data.items, "inventory");
+  } catch (error) {
+    $("#inventory-bin-card").textContent = error.message;
+    $("#inventory-items").innerHTML = "";
+    toast(error.message);
+  }
+}
+
+async function loadMoveBinInventory(identifier) {
+  if (!identifier) {
+    store.moveInventory = [];
+    $("#move-bin-preview").textContent = "Scan from bin to show available items.";
+    $("#move-bin-items").innerHTML = "";
+    resetMoveSelection();
+    return;
+  }
+  try {
+    const data = await apiFetch(`/location-inventory/${encodeURIComponent(identifier)}`);
+    store.moveInventory = data.items || [];
+    $("#move-bin-preview").classList.remove("hidden");
+    $("#move-bin-preview").innerHTML = `
+      <div class="product-preview-info">
+        <strong>${escapeHtml(data.location.full_code)}</strong>
+        <span><code>${escapeHtml(data.location.barcode || data.location.id)}</code> / ${store.moveInventory.length} item(s)</span>
+      </div>
+    `;
+    $("#move-bin-items").innerHTML = inventoryItemsHtml(store.moveInventory, "move");
+    $("#move-bin-items").querySelectorAll("[data-select-move-product]").forEach((button) => {
+      button.addEventListener("click", () => selectMoveItem(button.dataset.selectMoveProduct));
+    });
+    resetMoveSelection();
+  } catch (error) {
+    store.moveInventory = [];
+    $("#move-bin-preview").textContent = error.message;
+    $("#move-bin-items").innerHTML = "";
+    resetMoveSelection();
+    toast(error.message);
+  }
+}
+
+function inventoryItemsHtml(items, mode) {
+  if (!items.length) {
+    return `<div class="empty-state">Is bin me available item nahi hai.</div>`;
+  }
+  return items
+    .map((item) => {
+      const product = item.product;
+      const imageSrc = productImageSrc(product);
+      const action = mode === "move" ? `<button type="button" data-select-move-product="${escapeHtml(product.sku)}">Select</button>` : "";
+      return `
+        <article class="inventory-item">
+          <div class="product-preview-thumb ${imageSrc ? "" : "empty"}">
+            ${imageSrc ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(product.name)}">` : "<span>No image</span>"}
+          </div>
+          <div class="inventory-item-info">
+            <strong>${escapeHtml(product.sku)} / ${escapeHtml(product.name)}</strong>
+            <span>Available: ${item.available_quantity} / Total: ${item.quantity}</span>
+            <span>${escapeHtml(product.unit || "pcs")}</span>
+          </div>
+          ${action}
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function selectMoveItem(sku) {
+  const item = store.moveInventory.find((row) => row.product.sku === sku);
+  if (!item) return;
+  const form = $("#location-form");
+  form.elements.product.value = item.product.sku;
+  form.elements.quantity.value = 1;
+  form.elements.quantity.max = item.available_quantity;
+  form.elements.quantity.disabled = false;
+  form.elements.to_location.disabled = false;
+  $("#move-details").classList.remove("hidden");
+  $("#move-selected-item").innerHTML = `
+    <strong>${escapeHtml(item.product.sku)} / ${escapeHtml(item.product.name)}</strong><br>
+    Available to move: ${item.available_quantity}
+  `;
+  toast("Item selected. To bin scan karein.");
+}
+
+function resetMoveSelection() {
+  const form = $("#location-form");
+  if (!form) return;
+  form.elements.product.value = "";
+  form.elements.to_location.value = "";
+  form.elements.quantity.value = "";
+  form.elements.quantity.removeAttribute("max");
+  form.elements.to_location.disabled = true;
+  form.elements.quantity.disabled = true;
+  $("#move-details").classList.add("hidden");
+  $("#move-selected-item").textContent = "Select an item from the scanned bin.";
+}
+
 function productImageSrc(product) {
   const raw = product?.image_display_url || product?.image_url || "";
   if (!raw || raw.startsWith("gs://")) return "";
@@ -561,10 +831,20 @@ async function submitLocationUpdate(event) {
   const form = event.target;
   const payload = Object.fromEntries(new FormData(form).entries());
   payload.quantity = Number(payload.quantity);
+  if (!payload.product) {
+    toast("From bin se item select karein.");
+    return;
+  }
 
   try {
     await apiFetch("/location-update", { method: "POST", body: payload });
+    const fromLocation = payload.from_location;
     form.reset();
+    form.elements.from_location.value = fromLocation;
+    store.moveInventory = [];
+    $("#move-bin-items").innerHTML = "";
+    resetMoveSelection();
+    if (fromLocation) await loadMoveBinInventory(fromLocation);
     toast("Stock moved.");
     await refreshAll();
   } catch (error) {

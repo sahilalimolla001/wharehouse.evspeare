@@ -2,6 +2,14 @@
 
 Use this public API from the customer website to show live warehouse product data.
 
+Your customer website origin:
+
+```text
+https://evspeare.up.railway.app
+```
+
+Add this origin to the warehouse backend `API_ALLOWED_ORIGINS` value along with the mobile/backend domains.
+
 ```text
 GET https://your-backend-domain.com/api/public/products
 ```
@@ -39,7 +47,7 @@ The response includes customer-safe fields:
 For hosted customer websites, add the customer site domain to backend `.env`:
 
 ```text
-API_ALLOWED_ORIGINS=https://your-customer-website.com
+API_ALLOWED_ORIGINS=https://your-mobile-domain.up.railway.app,https://your-backend-domain.up.railway.app,https://evspeare.up.railway.app
 ```
 
 ## Frontend Snippet

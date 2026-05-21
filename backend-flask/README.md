@@ -157,6 +157,7 @@ For pgAdmin and Google setup, see `PGADMIN_GOOGLE_SETUP.md`.
 - `GET /api/products`
 - `GET /api/scan/<code>`
 - `GET /api/locations`
+- `GET /api/location-inventory/<location-code-or-id>`
 - `POST /api/stock-in`
 - `POST /api/stock-out`
 - `POST /api/location-update`

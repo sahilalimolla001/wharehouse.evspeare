@@ -2,6 +2,12 @@
 
 Use this flow when a customer places an order on the customer website and the order must appear in the warehouse admin.
 
+Your customer website:
+
+```text
+https://evspeare.up.railway.app
+```
+
 ## Warehouse Endpoint
 
 ```text

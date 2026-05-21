@@ -48,7 +48,7 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 SESSION_COOKIE_SECURE=true
 SESSION_COOKIE_SAMESITE=None
 TRUST_PROXY_HEADERS=true
-API_ALLOWED_ORIGINS=https://${{warehouse-mobile.RAILWAY_PUBLIC_DOMAIN}},https://${{warehouse-backend.RAILWAY_PUBLIC_DOMAIN}}
+API_ALLOWED_ORIGINS=https://${{warehouse-mobile.RAILWAY_PUBLIC_DOMAIN}},https://${{warehouse-backend.RAILWAY_PUBLIC_DOMAIN}},https://evspeare.up.railway.app
 API_ALLOW_RAILWAY_ORIGINS=true
 ALLOW_INSECURE_USER_HEADER=false
 INTEGRATION_API_KEY=replace-with-a-strong-random-integration-key
@@ -61,7 +61,7 @@ GOOGLE_SHEETS_AUTO_SYNC=true
 If Railway shows `problem processing` while saving variables, the service reference is not resolving yet. First generate public domains for both services, then either keep the reference variables above or paste the final domains literally:
 
 ```text
-API_ALLOWED_ORIGINS=https://your-mobile-domain.up.railway.app,https://your-backend-domain.up.railway.app
+API_ALLOWED_ORIGINS=https://your-mobile-domain.up.railway.app,https://your-backend-domain.up.railway.app,https://evspeare.up.railway.app
 ```
 
 Also confirm your service names are exactly `warehouse-backend`, `warehouse-mobile`, and `Postgres` if you use the reference syntax.
