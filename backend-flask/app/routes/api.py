@@ -868,6 +868,19 @@ def find_location(identifier=None, required=False):
         location = WarehouseLocation.query.filter_by(barcode=identifier).first()
         if location:
             return location
+    cleaned_identifier = identifier.removeprefix("LOC:").strip()
+    parts = [part.strip() for part in cleaned_identifier.replace("/", "-").split("-") if part.strip()]
+    if len(parts) >= 4:
+        zone, rack, shelf = parts[0], parts[1], parts[2]
+        bin_code = "-".join(parts[3:])
+        location = WarehouseLocation.query.filter(
+            func.lower(WarehouseLocation.zone) == zone.lower(),
+            func.lower(WarehouseLocation.rack) == rack.lower(),
+            func.lower(WarehouseLocation.shelf) == shelf.lower(),
+            func.lower(WarehouseLocation.bin_code) == bin_code.lower(),
+        ).first()
+        if location:
+            return location
     if required:
         raise ValueError("Location not found")
     return None

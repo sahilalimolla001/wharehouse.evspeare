@@ -52,13 +52,14 @@ function bindActions() {
   $("#start-scan").addEventListener("click", startScanner);
   $("#stop-scan").addEventListener("click", stopScanner);
   $("#manual-scan").addEventListener("click", () => scanCode($("#manual-code").value.trim()));
-  $("#back-to-orders").addEventListener("click", () => showScreen("orders-screen"));
+  $("#back-to-orders").addEventListener("click", cancelScanOrBackToOrders);
   $("#mark-packed").addEventListener("click", markActiveOrderPacked);
   $("#stock-in-form").addEventListener("submit", (event) => submitStock(event, "stock-in"));
   $('#stock-in-form [name="product"]').addEventListener("input", scheduleStockProductPreview);
   $('#stock-in-form [name="product"]').addEventListener("change", () => loadStockProductPreview($('#stock-in-form [name="product"]').value.trim()));
   $('#stock-in-form [name="product"]').addEventListener("blur", () => loadStockProductPreview($('#stock-in-form [name="product"]').value.trim()));
   $("#location-form").addEventListener("submit", submitLocationUpdate);
+  $("#load-move-bin").addEventListener("click", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
   $('#location-form [name="from_location"]').addEventListener("change", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
   $('#location-form [name="from_location"]').addEventListener("blur", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
   $("#inventory-lookup-form").addEventListener("submit", (event) => {
@@ -71,6 +72,9 @@ function bindActions() {
     button.addEventListener("click", () => {
       scanFillTarget = button.dataset.scanFill;
       scanReturnScreen = $(".screen.active")?.id || "orders-screen";
+      $("#manual-code").value = "";
+      $("#manual-code").placeholder = scanFillTarget.includes("location") ? "Scan bin barcode" : "Scan product barcode";
+      $("#scan-result").textContent = scanFillTarget.includes("location") ? "Scan bin barcode." : "Scan product barcode.";
       showScreen("pick-screen");
       startScanner();
     });
@@ -510,6 +514,17 @@ function stopScanner() {
   $("#scanner-video").srcObject = null;
 }
 
+function cancelScanOrBackToOrders() {
+  if (scanFillTarget && scanReturnScreen) {
+    const returnScreen = scanReturnScreen;
+    clearScanFillTarget();
+    showScreen(returnScreen);
+    toast("Scan cancelled.");
+    return;
+  }
+  showScreen("orders-screen");
+}
+
 async function scanCode(code) {
   if (!code) {
     toast("Code enter karein.");
@@ -521,11 +536,11 @@ async function scanCode(code) {
       const targetNeedsLocation = scanFillTarget.includes("location");
       const targetNeedsProduct = scanFillTarget.includes("product");
       if (targetNeedsLocation && data.type !== "location") {
-        toast("Location/bin barcode scan karein.");
+        reportScanFillError("Location/bin barcode scan karein.");
         return;
       }
       if (targetNeedsProduct && data.type !== "product") {
-        toast("Product SKU/barcode scan karein.");
+        reportScanFillError("Product SKU/barcode scan karein.");
         return;
       }
       fillScanTarget(data.type === "location" ? data.location.barcode || data.location.id : data.product.sku);
@@ -550,6 +565,10 @@ async function scanCode(code) {
       }
     }
   } catch (error) {
+    if (scanFillTarget) {
+      reportScanFillError(error.message);
+      return;
+    }
     $("#scan-result").textContent = error.message;
     toast(error.message);
   }
@@ -611,25 +630,47 @@ function resetActivePickBin() {
 }
 
 function fillScanTarget(value) {
-  const input = $(scanFillTarget);
+  const target = scanFillTarget;
+  const returnScreen = scanReturnScreen;
+  const input = $(target);
   if (input) {
     input.value = value;
     input.focus();
   }
-  if (scanFillTarget === '#stock-in-form [name=\'product\']') {
+  clearScanFillTarget();
+  if (returnScreen) showScreen(returnScreen);
+  if (target === '#stock-in-form [name=\'product\']') {
     loadStockProductPreview(value);
   }
-  if (scanFillTarget === '#inventory-lookup-form [name=\'location\']') {
+  if (target === '#inventory-lookup-form [name=\'location\']') {
     loadInventoryView(value);
   }
-  if (scanFillTarget === '#location-form [name=\'from_location\']') {
+  if (target === '#location-form [name=\'from_location\']') {
     loadMoveBinInventory(value);
   }
+  toast("Field filled.");
+}
+
+function reportScanFillError(message) {
+  const target = scanFillTarget;
   const returnScreen = scanReturnScreen;
+  clearScanFillTarget();
+  if (returnScreen) showScreen(returnScreen);
+  if (target === '#inventory-lookup-form [name=\'location\']') {
+    $("#inventory-bin-card").textContent = message;
+  } else if (target === '#location-form [name=\'from_location\']') {
+    $("#move-bin-preview").textContent = message;
+    $("#move-bin-items").innerHTML = "";
+    resetMoveSelection();
+  } else {
+    $("#scan-result").textContent = message;
+  }
+  toast(message);
+}
+
+function clearScanFillTarget() {
   scanFillTarget = null;
   scanReturnScreen = null;
-  if (returnScreen) showScreen(returnScreen);
-  toast("Field filled.");
 }
 
 async function submitStock(event, endpoint) {
