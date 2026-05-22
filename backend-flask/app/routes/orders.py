@@ -4,6 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
 from ..models import Order, OrderItem, Product, User
+from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
 from .auth import get_current_user, login_required, role_required, user_has_role
 
 orders_bp = Blueprint("orders", __name__)
@@ -71,11 +72,40 @@ def update_order_status(order_id):
     if not can_access_order(get_current_user(), order):
         flash("You do not have permission to update that order.", "warning")
         return redirect(url_for("orders.orders"))
-    order.status = request.form.get("status", order.status)
+    requested_status = request.form.get("status", order.status)
+    if requested_status == "dispatched":
+        return dispatch_order(order_id)
+
+    order.status = requested_status
     if order.status == "completed":
         order.completed_at = datetime.utcnow()
     db.session.commit()
     flash("Order status updated.", "success")
+    return redirect(url_for("orders.order_detail", order_id=order.id))
+
+
+@orders_bp.post("/order/<int:order_id>/dispatch")
+@role_required("manager", "staff", "picker", "packer", "delivery")
+def dispatch_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    if not can_access_order(get_current_user(), order):
+        flash("You do not have permission to dispatch that order.", "warning")
+        return redirect(url_for("orders.orders"))
+    if order.status not in {"packed", "dispatched"}:
+        flash("Order must be packed before dispatch.", "warning")
+        return redirect(url_for("orders.order_detail", order_id=order.id))
+    if not all(item.packed_quantity >= item.quantity for item in order.items):
+        flash("Pack all order items before dispatch.", "warning")
+        return redirect(url_for("orders.order_detail", order_id=order.id))
+
+    try:
+        result = dispatch_order_with_shiprocket(order, request.form, user_id=get_current_user().id if get_current_user() else None)
+        db.session.commit()
+        message = "Shiprocket courier created and order dispatched." if result["created"] else "Order dispatched with existing Shiprocket courier."
+        flash(message, "success")
+    except (ShiprocketError, ValueError) as error:
+        db.session.rollback()
+        flash(f"Dispatch failed: {error}", "danger")
     return redirect(url_for("orders.order_detail", order_id=order.id))
 
 

@@ -169,6 +169,8 @@ After running migrations, open the admin page:
 
 You can load an existing warehouse order, fill the required billing/shipping pincode, city, state, package dimensions, and create the Shiprocket courier order. The returned Shiprocket order ID, shipment ID, AWB, and status are saved back on the warehouse order when a local order is selected.
 
+When orders are imported through `/api/integrations/orders`, the app reads `payment_method`, `billing_address`, `shipping_address`, and `items` from the saved source payload. After picking/packing, the mobile Ship page asks only for package length, breadth, height, and weight; submitting Dispatch automatically creates the Shiprocket courier order and marks the warehouse order as dispatched.
+
 For real-time tracking updates, open:
 
 ```text

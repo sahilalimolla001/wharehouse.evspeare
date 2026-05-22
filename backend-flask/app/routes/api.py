@@ -17,6 +17,7 @@ from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import user_has_role
+from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
 
 api_bp = Blueprint("api", __name__)
 
@@ -413,6 +414,8 @@ def api_order_status(order_id):
     status = data.get("status", "").strip().lower()
     if status not in allowed:
         return jsonify({"ok": False, "message": "Invalid order status"}), 400
+    if status == "dispatched":
+        return dispatch_order_api_response(order, data)
     if status == "picking" and not order.assigned_to_id:
         order.assigned_to_id = current_api_user_id()
     order.status = status
@@ -421,6 +424,37 @@ def api_order_status(order_id):
     log_activity("order_status", f"Order {order.order_number} marked {status}", user_id=current_api_user_id(), entity_type="Order", entity_id=order.id)
     db.session.commit()
     return jsonify({"ok": True, "order": serialize_order(order)})
+
+
+@api_bp.post("/orders/<int:order_id>/dispatch")
+@api_role_required("manager", "staff", "picker", "packer", "delivery")
+def api_dispatch_order(order_id):
+    data = request.get_json(silent=True) or {}
+    order = Order.query.get_or_404(order_id)
+    if not can_access_order(current_api_user(), order):
+        return jsonify({"ok": False, "message": "Permission denied for this order"}), 403
+    return dispatch_order_api_response(order, data)
+
+
+def dispatch_order_api_response(order, data):
+    if order.status not in {"packed", "dispatched"}:
+        return jsonify({"ok": False, "message": "Order must be packed before dispatch"}), 400
+    if not all(item.packed_quantity >= item.quantity for item in order.items):
+        return jsonify({"ok": False, "message": "Pack all order items before dispatch"}), 400
+    try:
+        result = dispatch_order_with_shiprocket(order, data, user_id=current_api_user_id())
+        db.session.commit()
+        return jsonify(
+            {
+                "ok": True,
+                "order": serialize_order(order),
+                "shiprocket": result["summary"],
+                "created_courier_order": result["created"],
+            }
+        )
+    except (ShiprocketError, ValueError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
 
 
 @api_bp.post("/orders/<int:order_id>/items/<int:item_id>/pick")
@@ -1025,6 +1059,12 @@ def serialize_order(order):
             "shipment_id": order.courier_shipment_id,
             "awb": order.courier_awb,
             "status": order.courier_status,
+        },
+        "package": {
+            "length": float(order.package_length_cm or 0),
+            "breadth": float(order.package_breadth_cm or 0),
+            "height": float(order.package_height_cm or 0),
+            "weight": float(order.package_weight_kg or 0),
         },
         "items": [
             {

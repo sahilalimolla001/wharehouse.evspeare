@@ -249,6 +249,20 @@ body {
   overflow-wrap: anywhere;
 }
 
+.dispatch-package-form {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.dispatch-package-form .form-label {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .flash-stack {
   margin-bottom: 16px;
 }

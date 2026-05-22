@@ -436,7 +436,7 @@ async function markActiveOrderPacked() {
 }
 
 function renderDispatchQueue() {
-  const orders = store.orders.filter((order) => ["packed", "dispatched"].includes(order.status));
+  const orders = store.orders.filter((order) => order.status === "packed");
   const target = $("#dispatch-list");
   if (!orders.length) {
     target.innerHTML = `<div class="empty-state">No packed orders waiting.</div>`;
@@ -454,26 +454,55 @@ function renderDispatchQueue() {
           <span class="badge">${escapeHtml(order.status)}</span>
         </div>
         <div class="order-actions">
-          <button type="button" data-order-status="${order.id}:dispatched">Dispatch</button>
-          <button class="primary" type="button" data-order-status="${order.id}:completed">Complete</button>
+          <button class="primary" type="button" data-open-dispatch="${order.id}">Dispatch</button>
         </div>
+        <form class="dispatch-package hidden" data-dispatch-form="${order.id}">
+          <div class="two-col">
+            <label>Length cm
+              <input name="length" type="number" min="0.01" step="0.01" value="${numberInput(order.package?.length)}" required>
+            </label>
+            <label>Breadth cm
+              <input name="breadth" type="number" min="0.01" step="0.01" value="${numberInput(order.package?.breadth)}" required>
+            </label>
+            <label>Height cm
+              <input name="height" type="number" min="0.01" step="0.01" value="${numberInput(order.package?.height)}" required>
+            </label>
+            <label>Weight kg
+              <input name="weight" type="number" min="0.01" step="0.001" value="${numberInput(order.package?.weight)}" required>
+            </label>
+          </div>
+          <button class="primary" type="submit">Create Courier & Dispatch</button>
+        </form>
       </article>
     `)
     .join("");
 
-  target.querySelectorAll("[data-order-status]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const [orderId, status] = button.dataset.orderStatus.split(":");
-      await updateOrderStatus(orderId, status);
+  target.querySelectorAll("[data-open-dispatch]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = target.querySelector(`[data-dispatch-form="${button.dataset.openDispatch}"]`);
+      form?.classList.toggle("hidden");
+    });
+  });
+
+  target.querySelectorAll("[data-dispatch-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await dispatchOrderWithPackage(form.dataset.dispatchForm, form);
     });
   });
 }
 
-async function updateOrderStatus(orderId, status) {
+function numberInput(value) {
+  const number = Number(value || 0);
+  return number > 0 ? String(number) : "";
+}
+
+async function dispatchOrderWithPackage(orderId, form) {
+  const body = Object.fromEntries(new FormData(form).entries());
   try {
-    const data = await apiFetch(`/orders/${orderId}/status`, { method: "POST", body: { status } });
+    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body });
     replaceOrder(data.order);
-    toast(`Order ${status}.`);
+    toast(data.created_courier_order ? "Courier created and order dispatched." : "Order dispatched.");
     await loadOrders();
   } catch (error) {
     toast(error.message);

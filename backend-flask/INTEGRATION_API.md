@@ -34,14 +34,43 @@ X-Integration-Key: YOUR_INTEGRATION_API_KEY
   "customer_name": "Rahul Sharma",
   "customer_phone": "+91 90000 00000",
   "customer_address": "Delhi, India",
+  "payment_method": "Prepaid",
+  "billing_address": {
+    "first_name": "Rahul",
+    "last_name": "Sharma",
+    "address": "221B Market Road",
+    "address_2": "Near Metro Gate",
+    "city": "Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "country": "India",
+    "email": "rahul@example.com",
+    "phone": "+91 90000 00000"
+  },
+  "shipping_address": {
+    "first_name": "Rahul",
+    "last_name": "Sharma",
+    "address": "221B Market Road",
+    "address_2": "Near Metro Gate",
+    "city": "Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "country": "India",
+    "email": "rahul@example.com",
+    "phone": "+91 90000 00000"
+  },
   "priority": "normal",
   "expected_dispatch_date": "2026-05-20",
   "assigned_to_email": "picker@your-company.com",
   "items": [
     {
       "sku": "1001",
+      "name": "Barcode Scanner",
       "quantity": 2,
-      "unit_price": 2400
+      "unit_price": 2400,
+      "discount": 0,
+      "tax": 0,
+      "hsn": "8471"
     }
   ]
 }
@@ -55,6 +84,8 @@ X-Integration-Key: YOUR_INTEGRATION_API_KEY
 - `items[].sku` or `items[].product_id` or `items[].barcode`.
 - SKU values should be the number only, for example `1001`. Legacy values like `SKU-1001` are still accepted.
 - `items[].quantity`: greater than zero.
+
+For automatic Shiprocket dispatch, also send structured `billing_address`, `shipping_address`, and `payment_method` (`Prepaid` or `COD`). The warehouse keeps the full payload and uses it to create the Shiprocket courier order after package dimensions are entered during dispatch.
 
 ## Duplicate Safety
 

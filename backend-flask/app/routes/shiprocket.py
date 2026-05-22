@@ -72,6 +72,7 @@ def create_order():
             result = create_shiprocket_order(payload, current_app.config)
             result_summary = summarize_shiprocket_response(result)
             if selected_order:
+                save_package_dimensions(selected_order, package_dimensions_from_data(form_data, required=True))
                 save_shiprocket_response(selected_order, result, result_summary)
 
             current_user = get_current_user()
@@ -172,8 +173,16 @@ def receive_webhook():
 
 def default_form_data(order=None):
     now = datetime.now()
-    first_name, last_name = split_name(order.customer_name if order else "")
-    order_date = order.created_at if order else now
+    source = order_source_payload(order)
+    billing_address = source_address(source, "billing", order)
+    shipping_address = source_address(source, "shipping", order, fallback=billing_address)
+    first_name, last_name = split_name(source_customer_name(source, order))
+    billing_first_name = billing_address.get("first_name") or first_name
+    billing_last_name = billing_address.get("last_name") or last_name
+    shipping_first_name = shipping_address.get("first_name") or billing_first_name
+    shipping_last_name = shipping_address.get("last_name") or billing_last_name
+    order_date = source_order_date(source) or (order.created_at if order else now)
+    package = order_package_defaults(order)
     return {
         "local_order_id": str(order.id) if order else "",
         "order_id": order.order_number if order else f"EW-{now.strftime('%Y%m%d%H%M%S')}",
@@ -181,40 +190,263 @@ def default_form_data(order=None):
         "pickup_location": current_app.config.get("SHIPROCKET_PICKUP_LOCATION", ""),
         "channel_id": current_app.config.get("SHIPROCKET_CHANNEL_ID", ""),
         "comment": f"Warehouse order {order.order_number}" if order else "",
-        "billing_customer_name": first_name,
-        "billing_last_name": last_name,
-        "billing_address": order.customer_address if order else "",
-        "billing_address_2": "",
-        "billing_city": "",
-        "billing_pincode": "",
-        "billing_state": "",
-        "billing_country": "India",
-        "billing_email": "",
-        "billing_phone": order.customer_phone if order else "",
-        "billing_alternate_phone": "",
-        "shipping_is_billing": True,
-        "shipping_customer_name": first_name,
-        "shipping_last_name": last_name,
-        "shipping_address": order.customer_address if order else "",
-        "shipping_address_2": "",
-        "shipping_city": "",
-        "shipping_pincode": "",
-        "shipping_state": "",
-        "shipping_country": "India",
-        "shipping_email": "",
-        "shipping_phone": order.customer_phone if order else "",
-        "payment_method": "Prepaid",
+        "billing_customer_name": billing_first_name,
+        "billing_last_name": billing_last_name,
+        "billing_address": billing_address.get("address", ""),
+        "billing_address_2": billing_address.get("address_2", ""),
+        "billing_city": billing_address.get("city", ""),
+        "billing_pincode": billing_address.get("pincode", ""),
+        "billing_state": billing_address.get("state", ""),
+        "billing_country": billing_address.get("country", "India"),
+        "billing_email": billing_address.get("email", ""),
+        "billing_phone": billing_address.get("phone", ""),
+        "billing_alternate_phone": billing_address.get("alternate_phone", ""),
+        "shipping_is_billing": addresses_match(billing_address, shipping_address),
+        "shipping_customer_name": shipping_first_name,
+        "shipping_last_name": shipping_last_name,
+        "shipping_address": shipping_address.get("address", ""),
+        "shipping_address_2": shipping_address.get("address_2", ""),
+        "shipping_city": shipping_address.get("city", ""),
+        "shipping_pincode": shipping_address.get("pincode", ""),
+        "shipping_state": shipping_address.get("state", ""),
+        "shipping_country": shipping_address.get("country", "India"),
+        "shipping_email": shipping_address.get("email", ""),
+        "shipping_phone": shipping_address.get("phone", ""),
+        "payment_method": source_payment_method(source),
         "shipping_charges": "0",
         "giftwrap_charges": "0",
         "transaction_charges": "0",
         "total_discount": "0",
         "sub_total": decimal_to_input(order.total_value if order else 0),
-        "length": decimal_to_input(current_app.config.get("SHIPROCKET_DEFAULT_LENGTH_CM", 10)),
-        "breadth": decimal_to_input(current_app.config.get("SHIPROCKET_DEFAULT_BREADTH_CM", 10)),
-        "height": decimal_to_input(current_app.config.get("SHIPROCKET_DEFAULT_HEIGHT_CM", 10)),
-        "weight": decimal_to_input(current_app.config.get("SHIPROCKET_DEFAULT_WEIGHT_KG", 0.5)),
-        "line_items": default_line_items(order),
+        "length": decimal_to_input(package["length"]),
+        "breadth": decimal_to_input(package["breadth"]),
+        "height": decimal_to_input(package["height"]),
+        "weight": decimal_to_input(package["weight"]),
+        "line_items": default_line_items(order, source),
     }
+
+
+def dispatch_order_with_shiprocket(order, package_input, user_id=None):
+    package = package_dimensions_from_data(package_input, required=True)
+    save_package_dimensions(order, package)
+
+    result = None
+    result_summary = current_shiprocket_summary(order)
+    created = False
+    if not order.courier_order_id and not order.courier_shipment_id:
+        payload = build_shiprocket_payload_for_order(order, package)
+        result = create_shiprocket_order(payload, current_app.config)
+        result_summary = summarize_shiprocket_response(result)
+        save_shiprocket_response(order, result, result_summary)
+        created = True
+
+    order.status = "dispatched"
+    log_activity(
+        "order_dispatch",
+        f"Order {order.order_number} dispatched via Shiprocket",
+        user_id=user_id,
+        entity_type="Order",
+        entity_id=order.id,
+        meta={"shiprocket": result_summary, "package": serialize_package(package), "created_courier_order": created},
+    )
+    return {"created": created, "result": result, "summary": result_summary, "package": package}
+
+
+def build_shiprocket_payload_for_order(order, package_input):
+    form_data = default_form_data(order)
+    package = package_dimensions_from_data(package_input, required=True)
+    form_data["length"] = decimal_to_input(package["length"])
+    form_data["breadth"] = decimal_to_input(package["breadth"])
+    form_data["height"] = decimal_to_input(package["height"])
+    form_data["weight"] = decimal_to_input(package["weight"])
+    return build_shiprocket_payload(form_data)
+
+
+def package_dimensions_from_data(data, required=True):
+    data = data or {}
+    package = {
+        "length": package_decimal(data, ["length", "package_length_cm"], "Package length", required),
+        "breadth": package_decimal(data, ["breadth", "width", "package_breadth_cm"], "Package breadth", required),
+        "height": package_decimal(data, ["height", "package_height_cm"], "Package height", required),
+        "weight": package_decimal(data, ["weight", "package_weight_kg"], "Package weight", required),
+    }
+    return package
+
+
+def package_decimal(data, keys, label, required):
+    value = first_mapping_value(data, keys)
+    return decimal_field(value, label, required=required, min_value=0.01)
+
+
+def first_mapping_value(data, keys):
+    if hasattr(data, "get"):
+        for key in keys:
+            value = data.get(key)
+            if value not in (None, ""):
+                return value
+    return ""
+
+
+def save_package_dimensions(order, package):
+    order.package_length_cm = package["length"]
+    order.package_breadth_cm = package["breadth"]
+    order.package_height_cm = package["height"]
+    order.package_weight_kg = package["weight"]
+
+
+def serialize_package(package):
+    return {key: decimal_to_input(value) for key, value in package.items()}
+
+
+def current_shiprocket_summary(order):
+    return {
+        "courier_order_id": order.courier_order_id or "",
+        "courier_shipment_id": order.courier_shipment_id or "",
+        "courier_awb": order.courier_awb or "",
+        "courier_status": order.courier_status or "",
+    }
+
+
+def order_package_defaults(order):
+    return {
+        "length": order.package_length_cm if order and order.package_length_cm else current_app.config.get("SHIPROCKET_DEFAULT_LENGTH_CM", 10),
+        "breadth": order.package_breadth_cm if order and order.package_breadth_cm else current_app.config.get("SHIPROCKET_DEFAULT_BREADTH_CM", 10),
+        "height": order.package_height_cm if order and order.package_height_cm else current_app.config.get("SHIPROCKET_DEFAULT_HEIGHT_CM", 10),
+        "weight": order.package_weight_kg if order and order.package_weight_kg else current_app.config.get("SHIPROCKET_DEFAULT_WEIGHT_KG", 0.5),
+    }
+
+
+def order_source_payload(order):
+    if not order or not order.source_payload:
+        return {}
+    try:
+        payload = json.loads(order.source_payload)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def source_customer_name(source, order=None):
+    customer = source.get("customer") if isinstance(source.get("customer"), dict) else {}
+    return (
+        source_text(source.get("customer_name"))
+        or source_text(source.get("name"))
+        or source_text(customer.get("name"))
+        or " ".join(part for part in [source_text(customer.get("first_name")), source_text(customer.get("last_name"))] if part)
+        or (order.customer_name if order else "")
+    )
+
+
+def source_address(source, kind, order=None, fallback=None):
+    aliases = {
+        "billing": ["billing_address", "billing", "customer"],
+        "shipping": ["shipping_address", "shipping", "delivery_address", "delivery"],
+    }[kind]
+    raw = first_source_entry(source, aliases)
+    if raw in (None, "") and kind == "billing":
+        raw = first_source_entry(source, ["customer_address", "address"])
+    if raw in (None, "") and kind == "shipping":
+        raw = first_source_entry(source, ["customer_address", "address"])
+    if raw in (None, "") and fallback:
+        return dict(fallback)
+
+    customer = source.get("customer") if isinstance(source.get("customer"), dict) else {}
+    customer_name = source_customer_name(source, order)
+    first_name, last_name = split_name(customer_name)
+    address = {
+        "first_name": first_name,
+        "last_name": last_name,
+        "address": order.customer_address if order else "",
+        "address_2": "",
+        "city": "",
+        "pincode": "",
+        "state": "",
+        "country": "India",
+        "email": source_text(source.get("customer_email") or source.get("email") or customer.get("email")),
+        "phone": source_text(source.get("customer_phone") or source.get("phone") or customer.get("phone") or (order.customer_phone if order else "")),
+        "alternate_phone": source_text(source.get("alternate_phone") or source.get("customer_alternate_phone")),
+    }
+
+    if isinstance(raw, str):
+        address["address"] = source_text(raw)
+        return address
+    if not isinstance(raw, dict):
+        return address
+
+    raw_first, raw_last = source_name_parts(raw)
+    address.update(
+        {
+            "first_name": raw_first or first_name,
+            "last_name": raw_last or last_name,
+            "address": source_text(raw.get("address") or raw.get("line1") or raw.get("address1") or raw.get("street") or raw.get("street1")) or address["address"],
+            "address_2": source_text(raw.get("address_2") or raw.get("line2") or raw.get("address2") or raw.get("street2")),
+            "city": source_text(raw.get("city") or raw.get("town")),
+            "pincode": source_text(raw.get("pincode") or raw.get("postal_code") or raw.get("postcode") or raw.get("zip")),
+            "state": source_text(raw.get("state") or raw.get("province") or raw.get("region")),
+            "country": source_text(raw.get("country")) or "India",
+            "email": source_text(raw.get("email")) or address["email"],
+            "phone": source_text(raw.get("phone") or raw.get("mobile")) or address["phone"],
+            "alternate_phone": source_text(raw.get("alternate_phone")) or address["alternate_phone"],
+        }
+    )
+    return address
+
+
+def first_source_entry(source, aliases):
+    for key in aliases:
+        value = source.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def source_name_parts(data):
+    first_name = source_text(data.get("first_name") or data.get("firstName"))
+    last_name = source_text(data.get("last_name") or data.get("lastName"))
+    if first_name or last_name:
+        return first_name, last_name
+    return split_name(source_text(data.get("name") or data.get("customer_name")))
+
+
+def source_payment_method(source):
+    payment = source.get("payment") if isinstance(source.get("payment"), dict) else {}
+    raw = source_text(
+        source.get("payment_method")
+        or source.get("payment_mode")
+        or source.get("paymentMode")
+        or source.get("mode_of_payment")
+        or payment.get("method")
+        or payment.get("mode")
+        or payment.get("type")
+    ).lower()
+    is_cod = bool(source.get("is_cod") or source.get("cod") or payment.get("is_cod"))
+    if is_cod or raw in {"cod", "cash on delivery", "cash_on_delivery"}:
+        return "COD"
+    return "Prepaid"
+
+
+def source_order_date(source):
+    raw = source_text(source.get("order_date") or source.get("created_at") or source.get("createdAt") or source.get("date"))
+    if not raw:
+        return None
+    return parse_event_time(raw) or None
+
+
+def source_items(source):
+    for key in ("items", "line_items", "order_items", "products"):
+        value = source.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def source_text(value):
+    return str(value or "").strip()
+
+
+def addresses_match(left, right):
+    keys = ["first_name", "last_name", "address", "address_2", "city", "pincode", "state", "country", "email", "phone"]
+    return all(source_text(left.get(key)).lower() == source_text(right.get(key)).lower() for key in keys)
 
 
 def create_webhook_event(payload):
@@ -421,25 +653,40 @@ def serialize_webhook_event(event):
     }
 
 
-def default_line_items(order=None):
+def default_line_items(order=None, source=None):
     if not order:
         return [blank_line_item()]
 
+    source_rows = source_items(source or {})
     items = []
-    for item in order.items:
+    for index, item in enumerate(order.items):
+        source_row = source_item_for_order_item(source_rows, item, index)
         unit_price = item.unit_price or item.product.selling_price or 0
         items.append(
             {
-                "name": item.product.name,
-                "sku": item.product.sku,
+                "name": source_text(source_row.get("name") or source_row.get("product_name") or source_row.get("title")) or item.product.name,
+                "sku": source_text(source_row.get("sku") or source_row.get("product_sku")) or item.product.sku,
                 "units": str(item.quantity),
-                "selling_price": decimal_to_input(unit_price),
-                "discount": "0",
-                "tax": "0",
-                "hsn": "",
+                "selling_price": decimal_to_input(source_row.get("selling_price") or source_row.get("unit_price") or source_row.get("price") or unit_price),
+                "discount": decimal_to_input(source_row.get("discount") or 0),
+                "tax": decimal_to_input(source_row.get("tax") or 0),
+                "hsn": source_text(source_row.get("hsn") or source_row.get("hsn_code")),
             }
         )
     return items or [blank_line_item()]
+
+
+def source_item_for_order_item(source_rows, item, index):
+    if not source_rows:
+        return {}
+    sku = str(item.product.sku or "").strip().lower()
+    for row in source_rows:
+        row_sku = source_text(row.get("sku") or row.get("product_sku") or row.get("product")).lower()
+        if row_sku and row_sku == sku:
+            return row
+    if index < len(source_rows):
+        return source_rows[index]
+    return {}
 
 
 def blank_line_item():

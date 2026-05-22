@@ -40,6 +40,31 @@ The customer website cart must send warehouse SKU numbers. The product feed alre
   "customer_name": "Rahul Sharma",
   "customer_phone": "+91 90000 00000",
   "customer_address": "Delhi, India",
+  "payment_method": "Prepaid",
+  "billing_address": {
+    "first_name": "Rahul",
+    "last_name": "Sharma",
+    "address": "221B Market Road",
+    "address_2": "Near Metro Gate",
+    "city": "Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "country": "India",
+    "email": "rahul@example.com",
+    "phone": "+91 90000 00000"
+  },
+  "shipping_address": {
+    "first_name": "Rahul",
+    "last_name": "Sharma",
+    "address": "221B Market Road",
+    "address_2": "Near Metro Gate",
+    "city": "Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "country": "India",
+    "email": "rahul@example.com",
+    "phone": "+91 90000 00000"
+  },
   "priority": "normal",
   "items": [
     {
@@ -58,6 +83,8 @@ Required:
 - `items`
 - `items[].sku`
 - `items[].quantity`
+
+For automatic Shiprocket courier creation at dispatch time, send `payment_method`, `billing_address`, and `shipping_address` with city, state, and pincode. The picker will only enter package length, breadth, height, and weight on the Ship page.
 
 Duplicate safety: the same `source` + `external_order_id` will not create duplicate orders.
 
