@@ -5,6 +5,7 @@ from ..models import Product, User
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import test_storage_connection
+from ..utils.shiprocket import ShiprocketError, is_shiprocket_configured, test_shiprocket_connection
 from .auth import role_required
 
 users_bp = Blueprint("users", __name__)
@@ -38,6 +39,7 @@ def settings():
         "google_storage": "Connected" if current_app.config.get("GOOGLE_CLOUD_STORAGE_BUCKET") else "Not configured",
         "google_sheets": "Connected" if current_app.config.get("GOOGLE_APPS_SCRIPT_WEBHOOK_URL") or current_app.config.get("GOOGLE_SHEETS_SPREADSHEET_ID") else "Not configured",
         "customer_website": "Connected" if current_app.config.get("CUSTOMER_PRODUCT_WEBHOOK_URL") else "Feed only",
+        "shiprocket": "Connected" if is_shiprocket_configured(current_app.config) else "Not configured",
     }
     return render_template("settings.html", integrations=integrations)
 
@@ -73,4 +75,15 @@ def test_customer_website_settings():
     result = notify_product_change(product, "product.test")
     category = "success" if result.get("ok") else "warning" if result.get("skipped") else "danger"
     flash(result.get("message", "Customer website test finished."), category)
+    return redirect(url_for("users.settings"))
+
+
+@users_bp.post("/settings/test-shiprocket")
+@role_required("admin")
+def test_shiprocket_settings():
+    try:
+        result = test_shiprocket_connection(current_app.config)
+        flash(result["message"], "success")
+    except ShiprocketError as error:
+        flash(f"Shiprocket test failed: {error}", "danger")
     return redirect(url_for("users.settings"))

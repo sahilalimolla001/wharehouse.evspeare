@@ -1019,6 +1019,13 @@ def serialize_order(order):
         "priority": order.priority,
         "assigned_to_id": order.assigned_to_id,
         "total_items": order.total_items,
+        "courier": {
+            "provider": order.courier_provider,
+            "order_id": order.courier_order_id,
+            "shipment_id": order.courier_shipment_id,
+            "awb": order.courier_awb,
+            "status": order.courier_status,
+        },
         "items": [
             {
                 "id": item.id,

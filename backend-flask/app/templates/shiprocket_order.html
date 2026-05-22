@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block page_title %}Shiprocket Courier{% endblock %}
+
+{% block content %}
+  {% if not config_ready %}
+    <div class="alert alert-warning">Shiprocket credentials are not configured.</div>
+  {% endif %}
+
+  {% if result_summary %}
+    <section class="panel mb-3">
+      <div class="panel-heading">
+        <h2>Created Courier Order</h2>
+        <span class="badge text-bg-success">Shiprocket</span>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="integration-box">
+            <strong>Order ID</strong>
+            <span>{{ result_summary.courier_order_id or "-" }}</span>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="integration-box">
+            <strong>Shipment ID</strong>
+            <span>{{ result_summary.courier_shipment_id or "-" }}</span>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="integration-box">
+            <strong>AWB</strong>
+            <span>{{ result_summary.courier_awb or "-" }}</span>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="integration-box">
+            <strong>Status</strong>
+            <span>{{ result_summary.courier_status or "-" }}</span>
+          </div>
+        </div>
+      </div>
+      <details class="mt-3">
+        <summary>Response</summary>
+        <pre class="shiprocket-response">{{ result|tojson(indent=2) }}</pre>
+      </details>
+    </section>
+  {% endif %}
+
+  <section class="panel mb-3">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-lg-8">
+        <label class="form-label">Warehouse Order</label>
+        <select class="form-select" name="order_id">
+          <option value="">Blank courier order</option>
+          {% for order in recent_orders %}
+            <option value="{{ order.id }}" {% if selected_order and selected_order.id == order.id %}selected{% endif %}>
+              {{ order.order_number }} / {{ order.customer_name }} / {{ order.status|title }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-4 d-flex gap-2">
+        <button class="btn btn-outline-primary" type="submit">Load</button>
+        <a class="btn btn-outline-dark" href="{{ url_for('shiprocket.create_order') }}">Blank</a>
+      </div>
+    </form>
+  </section>
+
+  <form method="post" class="d-grid gap-3" data-shiprocket-form>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="local_order_id" value="{{ form_data.get('local_order_id', '') }}">
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Order</h2>
+        {% if selected_order %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=selected_order.id) }}">Open Warehouse Order</a>
+        {% endif %}
+      </div>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Order ID</label>
+          <input class="form-control" name="order_id" value="{{ form_data.get('order_id', '') }}" maxlength="50" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Order Date</label>
+          <input class="form-control" name="order_date" type="datetime-local" value="{{ form_data.get('order_date', '') }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Pickup Location</label>
+          <input class="form-control" name="pickup_location" value="{{ form_data.get('pickup_location', '') }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Channel ID</label>
+          <input class="form-control" name="channel_id" value="{{ form_data.get('channel_id', '') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Payment</label>
+          <select class="form-select" name="payment_method">
+            <option value="Prepaid" {% if form_data.get('payment_method') == 'Prepaid' %}selected{% endif %}>Prepaid</option>
+            <option value="COD" {% if form_data.get('payment_method') == 'COD' %}selected{% endif %}>COD</option>
+          </select>
+        </div>
+        <div class="col-md-9">
+          <label class="form-label">Comment</label>
+          <input class="form-control" name="comment" value="{{ form_data.get('comment', '') }}">
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Billing Address</h2>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="shippingIsBilling" name="shipping_is_billing" {% if form_data.get('shipping_is_billing') %}checked{% endif %}>
+          <label class="form-check-label" for="shippingIsBilling">Shipping same</label>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">First Name</label>
+          <input class="form-control" name="billing_customer_name" value="{{ form_data.get('billing_customer_name', '') }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Last Name</label>
+          <input class="form-control" name="billing_last_name" value="{{ form_data.get('billing_last_name', '') }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Phone</label>
+          <input class="form-control" name="billing_phone" value="{{ form_data.get('billing_phone', '') }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Email</label>
+          <input class="form-control" name="billing_email" type="email" value="{{ form_data.get('billing_email', '') }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Alternate Phone</label>
+          <input class="form-control" name="billing_alternate_phone" value="{{ form_data.get('billing_alternate_phone', '') }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Country</label>
+          <input class="form-control" name="billing_country" value="{{ form_data.get('billing_country', '') }}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Address</label>
+          <textarea class="form-control" name="billing_address" rows="2" required>{{ form_data.get('billing_address', '') }}</textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Address 2</label>
+          <textarea class="form-control" name="billing_address_2" rows="2">{{ form_data.get('billing_address_2', '') }}</textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">City</label>
+          <input class="form-control" name="billing_city" value="{{ form_data.get('billing_city', '') }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">State</label>
+          <input class="form-control" name="billing_state" value="{{ form_data.get('billing_state', '') }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Pincode</label>
+          <input class="form-control" name="billing_pincode" value="{{ form_data.get('billing_pincode', '') }}" required>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel {% if form_data.get('shipping_is_billing') %}d-none{% endif %}" data-shipping-panel>
+      <div class="panel-heading">
+        <h2>Shipping Address</h2>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">First Name</label>
+          <input class="form-control" name="shipping_customer_name" value="{{ form_data.get('shipping_customer_name', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Last Name</label>
+          <input class="form-control" name="shipping_last_name" value="{{ form_data.get('shipping_last_name', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Phone</label>
+          <input class="form-control" name="shipping_phone" value="{{ form_data.get('shipping_phone', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Email</label>
+          <input class="form-control" name="shipping_email" type="email" value="{{ form_data.get('shipping_email', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Country</label>
+          <input class="form-control" name="shipping_country" value="{{ form_data.get('shipping_country', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Address</label>
+          <textarea class="form-control" name="shipping_address" rows="2" data-shipping-input>{{ form_data.get('shipping_address', '') }}</textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Address 2</label>
+          <textarea class="form-control" name="shipping_address_2" rows="2" data-shipping-input>{{ form_data.get('shipping_address_2', '') }}</textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">City</label>
+          <input class="form-control" name="shipping_city" value="{{ form_data.get('shipping_city', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">State</label>
+          <input class="form-control" name="shipping_state" value="{{ form_data.get('shipping_state', '') }}" data-shipping-input>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Pincode</label>
+          <input class="form-control" name="shipping_pincode" value="{{ form_data.get('shipping_pincode', '') }}" data-shipping-input>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Items</h2>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-add-item>Add Item</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle shiprocket-items-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>SKU</th>
+              <th>Units</th>
+              <th>Price</th>
+              <th>Discount</th>
+              <th>Tax</th>
+              <th>HSN</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="shiprocketItems">
+            {% for item in form_data.get('line_items', []) %}
+              <tr>
+                <td><input class="form-control" name="item_name" value="{{ item.get('name', '') }}" required></td>
+                <td><input class="form-control" name="item_sku" value="{{ item.get('sku', '') }}" required></td>
+                <td><input class="form-control" name="item_units" type="number" min="1" step="1" value="{{ item.get('units', '1') }}" required data-line-total></td>
+                <td><input class="form-control" name="item_selling_price" type="number" min="0" step="0.01" value="{{ item.get('selling_price', '0') }}" required data-line-total></td>
+                <td><input class="form-control" name="item_discount" type="number" min="0" step="0.01" value="{{ item.get('discount', '0') }}"></td>
+                <td><input class="form-control" name="item_tax" type="number" min="0" step="0.01" value="{{ item.get('tax', '0') }}"></td>
+                <td><input class="form-control" name="item_hsn" value="{{ item.get('hsn', '') }}"></td>
+                <td><button class="btn btn-sm btn-outline-danger" type="button" data-remove-item>Remove</button></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>Package</h2>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Length cm</label>
+          <input class="form-control" name="length" type="number" min="0.01" step="0.01" value="{{ form_data.get('length', '') }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Breadth cm</label>
+          <input class="form-control" name="breadth" type="number" min="0.01" step="0.01" value="{{ form_data.get('breadth', '') }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Height cm</label>
+          <input class="form-control" name="height" type="number" min="0.01" step="0.01" value="{{ form_data.get('height', '') }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Weight kg</label>
+          <input class="form-control" name="weight" type="number" min="0.01" step="0.01" value="{{ form_data.get('weight', '') }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Shipping Charges</label>
+          <input class="form-control" name="shipping_charges" type="number" min="0" step="0.01" value="{{ form_data.get('shipping_charges', '0') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Giftwrap Charges</label>
+          <input class="form-control" name="giftwrap_charges" type="number" min="0" step="0.01" value="{{ form_data.get('giftwrap_charges', '0') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Transaction Charges</label>
+          <input class="form-control" name="transaction_charges" type="number" min="0" step="0.01" value="{{ form_data.get('transaction_charges', '0') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Total Discount</label>
+          <input class="form-control" name="total_discount" type="number" min="0" step="0.01" value="{{ form_data.get('total_discount', '0') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Sub Total</label>
+          <input class="form-control" name="sub_total" type="number" min="0" step="0.01" value="{{ form_data.get('sub_total', '0') }}" data-subtotal>
+        </div>
+      </div>
+    </section>
+
+    <div>
+      <button class="btn btn-primary" type="submit" {% if not config_ready %}disabled{% endif %}>Create Courier Order</button>
+    </div>
+  </form>
+
+  <template id="shiprocketItemTemplate">
+    <tr>
+      <td><input class="form-control" name="item_name" required></td>
+      <td><input class="form-control" name="item_sku" required></td>
+      <td><input class="form-control" name="item_units" type="number" min="1" step="1" value="1" required data-line-total></td>
+      <td><input class="form-control" name="item_selling_price" type="number" min="0" step="0.01" value="0" required data-line-total></td>
+      <td><input class="form-control" name="item_discount" type="number" min="0" step="0.01" value="0"></td>
+      <td><input class="form-control" name="item_tax" type="number" min="0" step="0.01" value="0"></td>
+      <td><input class="form-control" name="item_hsn"></td>
+      <td><button class="btn btn-sm btn-outline-danger" type="button" data-remove-item>Remove</button></td>
+    </tr>
+  </template>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (() => {
+      const form = document.querySelector("[data-shiprocket-form]");
+      if (!form) return;
+
+      const itemsBody = document.getElementById("shiprocketItems");
+      const template = document.getElementById("shiprocketItemTemplate");
+      const subtotalInput = form.querySelector("[data-subtotal]");
+      const shippingToggle = document.getElementById("shippingIsBilling");
+      const shippingPanel = form.querySelector("[data-shipping-panel]");
+      const shippingInputs = form.querySelectorAll("[data-shipping-input]");
+
+      const numberValue = (input) => Number.parseFloat(input.value || "0") || 0;
+
+      const recalculateSubtotal = () => {
+        if (subtotalInput.dataset.touched === "true") return;
+        let total = 0;
+        itemsBody.querySelectorAll("tr").forEach((row) => {
+          const units = numberValue(row.querySelector('[name="item_units"]'));
+          const price = numberValue(row.querySelector('[name="item_selling_price"]'));
+          total += units * price;
+        });
+        subtotalInput.value = total.toFixed(2);
+      };
+
+      const syncShippingPanel = () => {
+        const same = shippingToggle.checked;
+        shippingPanel.classList.toggle("d-none", same);
+        shippingInputs.forEach((input) => {
+          input.disabled = same;
+        });
+      };
+
+      form.addEventListener("input", (event) => {
+        if (event.target === subtotalInput) {
+          subtotalInput.dataset.touched = "true";
+        }
+        if (event.target.matches("[data-line-total]")) {
+          recalculateSubtotal();
+        }
+      });
+
+      form.addEventListener("click", (event) => {
+        if (event.target.matches("[data-add-item]")) {
+          itemsBody.appendChild(template.content.firstElementChild.cloneNode(true));
+          recalculateSubtotal();
+        }
+        if (event.target.matches("[data-remove-item]")) {
+          const rows = itemsBody.querySelectorAll("tr");
+          if (rows.length > 1) {
+            event.target.closest("tr").remove();
+          } else {
+            event.target.closest("tr").querySelectorAll("input").forEach((input) => {
+              input.value = input.name === "item_units" ? "1" : input.name === "item_discount" || input.name === "item_tax" || input.name === "item_selling_price" ? "0" : "";
+            });
+          }
+          subtotalInput.dataset.touched = "false";
+          recalculateSubtotal();
+        }
+      });
+
+      shippingToggle.addEventListener("change", syncShippingPanel);
+      syncShippingPanel();
+      recalculateSubtotal();
+    })();
+  </script>
+{% endblock %}

@@ -224,6 +224,21 @@ body {
   color: var(--muted);
 }
 
+.shiprocket-items-table {
+  min-width: 980px;
+}
+
+.shiprocket-response {
+  max-height: 320px;
+  margin: 12px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faf8;
+  color: var(--ink);
+}
+
 .flash-stack {
   margin-bottom: 16px;
 }

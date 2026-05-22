@@ -22,6 +22,7 @@ Use this before commercial warehouse use.
 - Use a paid database plan with automated backups for commercial use.
 - Turn on provider-level monitoring, uptime alerts, and log retention.
 - Restrict Google Cloud Storage bucket permissions and use signed/private access unless public product photos are intentional.
+- Create a dedicated Shiprocket API user and store its credentials only in server-side environment variables.
 - Rotate `SECRET_KEY`, `ADMIN_PASSWORD`, Google tokens, and service-account keys if they were ever shared.
 - Test stock-in, stock-out, location movement, order picking, packing, dispatch, and reports with real staff roles before launch.
 

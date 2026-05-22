@@ -279,6 +279,12 @@ def validate_production():
         warnings.append("GOOGLE_CLOUD_STORAGE_BUCKET is empty; product image uploads will not work.")
     if not Config.GOOGLE_APPS_SCRIPT_WEBHOOK_URL and not Config.GOOGLE_SHEETS_SPREADSHEET_ID:
         warnings.append("Google Sheets sync is not configured.")
+    shiprocket_configured = bool(Config.SHIPROCKET_TOKEN or (Config.SHIPROCKET_EMAIL and Config.SHIPROCKET_PASSWORD))
+    shiprocket_partial = any([Config.SHIPROCKET_EMAIL, Config.SHIPROCKET_PASSWORD, Config.SHIPROCKET_TOKEN, Config.SHIPROCKET_PICKUP_LOCATION])
+    if shiprocket_partial and not shiprocket_configured:
+        warnings.append("Shiprocket needs SHIPROCKET_EMAIL + SHIPROCKET_PASSWORD, or SHIPROCKET_TOKEN.")
+    if shiprocket_configured and not Config.SHIPROCKET_PICKUP_LOCATION:
+        warnings.append("SHIPROCKET_PICKUP_LOCATION is empty; Shiprocket order creation will require manual entry.")
 
     if warnings:
         print("Warnings:")

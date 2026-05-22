@@ -27,6 +27,9 @@
           <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
           <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
           <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
+          {% if current_user_can("manager", "staff") %}
+            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('shiprocket.') %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
+          {% endif %}
           {% if current_user_can("manager") %}
             <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}">Reports</a>
           {% endif %}

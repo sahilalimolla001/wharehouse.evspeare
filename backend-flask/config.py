@@ -24,6 +24,13 @@ def env_int(name, default):
         return default
 
 
+def env_float(name, default):
+    try:
+        return float(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def env_list(name):
     return [item.strip() for item in os.getenv(name, "").split(",") if item.strip()]
 
@@ -83,5 +90,16 @@ class Config:
     CUSTOMER_PRODUCT_WEBHOOK_URL = os.getenv("CUSTOMER_PRODUCT_WEBHOOK_URL", "")
     CUSTOMER_PRODUCT_WEBHOOK_TOKEN = os.getenv("CUSTOMER_PRODUCT_WEBHOOK_TOKEN", "")
     CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT = env_int("CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT", 10)
+    SHIPROCKET_API_BASE_URL = os.getenv("SHIPROCKET_API_BASE_URL", "https://apiv2.shiprocket.in/v1/external").rstrip("/")
+    SHIPROCKET_EMAIL = os.getenv("SHIPROCKET_EMAIL", "")
+    SHIPROCKET_PASSWORD = os.getenv("SHIPROCKET_PASSWORD", "")
+    SHIPROCKET_TOKEN = os.getenv("SHIPROCKET_TOKEN", "")
+    SHIPROCKET_PICKUP_LOCATION = os.getenv("SHIPROCKET_PICKUP_LOCATION", "")
+    SHIPROCKET_CHANNEL_ID = os.getenv("SHIPROCKET_CHANNEL_ID", "")
+    SHIPROCKET_TIMEOUT = env_int("SHIPROCKET_TIMEOUT", 20)
+    SHIPROCKET_DEFAULT_LENGTH_CM = env_float("SHIPROCKET_DEFAULT_LENGTH_CM", 10)
+    SHIPROCKET_DEFAULT_BREADTH_CM = env_float("SHIPROCKET_DEFAULT_BREADTH_CM", 10)
+    SHIPROCKET_DEFAULT_HEIGHT_CM = env_float("SHIPROCKET_DEFAULT_HEIGHT_CM", 10)
+    SHIPROCKET_DEFAULT_WEIGHT_KG = env_float("SHIPROCKET_DEFAULT_WEIGHT_KG", 0.5)
     CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
     GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")

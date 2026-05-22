@@ -32,6 +32,15 @@
         <h2>Dispatch Status</h2>
         <p class="text-secondary mb-1">{{ order.customer_name }}</p>
         <p class="text-secondary">{{ order.customer_phone or "-" }}</p>
+        {% if order.courier_provider %}
+          <div class="integration-box mb-3">
+            <strong>{{ order.courier_provider|title }}</strong>
+            <span>Order {{ order.courier_order_id or "-" }} / Shipment {{ order.courier_shipment_id or "-" }}</span>
+            {% if order.courier_awb %}
+              <span>AWB {{ order.courier_awb }}</span>
+            {% endif %}
+          </div>
+        {% endif %}
         {% if current_user_can("manager", "staff", "picker", "packer", "delivery") %}
           <form method="post" action="{{ url_for('orders.update_order_status', order_id=order.id) }}" class="d-grid gap-2">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -42,6 +51,9 @@
             </select>
             <button class="btn btn-primary" type="submit">Update Status</button>
           </form>
+          {% if current_user_can("manager", "staff") %}
+            <a class="btn btn-outline-primary mt-2 w-100" href="{{ url_for('shiprocket.create_order', order_id=order.id) }}">Create Shiprocket Courier</a>
+          {% endif %}
         {% else %}
           <p class="text-secondary mb-0">View-only access.</p>
         {% endif %}

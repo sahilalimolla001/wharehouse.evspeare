@@ -118,6 +118,16 @@ GOOGLE_APPS_SCRIPT_TOKEN=change-this-token
 CUSTOMER_PRODUCT_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/products
 CUSTOMER_PRODUCT_WEBHOOK_TOKEN=strong-shared-secret
 CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT=10
+SHIPROCKET_API_BASE_URL=https://apiv2.shiprocket.in/v1/external
+SHIPROCKET_EMAIL=shiprocket-api-user@example.com
+SHIPROCKET_PASSWORD=strong-shiprocket-api-password
+SHIPROCKET_TOKEN=
+SHIPROCKET_PICKUP_LOCATION=Primary
+SHIPROCKET_CHANNEL_ID=
+SHIPROCKET_DEFAULT_LENGTH_CM=10
+SHIPROCKET_DEFAULT_BREADTH_CM=10
+SHIPROCKET_DEFAULT_HEIGHT_CM=10
+SHIPROCKET_DEFAULT_WEIGHT_KG=0.5
 ```
 
 Before accepting real warehouse data:
@@ -145,6 +155,18 @@ To test Google Cloud Storage locally:
 ```powershell
 python -m flask --app run.py test-google-storage
 ```
+
+## Shiprocket Courier Orders
+
+Set `SHIPROCKET_EMAIL` and `SHIPROCKET_PASSWORD` to the API user created in Shiprocket, then set `SHIPROCKET_PICKUP_LOCATION` to the pickup location name from your Shiprocket account. `SHIPROCKET_TOKEN` is optional and only useful when you want to provide a temporary token yourself.
+
+After running migrations, open the admin page:
+
+```text
+/shiprocket
+```
+
+You can load an existing warehouse order, fill the required billing/shipping pincode, city, state, package dimensions, and create the Shiprocket courier order. The returned Shiprocket order ID, shipment ID, AWB, and status are saved back on the warehouse order when a local order is selected.
 
 For pgAdmin and Google setup, see `PGADMIN_GOOGLE_SETUP.md`.
 

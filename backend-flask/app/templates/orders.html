@@ -11,7 +11,7 @@
     </div>
     <div class="table-responsive">
       <table class="table align-middle">
-        <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Priority</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Priority</th><th>Status</th><th>Courier</th><th></th></tr></thead>
         <tbody>
           {% for order in orders %}
             <tr>
@@ -20,10 +20,17 @@
               <td>{{ order.total_items }}</td>
               <td>{{ order.priority|title }}</td>
               <td><span class="badge text-bg-secondary">{{ order.status|title }}</span></td>
+              <td>
+                {% if order.courier_provider %}
+                  <span class="badge text-bg-success">{{ order.courier_provider|title }}</span>
+                {% else %}
+                  <span class="text-secondary">-</span>
+                {% endif %}
+              </td>
               <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=order.id) }}">Open</a></td>
             </tr>
           {% else %}
-            <tr><td colspan="6" class="text-secondary">No orders yet.</td></tr>
+            <tr><td colspan="7" class="text-secondary">No orders yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
