@@ -72,9 +72,12 @@
     <section class="panel">
       <div class="panel-heading">
         <h2>Order</h2>
-        {% if selected_order %}
-          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=selected_order.id) }}">Open Warehouse Order</a>
-        {% endif %}
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-dark" href="{{ url_for('shiprocket.webhook_updates') }}">Live Updates</a>
+          {% if selected_order %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=selected_order.id) }}">Open Warehouse Order</a>
+          {% endif %}
+        </div>
       </div>
       <div class="row g-3">
         <div class="col-md-3">

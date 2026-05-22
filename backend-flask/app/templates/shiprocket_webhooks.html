@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block page_title %}Shiprocket Updates{% endblock %}
+
+{% block content %}
+  {% if not webhook_token_configured %}
+    <div class="alert alert-warning">SHIPROCKET_WEBHOOK_TOKEN is not configured.</div>
+  {% endif %}
+
+  <section class="panel mb-3">
+    <div class="panel-heading">
+      <h2>Webhook Setup</h2>
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('shiprocket.create_order') }}">Create Courier</a>
+    </div>
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-9">
+        <label class="form-label">Webhook URL</label>
+        <input class="form-control" value="{{ webhook_url_with_token }}" readonly data-copy-source>
+      </div>
+      <div class="col-lg-3">
+        <button class="btn btn-outline-dark w-100" type="button" data-copy-button>Copy URL</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="metric-grid mb-3">
+    <article class="metric-card">
+      <span>Total Updates</span>
+      <strong data-total-count>{{ total_count }}</strong>
+    </article>
+    <article class="metric-card success">
+      <span>Matched Orders</span>
+      <strong>{{ matched_count }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Latest Status</span>
+      <strong class="shiprocket-status-text" data-latest-status>{{ latest_event.current_status if latest_event else "-" }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Live Poll</span>
+      <strong class="shiprocket-status-text" data-live-state>Ready</strong>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <h2>Live Updates</h2>
+      <span class="text-secondary" data-last-refresh>Waiting for updates</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle shiprocket-webhook-table">
+        <thead>
+          <tr>
+            <th>Received</th>
+            <th>Order</th>
+            <th>AWB</th>
+            <th>Shipment</th>
+            <th>Status</th>
+            <th>Courier</th>
+            <th>Location</th>
+          </tr>
+        </thead>
+        <tbody data-webhook-events data-latest-id="{{ events[0].id if events else 0 }}">
+          {% for event in events %}
+            <tr data-event-id="{{ event.id }}">
+              <td>{{ event.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+              <td>
+                {% if event.order %}
+                  <a href="{{ url_for('orders.order_detail', order_id=event.order.id) }}">{{ event.order.order_number }}</a>
+                {% else %}
+                  <span class="text-secondary">{{ event.shiprocket_order_id or "-" }}</span>
+                {% endif %}
+              </td>
+              <td>{{ event.awb or "-" }}</td>
+              <td>{{ event.shipment_id or "-" }}</td>
+              <td><span class="badge text-bg-secondary">{{ event.current_status or "-" }}</span></td>
+              <td>{{ event.courier_name or "-" }}</td>
+              <td>{{ event.location or "-" }}</td>
+            </tr>
+          {% else %}
+            <tr data-empty-row><td colspan="7" class="text-secondary">No webhook updates yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (() => {
+      const eventsBody = document.querySelector("[data-webhook-events]");
+      if (!eventsBody) return;
+
+      const copySource = document.querySelector("[data-copy-source]");
+      const copyButton = document.querySelector("[data-copy-button]");
+      const liveState = document.querySelector("[data-live-state]");
+      const latestStatus = document.querySelector("[data-latest-status]");
+      const lastRefresh = document.querySelector("[data-last-refresh]");
+      const totalCount = document.querySelector("[data-total-count]");
+
+      const html = (value) => String(value || "-")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      const orderCell = (event) => {
+        if (event.order_id && event.order_number) {
+          return `<a href="/order/${event.order_id}">${html(event.order_number)}</a>`;
+        }
+        return `<span class="text-secondary">${html(event.shiprocket_order_id || "-")}</span>`;
+      };
+
+      const rowHtml = (event) => `
+        <tr data-event-id="${event.id}">
+          <td>${html(event.received_at)}</td>
+          <td>${orderCell(event)}</td>
+          <td>${html(event.awb)}</td>
+          <td>${html(event.shipment_id)}</td>
+          <td><span class="badge text-bg-secondary">${html(event.current_status)}</span></td>
+          <td>${html(event.courier_name)}</td>
+          <td>${html(event.location)}</td>
+        </tr>`;
+
+      const refresh = async () => {
+        const sinceId = Number.parseInt(eventsBody.dataset.latestId || "0", 10);
+        try {
+          liveState.textContent = "Checking";
+          const response = await fetch(`/shiprocket/webhooks/events?since_id=${sinceId}`, { credentials: "same-origin" });
+          if (!response.ok) throw new Error("Request failed");
+          const data = await response.json();
+          if (data.events.length) {
+            eventsBody.querySelector("[data-empty-row]")?.remove();
+            data.events.forEach((event) => {
+              if (!eventsBody.querySelector(`[data-event-id="${event.id}"]`)) {
+                eventsBody.insertAdjacentHTML("afterbegin", rowHtml(event));
+              }
+            });
+            eventsBody.dataset.latestId = String(data.latest_id || data.events[data.events.length - 1].id);
+            latestStatus.textContent = data.events[data.events.length - 1].current_status || "-";
+            totalCount.textContent = String(Number.parseInt(totalCount.textContent || "0", 10) + data.events.length);
+          }
+          lastRefresh.textContent = `Last checked ${new Date().toLocaleTimeString()}`;
+          liveState.textContent = "Live";
+        } catch (error) {
+          liveState.textContent = "Offline";
+        }
+      };
+
+      copyButton?.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(copySource.value);
+        copyButton.textContent = "Copied";
+        setTimeout(() => { copyButton.textContent = "Copy URL"; }, 1400);
+      });
+
+      setInterval(refresh, 5000);
+      refresh();
+    })();
+  </script>
+{% endblock %}

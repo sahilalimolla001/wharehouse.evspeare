@@ -124,6 +124,7 @@ SHIPROCKET_PASSWORD=strong-shiprocket-api-password
 SHIPROCKET_TOKEN=
 SHIPROCKET_PICKUP_LOCATION=Primary
 SHIPROCKET_CHANNEL_ID=
+SHIPROCKET_WEBHOOK_TOKEN=strong-random-webhook-token
 SHIPROCKET_DEFAULT_LENGTH_CM=10
 SHIPROCKET_DEFAULT_BREADTH_CM=10
 SHIPROCKET_DEFAULT_HEIGHT_CM=10
@@ -167,6 +168,14 @@ After running migrations, open the admin page:
 ```
 
 You can load an existing warehouse order, fill the required billing/shipping pincode, city, state, package dimensions, and create the Shiprocket courier order. The returned Shiprocket order ID, shipment ID, AWB, and status are saved back on the warehouse order when a local order is selected.
+
+For real-time tracking updates, open:
+
+```text
+/shiprocket/webhooks
+```
+
+Copy the generated webhook URL into Shiprocket under Settings > API > Webhooks. Use `SHIPROCKET_WEBHOOK_TOKEN` and keep the token in the URL query string so incoming webhook calls can be verified. Incoming updates are stored in `shiprocket_webhook_events`; when an update matches an existing warehouse order by Shiprocket order ID, shipment ID, AWB, or order number, the order's courier status is refreshed automatically.
 
 For pgAdmin and Google setup, see `PGADMIN_GOOGLE_SETUP.md`.
 

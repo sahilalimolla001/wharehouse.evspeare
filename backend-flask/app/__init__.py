@@ -52,6 +52,8 @@ def register_security_hooks(app):
             return None
         if request.endpoint and request.endpoint.startswith("api."):
             return None
+        if request.endpoint == "shiprocket.receive_webhook":
+            return None
         expected = session.get("_csrf_token")
         submitted = request.form.get("_csrf_token") or request.headers.get("X-CSRF-Token")
         if not expected or not submitted or not secrets.compare_digest(expected, submitted):

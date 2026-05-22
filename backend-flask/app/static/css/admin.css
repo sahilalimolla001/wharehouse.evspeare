@@ -239,6 +239,16 @@ body {
   color: var(--ink);
 }
 
+.shiprocket-webhook-table {
+  min-width: 920px;
+}
+
+.shiprocket-status-text {
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
 .flash-stack {
   margin-bottom: 16px;
 }

@@ -235,6 +235,7 @@ class Order(TimestampMixin, db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     items = db.relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     stock_outs = db.relationship("StockOut", back_populates="order")
+    shiprocket_events = db.relationship("ShiprocketWebhookEvent", back_populates="order")
 
     __table_args__ = (
         db.UniqueConstraint("external_source", "external_order_id", name="uq_order_external_reference"),
@@ -250,6 +251,31 @@ class Order(TimestampMixin, db.Model):
 
     def __repr__(self):
         return f"<Order {self.order_number}>"
+
+
+class ShiprocketWebhookEvent(TimestampMixin, db.Model):
+    __tablename__ = "shiprocket_webhook_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
+    event_type = db.Column(db.String(80))
+    shiprocket_order_id = db.Column(db.String(120), index=True)
+    shipment_id = db.Column(db.String(120), index=True)
+    awb = db.Column(db.String(120), index=True)
+    current_status = db.Column(db.String(120), index=True)
+    previous_status = db.Column(db.String(120))
+    status_code = db.Column(db.String(80))
+    courier_name = db.Column(db.String(160))
+    location = db.Column(db.String(180))
+    event_time = db.Column(db.DateTime)
+    payload_json = db.Column(db.Text, nullable=False)
+    headers_json = db.Column(db.Text)
+    received_ip = db.Column(db.String(80))
+
+    order = db.relationship("Order", back_populates="shiprocket_events")
+
+    def __repr__(self):
+        return f"<ShiprocketWebhookEvent {self.id} {self.current_status}>"
 
 
 class OrderItem(TimestampMixin, db.Model):

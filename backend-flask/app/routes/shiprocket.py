@@ -1,11 +1,12 @@
 import json
+import secrets
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, current_app, flash, render_template, request
+from flask import Blueprint, current_app, flash, jsonify, render_template, request, url_for
 
 from ..extensions import db
-from ..models import Order
+from ..models import Order, ShiprocketWebhookEvent
 from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, is_shiprocket_configured
 from ..utils.stock import log_activity
 from .auth import get_current_user, role_required
@@ -103,6 +104,72 @@ def create_order():
     )
 
 
+@shiprocket_bp.route("/shiprocket/webhooks")
+@role_required("manager", "staff")
+def webhook_updates():
+    events = ShiprocketWebhookEvent.query.order_by(ShiprocketWebhookEvent.created_at.desc(), ShiprocketWebhookEvent.id.desc()).limit(80).all()
+    latest_event = events[0] if events else None
+    matched_count = ShiprocketWebhookEvent.query.filter(ShiprocketWebhookEvent.order_id.isnot(None)).count()
+    total_count = ShiprocketWebhookEvent.query.count()
+    token = current_app.config.get("SHIPROCKET_WEBHOOK_TOKEN", "")
+    webhook_url = url_for("shiprocket.receive_webhook", _external=True)
+    webhook_url_with_token = url_for("shiprocket.receive_webhook", token=token, _external=True) if token else webhook_url
+    return render_template(
+        "shiprocket_webhooks.html",
+        events=events,
+        latest_event=latest_event,
+        matched_count=matched_count,
+        total_count=total_count,
+        webhook_url=webhook_url,
+        webhook_url_with_token=webhook_url_with_token,
+        webhook_token_configured=bool(token),
+    )
+
+
+@shiprocket_bp.get("/shiprocket/webhooks/events")
+@role_required("manager", "staff")
+def webhook_events():
+    since_id = int_or_default(request.args.get("since_id"), 0)
+    query = ShiprocketWebhookEvent.query
+    if since_id:
+        query = query.filter(ShiprocketWebhookEvent.id > since_id)
+    events = query.order_by(ShiprocketWebhookEvent.id.desc()).limit(50).all()
+    latest = ShiprocketWebhookEvent.query.order_by(ShiprocketWebhookEvent.id.desc()).first()
+    return jsonify(
+        {
+            "ok": True,
+            "latest_id": latest.id if latest else 0,
+            "events": [serialize_webhook_event(event) for event in reversed(events)],
+        }
+    )
+
+
+@shiprocket_bp.post("/api/webhooks/courier-updates")
+def receive_webhook():
+    if not verify_webhook_token():
+        return jsonify({"ok": False, "message": "Invalid webhook token"}), 401
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = request.form.to_dict(flat=True) if request.form else {}
+    payloads = payload if isinstance(payload, list) else [payload]
+
+    created_events = []
+    try:
+        for entry in payloads:
+            if not isinstance(entry, dict):
+                entry = {"value": entry}
+            event = create_webhook_event(entry)
+            created_events.append(event)
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.exception("Shiprocket webhook failed")
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+    return jsonify({"ok": True, "received": len(created_events), "events": [serialize_webhook_event(event) for event in created_events]})
+
+
 def default_form_data(order=None):
     now = datetime.now()
     first_name, last_name = split_name(order.customer_name if order else "")
@@ -147,6 +214,210 @@ def default_form_data(order=None):
         "height": decimal_to_input(current_app.config.get("SHIPROCKET_DEFAULT_HEIGHT_CM", 10)),
         "weight": decimal_to_input(current_app.config.get("SHIPROCKET_DEFAULT_WEIGHT_KG", 0.5)),
         "line_items": default_line_items(order),
+    }
+
+
+def create_webhook_event(payload):
+    summary = summarize_webhook_payload(payload)
+    order = find_order_for_webhook(summary)
+    event = ShiprocketWebhookEvent(
+        order_id=order.id if order else None,
+        event_type=trim_value(summary.get("event_type"), 80),
+        shiprocket_order_id=trim_value(summary.get("shiprocket_order_id"), 120),
+        shipment_id=trim_value(summary.get("shipment_id"), 120),
+        awb=trim_value(summary.get("awb"), 120),
+        current_status=trim_value(summary.get("current_status"), 120),
+        previous_status=trim_value(summary.get("previous_status"), 120),
+        status_code=trim_value(summary.get("status_code"), 80),
+        courier_name=trim_value(summary.get("courier_name"), 160),
+        location=trim_value(summary.get("location"), 180),
+        event_time=parse_event_time(summary.get("event_time")),
+        payload_json=json.dumps(payload, default=str, separators=(",", ":"))[:20000],
+        headers_json=json.dumps(webhook_headers(), separators=(",", ":"))[:4000],
+        received_ip=trim_value(request.headers.get("X-Forwarded-For") or request.remote_addr, 80),
+    )
+    db.session.add(event)
+    db.session.flush()
+    if order:
+        apply_webhook_to_order(order, summary, payload)
+        log_activity(
+            "shiprocket_webhook",
+            f"Shiprocket update: {summary.get('current_status') or 'received'}",
+            entity_type="Order",
+            entity_id=order.id,
+            meta={"event_id": event.id, "summary": summary},
+        )
+    return event
+
+
+def summarize_webhook_payload(payload):
+    latest_scan = latest_scan_payload(payload)
+    return {
+        "event_type": first_payload_value(payload, "event", "event_type", "webhook_type", "type") or str(latest_scan.get("activity") or "").strip(),
+        "shiprocket_order_id": first_payload_value(payload, "order_id", "shiprocket_order_id", "sr_order_id"),
+        "shipment_id": first_payload_value(payload, "shipment_id", "shiprocket_shipment_id", "sr_shipment_id"),
+        "awb": first_payload_value(payload, "awb", "awb_code", "awb_number", "tracking_number"),
+        "current_status": first_payload_value(payload, "current_status", "current_status_name", "shipment_status", "status", "tracking_status"),
+        "previous_status": first_payload_value(payload, "previous_status", "previous_status_name", "old_status"),
+        "status_code": first_payload_value(payload, "current_status_id", "status_code", "shipment_status_id"),
+        "courier_name": first_payload_value(payload, "courier_name", "courier_company", "courier_partner"),
+        "location": first_payload_value(payload, "location", "current_location", "scan_location") or str(latest_scan.get("location") or "").strip(),
+        "event_time": first_payload_value(payload, "event_time", "status_time", "scan_date", "current_timestamp", "timestamp", "updated_at") or str(latest_scan.get("date") or "").strip(),
+        "channel_order_id": first_payload_value(payload, "channel_order_id", "channel_order_number", "order_number"),
+    }
+
+
+def first_payload_value(payload, *keys):
+    for container in payload_containers(payload):
+        for key in keys:
+            value = container.get(key)
+            if value not in (None, ""):
+                return str(value).strip()
+    return ""
+
+
+def payload_containers(payload):
+    containers = []
+    if isinstance(payload, dict):
+        containers.append(payload)
+        for key in ("data", "shipment", "order", "tracking_data", "tracking", "payload"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                containers.extend(payload_containers(value))
+    return containers
+
+
+def latest_scan_payload(payload):
+    scans = first_payload_list(payload, "scans", "scan", "activities")
+    if not scans:
+        return {}
+    first_scan = scans[0]
+    return first_scan if isinstance(first_scan, dict) else {}
+
+
+def first_payload_list(payload, *keys):
+    for container in payload_containers(payload):
+        for key in keys:
+            value = container.get(key)
+            if isinstance(value, list):
+                return value
+    return []
+
+
+def find_order_for_webhook(summary):
+    lookup_fields = [
+        (Order.courier_order_id, summary.get("shiprocket_order_id")),
+        (Order.courier_shipment_id, summary.get("shipment_id")),
+        (Order.courier_awb, summary.get("awb")),
+        (Order.order_number, summary.get("channel_order_id")),
+    ]
+    for column, value in lookup_fields:
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            continue
+        order = Order.query.filter(column == cleaned).first()
+        if order:
+            return order
+    return None
+
+
+def apply_webhook_to_order(order, summary, payload):
+    order.courier_provider = "shiprocket"
+    if summary.get("shiprocket_order_id"):
+        order.courier_order_id = trim_value(summary["shiprocket_order_id"], 120)
+    if summary.get("shipment_id"):
+        order.courier_shipment_id = trim_value(summary["shipment_id"], 120)
+    if summary.get("awb"):
+        order.courier_awb = trim_value(summary["awb"], 120)
+    if summary.get("current_status"):
+        order.courier_status = trim_value(summary["current_status"], 80)
+        mapped_status = map_shiprocket_status(summary["current_status"])
+        if mapped_status and order.status not in {"completed", "cancelled"}:
+            order.status = mapped_status
+            if mapped_status == "completed":
+                order.completed_at = datetime.utcnow()
+    order.courier_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
+
+
+def map_shiprocket_status(status):
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return None
+    if "delivered" in normalized and "rto" not in normalized:
+        return "completed"
+    if "cancel" in normalized:
+        return "cancelled"
+    if "rto" in normalized or "return" in normalized:
+        return "cancelled"
+    dispatched_markers = ["pickup", "picked", "shipped", "in transit", "out for delivery", "manifested"]
+    if any(marker in normalized for marker in dispatched_markers):
+        return "dispatched"
+    return None
+
+
+def parse_event_time(value):
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M"):
+        try:
+            return datetime.strptime(cleaned[:19], fmt)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(cleaned.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def verify_webhook_token():
+    configured = str(current_app.config.get("SHIPROCKET_WEBHOOK_TOKEN") or "").strip()
+    if not configured:
+        return True
+    supplied = (
+        request.args.get("token", "").strip()
+        or bearer_token()
+        or request.headers.get("X-Shiprocket-Token", "").strip()
+        or request.headers.get("X-Webhook-Token", "").strip()
+        or request.headers.get("X-Integration-Key", "").strip()
+    )
+    return bool(supplied and secrets.compare_digest(configured, supplied))
+
+
+def bearer_token():
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return ""
+
+
+def webhook_headers():
+    safe_headers = {}
+    for key, value in request.headers.items():
+        if key.lower() in {"authorization", "cookie", "x-shiprocket-token", "x-webhook-token", "x-integration-key"}:
+            safe_headers[key] = "[redacted]"
+        else:
+            safe_headers[key] = value
+    return safe_headers
+
+
+def serialize_webhook_event(event):
+    return {
+        "id": event.id,
+        "received_at": event.created_at.strftime("%Y-%m-%d %H:%M:%S") if event.created_at else "",
+        "event_time": event.event_time.strftime("%Y-%m-%d %H:%M:%S") if event.event_time else "",
+        "event_type": event.event_type or "",
+        "order_id": event.order_id,
+        "order_number": event.order.order_number if event.order else "",
+        "shiprocket_order_id": event.shiprocket_order_id or "",
+        "shipment_id": event.shipment_id or "",
+        "awb": event.awb or "",
+        "current_status": event.current_status or "",
+        "previous_status": event.previous_status or "",
+        "status_code": event.status_code or "",
+        "courier_name": event.courier_name or "",
+        "location": event.location or "",
+        "matched": bool(event.order_id),
     }
 
 
@@ -364,6 +635,13 @@ def int_field(value, label, min_value=None):
     if min_value is not None and number < min_value:
         raise ValueError(f"{label} must be at least {min_value}.")
     return number
+
+
+def int_or_default(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def decimal_payload(value):
