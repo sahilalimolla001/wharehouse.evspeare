@@ -120,6 +120,7 @@ def customer_shipping_status_payload(order, event_record=None):
         "location": event_value(event_record, "location"),
         "event_time": iso_datetime(getattr(event_record, "event_time", None)),
         "updated_at": iso_datetime(getattr(event_record, "created_at", None) or order.updated_at),
+        "tracking_history": customer_shipping_tracking_history(order, event_record),
     }
 
 
@@ -129,3 +130,88 @@ def event_value(event_record, field):
 
 def iso_datetime(value):
     return value.isoformat() + "Z" if value else None
+
+
+def customer_shipping_tracking_history(order, event_record=None):
+    events = []
+    if event_record:
+        events.append(event_record)
+    events.extend(
+        sorted(
+            [event for event in getattr(order, "shiprocket_events", []) if not event_record or event.id != event_record.id],
+            key=lambda event: (event.created_at, event.id),
+            reverse=True,
+        )
+    )
+
+    rows = []
+    for event in events[:200]:
+        scans = tracking_scans_from_event(event)
+        if not scans:
+            scans = [
+                {
+                    "date": event_value(event, "event_time") or event_value(event, "created_at"),
+                    "activity": event_value(event, "current_status") or event_value(event, "event_type"),
+                    "location": event_value(event, "location"),
+                }
+            ]
+        rows.extend(scans)
+    return unique_tracking_rows(rows)
+
+
+def tracking_scans_from_event(event):
+    try:
+        payload = json.loads(getattr(event, "payload_json", "") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    scans = []
+    for value in payload_lists(payload, "scans", "scan", "activities", "tracking_history", "shipment_track_activities"):
+        for item in value:
+            if isinstance(item, dict):
+                scans.append(
+                    {
+                        "date": text_value(item.get("date") or item.get("scan_date") or item.get("time") or item.get("timestamp") or item.get("event_time")),
+                        "activity": text_value(item.get("activity") or item.get("status") or item.get("current_status") or item.get("description")),
+                        "location": text_value(item.get("location") or item.get("scan_location") or item.get("current_location")),
+                    }
+                )
+    return [scan for scan in scans if scan["date"] or scan["activity"] or scan["location"]]
+
+
+def payload_lists(payload, *keys):
+    lists = []
+    if not isinstance(payload, dict):
+        return lists
+    for container in payload_containers(payload):
+        for key in keys:
+            value = container.get(key)
+            if isinstance(value, list):
+                lists.append(value)
+    return lists
+
+
+def payload_containers(payload):
+    containers = []
+    if isinstance(payload, dict):
+        containers.append(payload)
+        for key in ("data", "shipment", "order", "tracking_data", "tracking", "payload"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                containers.extend(payload_containers(value))
+    return containers
+
+
+def unique_tracking_rows(rows):
+    unique = []
+    seen = set()
+    for row in rows:
+        key = (row.get("date") or "", row.get("activity") or "", row.get("location") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return sorted(unique, key=lambda row: row.get("date") or "", reverse=True)
+
+
+def text_value(value):
+    return str(value or "").strip()

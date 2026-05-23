@@ -249,6 +249,206 @@ body {
   overflow-wrap: anywhere;
 }
 
+.tracking-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tracking-summary div {
+  min-height: 92px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.tracking-summary span,
+.tracking-event time,
+.tracking-event span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.tracking-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.tracking-progress {
+  --active-steps: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 8px 0 0;
+}
+
+.tracking-progress[data-progress-stage="placed"] {
+  --active-steps: 1;
+}
+
+.tracking-progress[data-progress-stage="shipped"] {
+  --active-steps: 2;
+}
+
+.tracking-progress[data-progress-stage="transit"] {
+  --active-steps: 3;
+}
+
+.tracking-progress[data-progress-stage="delivered"] {
+  --active-steps: 4;
+}
+
+.tracking-line {
+  position: absolute;
+  top: 34px;
+  left: 12.5%;
+  right: 12.5%;
+  height: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #9bd5e6 calc((var(--active-steps) - 1) / 3 * 100%), #d7e8ee 0);
+}
+
+.tracking-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center;
+}
+
+.tracking-icon {
+  width: 58px;
+  height: 58px;
+  position: relative;
+  border: 3px solid #a8dced;
+  border-radius: 50%;
+  background: #dff3f9;
+  box-shadow: 0 0 0 6px #fff;
+}
+
+.tracking-progress[data-progress-stage="placed"] .tracking-step:nth-of-type(-n + 2) .tracking-icon,
+.tracking-progress[data-progress-stage="shipped"] .tracking-step:nth-of-type(-n + 3) .tracking-icon,
+.tracking-progress[data-progress-stage="transit"] .tracking-step:nth-of-type(-n + 4) .tracking-icon,
+.tracking-progress[data-progress-stage="delivered"] .tracking-step:nth-of-type(-n + 5) .tracking-icon {
+  animation: tracking-pulse 1.4s ease-in-out infinite;
+  border-color: #65b7cc;
+}
+
+.tracking-bag::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 20px;
+  width: 22px;
+  height: 21px;
+  border: 3px solid #4d7480;
+  border-radius: 4px;
+}
+
+.tracking-bag::after {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 14px;
+  width: 12px;
+  height: 10px;
+  border: 3px solid #4d7480;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+}
+
+.tracking-box::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 17px;
+  width: 26px;
+  height: 26px;
+  border: 3px solid #4d7480;
+  transform: rotate(45deg) skew(-8deg, -8deg);
+}
+
+.tracking-truck::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 22px;
+  width: 22px;
+  height: 16px;
+  border: 3px solid #4d7480;
+  border-radius: 3px;
+}
+
+.tracking-truck::after {
+  content: "";
+  position: absolute;
+  left: 33px;
+  top: 27px;
+  width: 13px;
+  height: 11px;
+  border: 3px solid #4d7480;
+  border-left: 0;
+  border-radius: 0 3px 3px 0;
+  box-shadow: -13px 12px 0 -4px #4d7480, 4px 12px 0 -4px #4d7480;
+}
+
+.tracking-check::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 24px;
+  width: 24px;
+  height: 13px;
+  border-left: 4px solid #4d7480;
+  border-bottom: 4px solid #4d7480;
+  transform: rotate(-45deg);
+}
+
+.tracking-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.tracking-event {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 12px 12px 12px 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.tracking-event::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 17px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+@keyframes tracking-pulse {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
 .dispatch-package-form {
   padding: 12px;
   border: 1px solid var(--line);
@@ -285,6 +485,10 @@ body {
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .tracking-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -304,5 +508,14 @@ body {
 
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tracking-summary,
+  .tracking-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .tracking-line {
+    display: none;
   }
 }

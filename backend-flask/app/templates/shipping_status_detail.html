@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block page_title %}Track Order {{ tracking.website_order_id }}{% endblock %}
+
+{% block content %}
+  <section class="panel mb-3">
+    <div class="panel-heading">
+      <h2>Track Your Order</h2>
+      <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-dark" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
+        <a class="btn btn-sm btn-outline-primary" href="{{ tracking.warehouse_order_url }}">Warehouse Order</a>
+      </div>
+    </div>
+
+    <div class="tracking-summary">
+      <div>
+        <span>Website Order ID</span>
+        <strong data-track-field="website_order_id">{{ tracking.website_order_id or "-" }}</strong>
+      </div>
+      <div>
+        <span>Shiprocket Order ID</span>
+        <strong data-track-field="shiprocket_order_id">{{ tracking.shiprocket_order_id or "-" }}</strong>
+      </div>
+      <div>
+        <span>AWB</span>
+        <strong data-track-field="awb">{{ tracking.awb or "-" }}</strong>
+      </div>
+      <div>
+        <span>Courier</span>
+        <strong data-track-field="courier">{{ tracking.courier or "-" }}</strong>
+      </div>
+    </div>
+
+    <div class="tracking-progress mt-4" data-progress-stage="{{ tracking.progress_stage }}">
+      <div class="tracking-line"></div>
+      <div class="tracking-step" data-stage="placed">
+        <div class="tracking-icon tracking-bag"></div>
+        <span>Order Placed</span>
+      </div>
+      <div class="tracking-step" data-stage="shipped">
+        <div class="tracking-icon tracking-box"></div>
+        <span>Shipped</span>
+      </div>
+      <div class="tracking-step" data-stage="transit">
+        <div class="tracking-icon tracking-truck"></div>
+        <span>In Transit</span>
+      </div>
+      <div class="tracking-step" data-stage="delivered">
+        <div class="tracking-icon tracking-check"></div>
+        <span>Delivered</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2 data-track-field="latest_activity">{{ tracking.latest_activity or "No updates yet" }}</h2>
+        <div class="text-secondary" data-track-field="latest_location">{{ tracking.latest_location or "" }}</div>
+      </div>
+      <span class="text-secondary" data-track-field="updated_at">{{ tracking.updated_at or "-" }}</span>
+    </div>
+    <div class="tracking-timeline" data-tracking-history>
+      {% for item in tracking.history %}
+        <article class="tracking-event">
+          <time>{{ item.date or "-" }}</time>
+          <strong>{{ item.activity or "-" }}</strong>
+          <span>{{ item.location or "-" }}</span>
+        </article>
+      {% else %}
+        <div class="text-secondary" data-empty-row>No live tracking updates yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (() => {
+      const endpoint = "{{ url_for('shiprocket.shipping_status_detail_live', order_id=tracking.id) }}";
+      const progress = document.querySelector("[data-progress-stage]");
+      const history = document.querySelector("[data-tracking-history]");
+      if (!progress || !history) return;
+
+      const fields = {
+        website_order_id: document.querySelector('[data-track-field="website_order_id"]'),
+        shiprocket_order_id: document.querySelector('[data-track-field="shiprocket_order_id"]'),
+        awb: document.querySelector('[data-track-field="awb"]'),
+        courier: document.querySelector('[data-track-field="courier"]'),
+        latest_activity: document.querySelector('[data-track-field="latest_activity"]'),
+        latest_location: document.querySelector('[data-track-field="latest_location"]'),
+        updated_at: document.querySelector('[data-track-field="updated_at"]'),
+      };
+
+      const html = (value) => String(value || "-")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      const renderHistory = (rows) => {
+        if (!rows.length) {
+          history.innerHTML = '<div class="text-secondary" data-empty-row>No live tracking updates yet.</div>';
+          return;
+        }
+        history.innerHTML = rows.map((item) => `
+          <article class="tracking-event">
+            <time>${html(item.date)}</time>
+            <strong>${html(item.activity)}</strong>
+            <span>${html(item.location)}</span>
+          </article>
+        `).join("");
+      };
+
+      const refresh = async () => {
+        try {
+          const response = await fetch(endpoint, { credentials: "same-origin" });
+          if (!response.ok) throw new Error("Request failed");
+          const data = await response.json();
+          const tracking = data.tracking || {};
+          Object.entries(fields).forEach(([key, node]) => {
+            if (node) node.textContent = tracking[key] || (key === "latest_location" ? "" : "-");
+          });
+          progress.dataset.progressStage = tracking.progress_stage || "placed";
+          renderHistory(tracking.history || []);
+        } catch (error) {
+          fields.updated_at.textContent = "Live update offline";
+        }
+      };
+
+      setInterval(refresh, 5000);
+      refresh();
+    })();
+  </script>
+{% endblock %}

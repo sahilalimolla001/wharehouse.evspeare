@@ -154,6 +154,23 @@ def shipping_status_live():
     )
 
 
+@shiprocket_bp.route("/shipping-status/<int:order_id>")
+@role_required("manager", "staff")
+def shipping_status_detail(order_id):
+    order = Order.query.get_or_404(order_id)
+    return render_template(
+        "shipping_status_detail.html",
+        tracking=serialize_shipping_tracking(order),
+    )
+
+
+@shiprocket_bp.get("/shipping-status/<int:order_id>/live")
+@role_required("manager", "staff")
+def shipping_status_detail_live(order_id):
+    order = Order.query.get_or_404(order_id)
+    return jsonify({"ok": True, "tracking": serialize_shipping_tracking(order)})
+
+
 @shiprocket_bp.get("/shiprocket/webhooks/events")
 @role_required("manager", "staff")
 def webhook_events():
@@ -712,7 +729,8 @@ def serialize_shipping_status_order(order):
         "courier": (latest_event.courier_name if latest_event else "") or order.courier_provider or "",
         "destination": destination,
         "updated_at": shipping_status_updated_at(order, latest_event),
-        "order_url": url_for("orders.order_detail", order_id=order.id),
+        "order_url": url_for("shiprocket.shipping_status_detail", order_id=order.id),
+        "warehouse_order_url": url_for("orders.order_detail", order_id=order.id),
     }
 
 
@@ -748,6 +766,112 @@ def shipping_status_updated_at(order, latest_event):
         value = latest_event.event_time or latest_event.created_at
     value = value or order.updated_at or order.created_at
     return value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+
+def serialize_shipping_tracking(order):
+    row = serialize_shipping_status_order(order)
+    history = shipping_tracking_history(order)
+    latest = history[0] if history else {}
+    status = row["latest_status"] or latest.get("activity") or ""
+    return {
+        **row,
+        "latest_activity": latest.get("activity") or status,
+        "latest_location": latest.get("location") or "",
+        "progress_stage": tracking_progress_stage(status),
+        "history": history,
+    }
+
+
+def shipping_tracking_history(order):
+    events = shipping_tracking_events(order)
+    rows = []
+    for event in events:
+        payload = event_payload(event)
+        scans = tracking_scans_from_payload(payload)
+        if not scans:
+            scans = [
+                {
+                    "date": event.event_time.strftime("%Y-%m-%d %H:%M:%S") if event.event_time else event.created_at.strftime("%Y-%m-%d %H:%M:%S") if event.created_at else "",
+                    "activity": event.current_status or event.event_type or "",
+                    "location": event.location or "",
+                }
+            ]
+        rows.extend(scans)
+    return unique_tracking_rows(rows)
+
+
+def shipping_tracking_events(order):
+    conditions = [ShiprocketWebhookEvent.order_id == order.id]
+    if order.courier_order_id:
+        conditions.append(ShiprocketWebhookEvent.shiprocket_order_id == order.courier_order_id)
+    if order.courier_awb:
+        conditions.append(ShiprocketWebhookEvent.awb == order.courier_awb)
+    if order.courier_shipment_id:
+        conditions.append(ShiprocketWebhookEvent.shipment_id == order.courier_shipment_id)
+    return (
+        ShiprocketWebhookEvent.query.filter(db.or_(*conditions))
+        .order_by(ShiprocketWebhookEvent.created_at.desc(), ShiprocketWebhookEvent.id.desc())
+        .limit(200)
+        .all()
+    )
+
+
+def event_payload(event):
+    try:
+        payload = json.loads(event.payload_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def tracking_scans_from_payload(payload):
+    scans = []
+    for value in payload_lists(payload, "scans", "scan", "activities", "tracking_history", "shipment_track_activities"):
+        for item in value:
+            if isinstance(item, dict):
+                scans.append(
+                    {
+                        "date": source_text(item.get("date") or item.get("scan_date") or item.get("time") or item.get("timestamp") or item.get("event_time")),
+                        "activity": source_text(item.get("activity") or item.get("status") or item.get("current_status") or item.get("description")),
+                        "location": source_text(item.get("location") or item.get("scan_location") or item.get("current_location")),
+                    }
+                )
+    return [scan for scan in scans if scan["date"] or scan["activity"] or scan["location"]]
+
+
+def payload_lists(payload, *keys):
+    lists = []
+    if not isinstance(payload, dict):
+        return lists
+    for container in payload_containers(payload):
+        for key in keys:
+            value = container.get(key)
+            if isinstance(value, list):
+                lists.append(value)
+    return lists
+
+
+def unique_tracking_rows(rows):
+    unique = []
+    seen = set()
+    for row in rows:
+        key = (row.get("date") or "", row.get("activity") or "", row.get("location") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return sorted(unique, key=lambda row: row.get("date") or "", reverse=True)
+
+
+def tracking_progress_stage(status):
+    normalized = str(status or "").strip().lower()
+    if "deliver" in normalized and "undeliver" not in normalized and "rto" not in normalized:
+        return "delivered"
+    if "out for delivery" in normalized or "transit" in normalized or "hub" in normalized or "arrived" in normalized or "connected" in normalized:
+        return "transit"
+    if "ship" in normalized or "pickup" in normalized or "picked" in normalized or "manifest" in normalized:
+        return "shipped"
+    return "placed"
 
 
 def push_shipping_status_updates(events):
