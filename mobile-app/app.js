@@ -728,41 +728,14 @@ function renderDispatchQueue() {
           <span class="badge">${escapeHtml(order.status)}</span>
         </div>
         <div class="order-actions">
-          <button class="primary" type="button" data-open-dispatch="${order.id}">Dispatch</button>
+          <button class="primary" type="button" data-manual-dispatch="${order.id}">Dispatch</button>
         </div>
-        <form class="dispatch-package hidden" data-dispatch-form="${order.id}">
-          <div class="two-col">
-            <label>Length cm
-              <input name="length" type="number" min="0.01" step="0.01" value="${numberInput(order.package?.length)}" required>
-            </label>
-            <label>Breadth cm
-              <input name="breadth" type="number" min="0.01" step="0.01" value="${numberInput(order.package?.breadth)}" required>
-            </label>
-            <label>Height cm
-              <input name="height" type="number" min="0.01" step="0.01" value="${numberInput(order.package?.height)}" required>
-            </label>
-            <label>Weight kg
-              <input name="weight" type="number" min="0.01" step="0.001" value="${numberInput(order.package?.weight)}" required>
-            </label>
-          </div>
-          <button class="primary" type="submit">Create Courier & Dispatch</button>
-        </form>
       </article>
     `)
     .join("");
 
-  target.querySelectorAll("[data-open-dispatch]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const form = target.querySelector(`[data-dispatch-form="${button.dataset.openDispatch}"]`);
-      form?.classList.toggle("hidden");
-    });
-  });
-
-  target.querySelectorAll("[data-dispatch-form]").forEach((form) => {
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await dispatchOrderWithPackage(form.dataset.dispatchForm, form);
-    });
+  target.querySelectorAll("[data-manual-dispatch]").forEach((button) => {
+    button.addEventListener("click", () => dispatchOrderManually(button.dataset.manualDispatch));
   });
 }
 
@@ -771,12 +744,11 @@ function numberInput(value) {
   return number > 0 ? String(number) : "";
 }
 
-async function dispatchOrderWithPackage(orderId, form) {
-  const body = Object.fromEntries(new FormData(form).entries());
+async function dispatchOrderManually(orderId) {
   try {
-    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body });
+    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body: { manual_dispatch: true } });
     replaceOrder(data.order);
-    toast(data.created_courier_order ? "Courier created and order dispatched." : "Order dispatched.");
+    toast("Order dispatched. Pickup location dashboard se add karein.");
     await loadOrders();
   } catch (error) {
     toast(error.message);

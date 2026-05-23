@@ -551,6 +551,18 @@ def dispatch_order_api_response(order, data):
         return jsonify({"ok": False, "message": "Order must be packed before dispatch"}), 400
     if not all(item.packed_quantity >= item.quantity for item in order.items):
         return jsonify({"ok": False, "message": "Pack all order items before dispatch"}), 400
+    if data.get("manual_dispatch"):
+        order.status = "dispatched"
+        log_activity(
+            "order_dispatch",
+            f"Order {order.order_number} marked dispatched from picker app",
+            user_id=current_api_user_id(),
+            entity_type="Order",
+            entity_id=order.id,
+            meta={"manual_dispatch": True},
+        )
+        db.session.commit()
+        return jsonify({"ok": True, "order": serialize_order(order), "created_courier_order": False})
     try:
         result = dispatch_order_with_shiprocket(order, data, user_id=current_api_user_id())
         db.session.commit()
