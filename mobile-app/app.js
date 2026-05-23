@@ -22,6 +22,7 @@ let scanFillTarget = null;
 let scanReturnScreen = null;
 let refreshTimer = null;
 let stockPreviewTimer = null;
+let activeReturnConfirmed = false;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -53,7 +54,7 @@ function bindActions() {
   $("#refresh-returns").addEventListener("click", refreshAll);
   $("#return-lookup-form").addEventListener("submit", startReturnFromLookup);
   $("#return-scan-item").addEventListener("click", () => scanReturnCode($("#return-code").value.trim()));
-  $("#back-to-returns").addEventListener("click", () => showScreen("return-screen"));
+  $("#back-to-returns").addEventListener("click", closeActiveReturn);
   $("#initiate-pv").addEventListener("click", initiateReturnPv);
   $("#pv-back").addEventListener("click", () => showScreen("return-screen"));
   $$("[data-refresh-orders]").forEach((button) => button.addEventListener("click", refreshAll));
@@ -268,6 +269,14 @@ function renderReturnQueue() {
   const returns = store.returns.filter((item) => ["approved", "return_picking", "return_picked", "inspection"].includes(item.status));
   const target = $("#return-queue");
   if (!target) return;
+  const listHidden = Boolean(store.activeReturnId);
+  $("#return-lookup-form").classList.toggle("hidden", listHidden);
+  $("#return-list-head").classList.toggle("hidden", listHidden);
+  target.classList.toggle("hidden", listHidden);
+  if (listHidden) {
+    target.innerHTML = "";
+    return;
+  }
   if (!returns.length) {
     target.innerHTML = `<div class="empty-state">No approved returns right now.</div>`;
     return;
@@ -324,16 +333,39 @@ async function startReturnFromLookup(event) {
 
 function startReturn(returnId) {
   store.activeReturnId = returnId;
+  activeReturnConfirmed = false;
   localStorage.setItem("warehouseActiveReturnId", String(returnId));
   const returnOrder = activeReturn();
   if (returnOrder?.status === "inspection") showScreen("pv-screen");
   else showScreen("return-screen");
+  renderReturnQueue();
   renderActiveReturn();
   renderReturnPv();
 }
 
 function activeReturn() {
-  return store.returns.find((item) => item.id === store.activeReturnId) || store.returns.find((item) => ["return_picking", "inspection"].includes(item.status)) || null;
+  return store.returns.find((item) => item.id === store.activeReturnId) || null;
+}
+
+function closeActiveReturn() {
+  store.activeReturnId = 0;
+  activeReturnConfirmed = false;
+  localStorage.removeItem("warehouseActiveReturnId");
+  $("#return-code").value = "";
+  showScreen("return-screen");
+  renderReturnQueue();
+  renderActiveReturn();
+}
+
+function returnIdentifierMatches(returnOrder, code) {
+  const cleaned = String(code || "").trim().toLowerCase();
+  if (!cleaned) return false;
+  return [
+    returnOrder.id,
+    returnOrder.return_number,
+    returnOrder.website_order_id,
+    returnOrder.order_id,
+  ].some((value) => String(value || "").trim().toLowerCase() === cleaned);
 }
 
 function renderActiveReturn() {
@@ -343,7 +375,8 @@ function renderActiveReturn() {
   if (!returnOrder) {
     card.innerHTML = `<div class="empty-state">Return/order ID type karein ya approved return select karein.</div>`;
     $("#return-items").innerHTML = "";
-    $("#return-result").textContent = "Return select karne ke baad item scan karein.";
+    $("#return-result").textContent = "Admin approve ke baad return list me dikhega.";
+    $("#return-code").placeholder = "Return / website order ID";
     $("#initiate-pv").disabled = true;
     return;
   }
@@ -361,6 +394,14 @@ function renderActiveReturn() {
       </div>
     </article>
   `;
+  if (!activeReturnConfirmed) {
+    $("#return-code").placeholder = returnOrder.website_order_id || returnOrder.return_number;
+    $("#return-items").innerHTML = `<div class="empty-state">Step 1: Return/order ID scan ya type karein.</div>`;
+    $("#return-result").textContent = "Return ID confirm hone ke baad product scan open hoga.";
+    $("#initiate-pv").disabled = true;
+    return;
+  }
+  $("#return-code").placeholder = currentItem ? currentItem.product.sku : "PV ready";
   $("#return-items").innerHTML = currentItem
     ? returnItemHtml(currentItem)
     : `<div class="empty-state">Return pick complete. Ab Initiate PV karein.</div>`;
@@ -399,7 +440,19 @@ async function scanReturnCode(code) {
     return;
   }
   if (!code) {
-    toast("Product SKU/barcode enter karein.");
+    toast(activeReturnConfirmed ? "Product SKU/barcode enter karein." : "Return/order ID enter karein.");
+    return;
+  }
+  if (!activeReturnConfirmed) {
+    if (!returnIdentifierMatches(returnOrder, code)) {
+      $("#return-result").textContent = "Return/order ID match nahi hua.";
+      toast("Sahi return/order ID scan karein.");
+      return;
+    }
+    activeReturnConfirmed = true;
+    $("#return-code").value = "";
+    renderActiveReturn();
+    toast("Return confirmed. Product scan karein.");
     return;
   }
   try {
