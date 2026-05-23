@@ -78,6 +78,7 @@ class WarehouseLocation(TimestampMixin, db.Model):
     bin_code = db.Column(db.String(30), nullable=False)
     barcode = db.Column(db.String(80), unique=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    is_virtual = db.Column(db.Boolean, default=False, nullable=False)
 
     inventory_items = db.relationship("Inventory", back_populates="location")
 
@@ -124,7 +125,7 @@ class Product(TimestampMixin, db.Model):
 
     @property
     def available_quantity(self):
-        return sum(item.available_quantity for item in self.inventory_items)
+        return sum(item.available_quantity for item in self.inventory_items if not item.location.is_virtual)
 
     @property
     def stock_value(self):
@@ -297,11 +298,38 @@ class CustomerReturnOrder(TimestampMixin, db.Model):
     notes = db.Column(db.Text)
     requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     resolved_at = db.Column(db.DateTime)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
     order = db.relationship("Order")
+    approved_by = db.relationship("User")
+    items = db.relationship("CustomerReturnItem", back_populates="return_order", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<CustomerReturnOrder {self.return_number}>"
+
+
+class CustomerReturnItem(TimestampMixin, db.Model):
+    __tablename__ = "customer_return_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    return_order_id = db.Column(db.Integer, db.ForeignKey("customer_return_orders.id"), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    expected_quantity = db.Column(db.Integer, default=1, nullable=False)
+    picked_quantity = db.Column(db.Integer, default=0, nullable=False)
+    stocked_quantity = db.Column(db.Integer, default=0, nullable=False)
+    issue_quantity = db.Column(db.Integer, default=0, nullable=False)
+    status = db.Column(db.String(40), default="pending", nullable=False)
+    notes = db.Column(db.Text)
+
+    return_order = db.relationship("CustomerReturnOrder", back_populates="items")
+    product = db.relationship("Product")
+
+    @property
+    def remaining_stock_in_quantity(self):
+        return max(self.picked_quantity - self.stocked_quantity - self.issue_quantity, 0)
+
+    def __repr__(self):
+        return f"<CustomerReturnItem return={self.return_order_id} product={self.product_id}>"
 
 
 class OrderItem(TimestampMixin, db.Model):

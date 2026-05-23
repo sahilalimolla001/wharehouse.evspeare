@@ -90,6 +90,39 @@
           <div class="card-list" id="dispatch-list"></div>
         </section>
 
+        <section class="screen" id="return-screen">
+          <form id="return-lookup-form" class="form-card">
+            <h2>Return Receive</h2>
+            <label>Return / Website Order ID
+              <input id="return-order-lookup" placeholder="RET-1001 or website order ID">
+            </label>
+            <button class="primary" type="submit">Open Return</button>
+          </form>
+          <div class="section-head">
+            <h2>Approved Returns</h2>
+            <button id="refresh-returns" type="button">Refresh</button>
+          </div>
+          <div class="card-list" id="return-queue"></div>
+          <div class="active-order" id="active-return-card"></div>
+          <label>Return Item SKU / Barcode
+            <span class="scan-input"><input id="return-code" inputmode="numeric" placeholder="1001 or barcode"><button id="return-scan-item" type="button">Scan</button></span>
+          </label>
+          <div class="result-card" id="return-result">Return select karne ke baad item scan karein.</div>
+          <div class="card-list" id="return-items"></div>
+          <div class="action-bar">
+            <button id="back-to-returns" type="button">Return List</button>
+            <button class="primary" id="initiate-pv" type="button" disabled>Initiate PV</button>
+          </div>
+        </section>
+
+        <section class="screen" id="pv-screen">
+          <div class="active-order" id="pv-return-card"></div>
+          <div class="card-list" id="pv-items"></div>
+          <div class="action-bar">
+            <button id="pv-back" type="button">Back To Return</button>
+          </div>
+        </section>
+
         <section class="screen" id="stock-screen">
           <form id="stock-in-form" class="form-card">
             <h2>Stock In</h2>
@@ -148,6 +181,7 @@
       <nav class="bottom-nav" aria-label="Picker navigation">
         <button class="active" data-screen="orders-screen" type="button">Orders</button>
         <button data-screen="dispatch-screen" type="button">Ship</button>
+        <button data-screen="return-screen" type="button">Return</button>
         <button data-screen="stock-screen" type="button">Stock</button>
         <button data-screen="move-screen" type="button">Move</button>
         <button data-screen="inventory-screen" type="button">Inventory</button>

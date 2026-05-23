@@ -85,6 +85,7 @@
             <th>Website Order</th>
             <th>Customer</th>
             <th>Reason</th>
+            <th>Items</th>
             <th>Status</th>
             <th>Refund</th>
             <th>Requested</th>
@@ -106,14 +107,28 @@
                 {% if item.customer_phone %}<div class="text-secondary">{{ item.customer_phone }}</div>{% endif %}
               </td>
               <td>{{ item.reason.replace("_", " ")|title }}</td>
+              <td>
+                {% if item.items %}
+                  {% for line in item.items %}
+                    <div>
+                      <strong>{{ line.product.sku }}</strong>
+                      <span class="text-secondary">{{ line.picked_quantity }}/{{ line.expected_quantity }} picked, {{ line.stocked_quantity }} good, {{ line.issue_quantity }} issue</span>
+                    </div>
+                  {% endfor %}
+                {% elif item.order %}
+                  <span class="text-secondary">Order items will attach on approval.</span>
+                {% else %}
+                  <span class="text-secondary">No items</span>
+                {% endif %}
+              </td>
               <td><span class="badge text-bg-secondary">{{ item.status|title }}</span></td>
               <td><span class="badge text-bg-light">{{ item.refund_status.replace("_", " ")|title }}</span></td>
               <td>{{ item.requested_at.strftime("%Y-%m-%d") if item.requested_at else "-" }}</td>
               <td>
-                <form method="post" action="{{ url_for('returns.update_customer_return', return_id=item.id) }}" class="d-flex gap-2">
+                <form method="post" action="{{ url_for('returns.update_customer_return', return_id=item.id) }}" class="d-flex gap-2 mb-2">
                   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                   <select class="form-select form-select-sm" name="status">
-                    {% for status in ["requested", "approved", "received", "rejected", "refunded"] %}
+                    {% for status in ["requested", "approved", "return_picking", "return_picked", "inspection", "received", "rejected", "refunded"] %}
                       <option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status|title }}</option>
                     {% endfor %}
                   </select>
@@ -124,10 +139,51 @@
                   </select>
                   <button class="btn btn-sm btn-outline-primary" type="submit">Update</button>
                 </form>
+                {% if item.status == "requested" %}
+                  <form method="post" action="{{ url_for('returns.approve_customer_return', return_id=item.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-success w-100" type="submit">Approve & Push To Picker</button>
+                  </form>
+                {% endif %}
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="8" class="text-secondary">No customer return orders yet.</td></tr>
+            <tr><td colspan="9" class="text-secondary">No customer return orders yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel mt-3">
+    <div class="panel-heading">
+      <h2>Virtual Return Bins</h2>
+      <span class="text-secondary">Visible in inventory, excluded from customer orders</span>
+    </div>
+    <div class="row g-3 mb-3">
+      {% for bin in virtual_bins %}
+        <div class="col-md-6">
+          <div class="border rounded p-3 h-100">
+            <strong>{{ bin.barcode }}</strong>
+            <div class="text-secondary">{{ bin.full_code }}</div>
+            <span class="badge text-bg-warning mt-2">Virtual Bin</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Virtual Bin</th><th>SKU</th><th>Product</th><th>Qty</th></tr></thead>
+        <tbody>
+          {% for row in virtual_inventory %}
+            <tr>
+              <td>{{ row.location.barcode or row.location.bin_code }}</td>
+              <td>{{ row.product.sku }}</td>
+              <td>{{ row.product.name }}</td>
+              <td>{{ row.quantity }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="text-secondary">No issue inventory in virtual bins yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

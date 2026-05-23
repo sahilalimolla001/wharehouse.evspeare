@@ -10,7 +10,7 @@ from sqlalchemy import func, or_
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, WarehouseLocation
+from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
@@ -302,6 +302,19 @@ def api_import_order():
         return jsonify({"ok": False, "message": str(error)}), 400
 
 
+@api_bp.post("/integrations/returns")
+@integration_key_required
+def api_import_return():
+    data = request.get_json(silent=True) or {}
+    try:
+        return_order, created = create_return_from_integration(data)
+        db.session.commit()
+        return jsonify({"ok": True, "created": created, "return_order": serialize_return_order(return_order)}), 201 if created else 200
+    except (TypeError, ValueError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
 @api_bp.post("/stock-in")
 @api_role_required("manager", "staff")
 def api_stock_in():
@@ -401,6 +414,103 @@ def api_pick_list():
         query = query.filter(or_(Order.assigned_to_id == user.id, Order.assigned_to_id.is_(None)))
     orders = query.order_by(Order.priority.desc(), Order.created_at).all()
     return jsonify({"orders": [serialize_order(order) for order in orders]})
+
+
+@api_bp.get("/returns/pick-list")
+@api_role_required("manager", "staff", "picker")
+def api_return_pick_list():
+    ensure_virtual_return_bins()
+    db.session.commit()
+    query = CustomerReturnOrder.query.filter(CustomerReturnOrder.status.in_(["approved", "return_picking", "return_picked", "inspection"]))
+    returns = query.order_by(CustomerReturnOrder.requested_at, CustomerReturnOrder.id).all()
+    return jsonify({"returns": [serialize_return_order(return_order) for return_order in returns]})
+
+
+@api_bp.post("/returns/<int:return_id>/items/<int:item_id>/pick")
+@api_role_required("manager", "staff", "picker")
+def api_return_item_pick(return_id, item_id):
+    data = request.get_json(silent=True) or {}
+    return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    if return_order.status not in {"approved", "return_picking", "return_picked"}:
+        return jsonify({"ok": False, "message": "Return must be approved before picking"}), 400
+    item = CustomerReturnItem.query.filter_by(id=item_id, return_order_id=return_order.id).first_or_404()
+    try:
+        quantity = int(data.get("quantity", item.expected_quantity))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Quantity must be a number"}), 400
+    if quantity < 0 or quantity > item.expected_quantity:
+        return jsonify({"ok": False, "message": "Picked quantity must be between 0 and return quantity"}), 400
+
+    item.picked_quantity = quantity
+    item.status = "picked" if quantity >= item.expected_quantity else "pending"
+    return_order.status = "return_picked" if all(row.picked_quantity >= row.expected_quantity for row in return_order.items) else "return_picking"
+    log_activity("return_pick", f"Picked return item {item.product.sku}: {quantity}/{item.expected_quantity}", user_id=current_api_user_id(), entity_type="CustomerReturnItem", entity_id=item.id)
+    db.session.commit()
+    return jsonify({"ok": True, "return_order": serialize_return_order(return_order)})
+
+
+@api_bp.post("/returns/<int:return_id>/initiate-pv")
+@api_role_required("manager", "staff", "picker")
+def api_return_initiate_pv(return_id):
+    return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    if not return_order.items or not all(item.picked_quantity >= item.expected_quantity for item in return_order.items):
+        return jsonify({"ok": False, "message": "Pick all return items before PV"}), 400
+    return_order.status = "inspection"
+    log_activity("return_pv", f"PV initiated for {return_order.return_number}", user_id=current_api_user_id(), entity_type="CustomerReturnOrder", entity_id=return_order.id)
+    db.session.commit()
+    return jsonify({"ok": True, "return_order": serialize_return_order(return_order)})
+
+
+@api_bp.post("/returns/<int:return_id>/items/<int:item_id>/stock-in")
+@api_role_required("manager", "staff", "picker")
+def api_return_item_stock_in(return_id, item_id):
+    data = request.get_json(silent=True) or {}
+    return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    if return_order.status != "inspection":
+        return jsonify({"ok": False, "message": "Initiate PV before stock in"}), 400
+    item = CustomerReturnItem.query.filter_by(id=item_id, return_order_id=return_order.id).first_or_404()
+    try:
+        quantity = int(data.get("quantity", 1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Quantity must be a number"}), 400
+    if quantity <= 0 or quantity > item.remaining_stock_in_quantity:
+        return jsonify({"ok": False, "message": "Quantity is more than pending picked return quantity"}), 400
+
+    condition = str(data.get("condition") or "no_issue").strip().lower()
+    try:
+        if condition == "issue":
+            location = ensure_virtual_return_bins()["customer_return"]
+            item.issue_quantity += quantity
+            item.status = "issue" if item.remaining_stock_in_quantity == 0 else "partial"
+            notes = f"Customer return issue stock in: {return_order.return_number}"
+        elif condition == "no_issue":
+            location = find_location(identifier=data.get("location") or data.get("location_id") or data.get("location_barcode"), required=True)
+            if location.is_virtual:
+                raise ValueError("No-issue stock must go to a normal bin")
+            item.stocked_quantity += quantity
+            item.status = "stocked" if item.remaining_stock_in_quantity == 0 else "partial"
+            notes = f"Customer return no-issue stock in: {return_order.return_number}"
+        else:
+            raise ValueError("Condition must be issue or no_issue")
+
+        entry = receive_stock(
+            product_id=item.product_id,
+            location_id=location.id,
+            quantity=quantity,
+            received_by_id=current_api_user_id(),
+            notes=notes,
+        )
+        if all(row.remaining_stock_in_quantity == 0 for row in return_order.items):
+            return_order.status = "received"
+            return_order.resolved_at = datetime.utcnow()
+        log_activity("return_stock_in", f"Stocked return item {item.product.sku} to {location.barcode or location.id}", user_id=current_api_user_id(), entity_type="CustomerReturnItem", entity_id=item.id)
+        db.session.commit()
+        sync_result = auto_sync_current_stock_sheet("customer_return_stock_in")
+        push_result = notify_product_change(item.product, "stock.changed")
+        return jsonify({"ok": True, "stock_in": {"id": entry.id}, "return_order": serialize_return_order(return_order), "google_sheet": sync_result, "customer_website": push_result})
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
 
 
 @api_bp.post("/orders/<int:order_id>/status")
@@ -613,6 +723,8 @@ def sync_order_product_pick_stock(order, product_id, location_identifier=None):
 def issue_order_pick_stock(order, product_id, quantity, location_identifier=None):
     if location_identifier:
         location = find_location(identifier=location_identifier, required=True)
+        if location.is_virtual:
+            raise ValueError("Virtual bins cannot be used for order picking")
         inventory = Inventory.query.filter_by(product_id=product_id, location_id=location.id).first()
         if not inventory or inventory.available_quantity < quantity:
             raise ValueError("Not enough available stock in scanned bin for this order item")
@@ -629,7 +741,8 @@ def issue_order_pick_stock(order, product_id, quantity, location_identifier=None
 
     remaining = quantity
     inventory_rows = (
-        Inventory.query.filter_by(product_id=product_id)
+        Inventory.query.join(WarehouseLocation)
+        .filter(Inventory.product_id == product_id, WarehouseLocation.is_virtual.is_(False))
         .filter(Inventory.quantity > Inventory.reserved_quantity)
         .order_by(Inventory.quantity.desc(), Inventory.id)
         .all()
@@ -753,6 +866,109 @@ def create_order_from_integration(data):
         meta={"source": source, "external_order_id": external_order_id},
     )
     return order, True
+
+
+def create_return_from_integration(data):
+    if not isinstance(data, dict):
+        raise ValueError("JSON body must be an object")
+
+    external_return_id = trim_text(data.get("return_id") or data.get("external_return_id") or data.get("id"), 120)
+    website_order_id = trim_text(data.get("website_order_id") or data.get("external_order_id") or data.get("order_id"), 120)
+    if not external_return_id and not website_order_id:
+        raise ValueError("return_id or website_order_id is required")
+
+    return_number = trim_text(data.get("return_number") or data.get("return_order_number") or f"RET-{external_return_id or website_order_id}", 80)
+    existing = CustomerReturnOrder.query.filter_by(return_number=return_number).first()
+    if existing:
+        return existing, False
+
+    original_order = find_order_for_return(data, website_order_id)
+    customer = data.get("customer") or {}
+    if customer and not isinstance(customer, dict):
+        raise ValueError("customer must be an object")
+    customer_name = trim_text(data.get("customer_name") or customer.get("name") or (original_order.customer_name if original_order else ""), 160)
+    if not customer_name:
+        raise ValueError("customer_name is required")
+
+    return_order = CustomerReturnOrder(
+        return_number=return_number,
+        order_id=original_order.id if original_order else None,
+        website_order_id=website_order_id or (original_order.external_order_id if original_order else ""),
+        customer_name=customer_name,
+        customer_phone=trim_text(data.get("customer_phone") or customer.get("phone") or (original_order.customer_phone if original_order else ""), 30),
+        reason=trim_text(data.get("reason") or data.get("return_reason") or "other", 80).lower() or "other",
+        status="requested",
+        refund_status=trim_text(data.get("refund_status") or "pending", 40).lower() or "pending",
+        notes=trim_text(data.get("notes"), 2000),
+    )
+
+    items = data.get("items")
+    if items is None and original_order:
+        items = [{"product_id": item.product_id, "quantity": item.quantity} for item in original_order.items]
+    if not isinstance(items, list) or not items:
+        raise ValueError("items must be a non-empty list")
+
+    for item_data in items:
+        if not isinstance(item_data, dict):
+            raise ValueError("Each item must be an object")
+        product = find_product_from_payload(item_data, required=True)
+        return_order.items.append(
+            CustomerReturnItem(
+                product_id=product.id,
+                expected_quantity=positive_int(item_data.get("quantity") or item_data.get("expected_quantity") or 1, "quantity"),
+                notes=trim_text(item_data.get("notes"), 1000),
+            )
+        )
+
+    db.session.add(return_order)
+    db.session.flush()
+    log_activity(
+        "return_import",
+        f"Imported customer return {return_order.return_number}",
+        entity_type="CustomerReturnOrder",
+        entity_id=return_order.id,
+        meta={"website_order_id": website_order_id, "external_return_id": external_return_id},
+    )
+    return return_order, True
+
+
+def find_order_for_return(data, website_order_id):
+    local_order_id = int_or_none(data.get("local_order_id") or data.get("warehouse_order_id"))
+    if local_order_id:
+        order = Order.query.get(local_order_id)
+        if order:
+            return order
+    order_lookup = trim_text(data.get("order_number") or website_order_id, 120)
+    if not order_lookup:
+        return None
+    return Order.query.filter(or_(Order.order_number == order_lookup, Order.external_order_id == order_lookup)).first()
+
+
+def ensure_virtual_return_bins():
+    return {
+        "customer_return": ensure_virtual_location("RC-DA-01", "RC", "DA", "Virtual", "01"),
+        "store_damage": ensure_virtual_location("RE-01-01", "RE", "01", "Virtual", "01"),
+    }
+
+
+def ensure_virtual_location(barcode, zone, rack, shelf, bin_code):
+    location = WarehouseLocation.query.filter_by(barcode=barcode).first()
+    if location:
+        location.is_virtual = True
+        location.is_active = True
+        return location
+    location = WarehouseLocation(
+        zone=zone,
+        rack=rack,
+        shelf=shelf,
+        bin_code=bin_code,
+        barcode=barcode,
+        is_active=True,
+        is_virtual=True,
+    )
+    db.session.add(location)
+    db.session.flush()
+    return location
 
 
 def trim_text(value, limit):
@@ -982,6 +1198,7 @@ def serialize_location(location):
         "bin_code": location.bin_code,
         "full_code": location.full_code,
         "barcode": location.barcode,
+        "is_virtual": location.is_virtual,
     }
 
 
@@ -1010,6 +1227,7 @@ def serialize_product(product):
                 "available_quantity": item.available_quantity,
             }
             for item in product.inventory_items
+            if not item.location.is_virtual
         ],
     }
 
@@ -1075,5 +1293,35 @@ def serialize_order(order):
                 "packed_quantity": item.packed_quantity,
             }
             for item in order.items
+        ],
+    }
+
+
+def serialize_return_order(return_order):
+    return {
+        "id": return_order.id,
+        "return_number": return_order.return_number,
+        "order_id": return_order.order_id,
+        "website_order_id": return_order.website_order_id,
+        "customer_name": return_order.customer_name,
+        "customer_phone": return_order.customer_phone,
+        "reason": return_order.reason,
+        "status": return_order.status,
+        "refund_status": return_order.refund_status,
+        "notes": return_order.notes,
+        "requested_at": return_order.requested_at.isoformat() + "Z" if return_order.requested_at else None,
+        "items": [
+            {
+                "id": item.id,
+                "product": serialize_product(item.product),
+                "expected_quantity": item.expected_quantity,
+                "picked_quantity": item.picked_quantity,
+                "stocked_quantity": item.stocked_quantity,
+                "issue_quantity": item.issue_quantity,
+                "remaining_stock_in_quantity": item.remaining_stock_in_quantity,
+                "status": item.status,
+                "notes": item.notes,
+            }
+            for item in return_order.items
         ],
     }
