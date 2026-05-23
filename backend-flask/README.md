@@ -118,6 +118,9 @@ GOOGLE_APPS_SCRIPT_TOKEN=change-this-token
 CUSTOMER_PRODUCT_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/products
 CUSTOMER_PRODUCT_WEBHOOK_TOKEN=strong-shared-secret
 CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT=10
+CUSTOMER_SHIPPING_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/shipping-status
+CUSTOMER_SHIPPING_WEBHOOK_TOKEN=strong-shared-secret
+CUSTOMER_SHIPPING_WEBHOOK_TIMEOUT=10
 SHIPROCKET_API_BASE_URL=https://apiv2.shiprocket.in/v1/external
 SHIPROCKET_EMAIL=shiprocket-api-user@example.com
 SHIPROCKET_PASSWORD=strong-shiprocket-api-password
@@ -178,6 +181,8 @@ For real-time tracking updates, open:
 ```
 
 Copy the generated webhook URL into Shiprocket under Settings > API > Webhooks. Use `SHIPROCKET_WEBHOOK_TOKEN` and keep the token in the URL query string so incoming webhook calls can be verified. Incoming updates are stored in `shiprocket_webhook_events`; when an update matches an existing warehouse order by Shiprocket order ID, shipment ID, AWB, or order number, the order's courier status is refreshed automatically.
+
+Open `/shipping-status` for the live shipping table. Shiprocket order ID, AWB, latest status, and courier are read from the latest Shiprocket webhook event first, with saved order courier fields as fallback. Set `CUSTOMER_SHIPPING_WEBHOOK_URL` to push each matched Shiprocket status update to your customer app.
 
 For pgAdmin and Google setup, see `PGADMIN_GOOGLE_SETUP.md`.
 

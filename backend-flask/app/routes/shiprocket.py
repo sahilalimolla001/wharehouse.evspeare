@@ -7,6 +7,7 @@ from flask import Blueprint, current_app, flash, jsonify, render_template, reque
 
 from ..extensions import db
 from ..models import Order, ShiprocketWebhookEvent
+from ..utils.customer_website import notify_shipping_status_change
 from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, is_shiprocket_configured
 from ..utils.stock import log_activity
 from .auth import get_current_user, role_required
@@ -194,7 +195,8 @@ def receive_webhook():
         current_app.logger.exception("Shiprocket webhook failed")
         return jsonify({"ok": False, "message": str(error)}), 400
 
-    return jsonify({"ok": True, "received": len(created_events), "events": [serialize_webhook_event(event) for event in created_events]})
+    push_results = push_shipping_status_updates(created_events)
+    return jsonify({"ok": True, "received": len(created_events), "events": [serialize_webhook_event(event) for event in created_events], "customer_app": push_results})
 
 
 def default_form_data(order=None):
@@ -704,9 +706,9 @@ def serialize_shipping_status_order(order):
         "id": order.id,
         "website_order_id": order.external_order_id or order.order_number or "",
         "warehouse_order_number": order.order_number or "",
-        "shiprocket_order_id": order.courier_order_id or (latest_event.shiprocket_order_id if latest_event else "") or "",
-        "awb": order.courier_awb or (latest_event.awb if latest_event else "") or "",
-        "latest_status": order.courier_status or (latest_event.current_status if latest_event else "") or order.status or "",
+        "shiprocket_order_id": (latest_event.shiprocket_order_id if latest_event else "") or order.courier_order_id or "",
+        "awb": (latest_event.awb if latest_event else "") or order.courier_awb or "",
+        "latest_status": (latest_event.current_status if latest_event else "") or order.courier_status or order.status or "",
         "courier": (latest_event.courier_name if latest_event else "") or order.courier_provider or "",
         "destination": destination,
         "updated_at": shipping_status_updated_at(order, latest_event),
@@ -746,6 +748,20 @@ def shipping_status_updated_at(order, latest_event):
         value = latest_event.event_time or latest_event.created_at
     value = value or order.updated_at or order.created_at
     return value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+
+def push_shipping_status_updates(events):
+    results = []
+    for event in events:
+        if not event.order:
+            results.append({"event_id": event.id, "skipped": True, "message": "No matched warehouse order"})
+            continue
+        result = notify_shipping_status_change(event.order, event)
+        result["event_id"] = event.id
+        results.append(result)
+        if not result.get("ok") and not result.get("skipped"):
+            current_app.logger.warning("Customer shipping webhook failed for event %s: %s", event.id, result.get("message"))
+    return results
 
 
 def default_line_items(order=None, source=None):
