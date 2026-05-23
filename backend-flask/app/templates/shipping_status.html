@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block page_title %}Shipping Status{% endblock %}
+
+{% block content %}
+  <section class="metric-grid mb-3">
+    <article class="metric-card">
+      <span>Tracked Orders</span>
+      <strong data-order-count>{{ shipping_rows|length }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Latest Update</span>
+      <strong class="shiprocket-status-text" data-latest-status>{{ latest_event.current_status if latest_event else "-" }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Live Status</span>
+      <strong class="shiprocket-status-text" data-live-state>Ready</strong>
+    </article>
+    <article class="metric-card">
+      <span>Refresh</span>
+      <strong class="shiprocket-status-text" data-last-refresh>Waiting</strong>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <h2>Shipping Status</h2>
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('shiprocket.create_order') }}">Create Courier</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle shiprocket-webhook-table">
+        <thead>
+          <tr>
+            <th>Website Order ID</th>
+            <th>Shiprocket Order ID</th>
+            <th>AWB</th>
+            <th>Latest Status</th>
+            <th>Courier</th>
+            <th>Destination</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody data-shipping-status-rows data-latest-id="{{ latest_event.id if latest_event else 0 }}">
+          {% for row in shipping_rows %}
+            <tr data-order-id="{{ row.id }}">
+              <td><a href="{{ row.order_url }}">{{ row.website_order_id or "-" }}</a></td>
+              <td>{{ row.shiprocket_order_id or "-" }}</td>
+              <td>{{ row.awb or "-" }}</td>
+              <td><span class="badge text-bg-secondary">{{ row.latest_status or "-" }}</span></td>
+              <td>{{ row.courier or "-" }}</td>
+              <td>{{ row.destination or "-" }}</td>
+              <td>{{ row.updated_at or "-" }}</td>
+            </tr>
+          {% else %}
+            <tr data-empty-row><td colspan="7" class="text-secondary">No shipping status found yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (() => {
+      const rowsBody = document.querySelector("[data-shipping-status-rows]");
+      if (!rowsBody) return;
+
+      const liveState = document.querySelector("[data-live-state]");
+      const latestStatus = document.querySelector("[data-latest-status]");
+      const lastRefresh = document.querySelector("[data-last-refresh]");
+      const orderCount = document.querySelector("[data-order-count]");
+
+      const html = (value) => String(value || "-")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      const rowHtml = (order) => `
+        <tr data-order-id="${order.id}">
+          <td><a href="${html(order.order_url)}">${html(order.website_order_id)}</a></td>
+          <td>${html(order.shiprocket_order_id)}</td>
+          <td>${html(order.awb)}</td>
+          <td><span class="badge text-bg-secondary">${html(order.latest_status)}</span></td>
+          <td>${html(order.courier)}</td>
+          <td>${html(order.destination)}</td>
+          <td>${html(order.updated_at)}</td>
+        </tr>`;
+
+      const renderOrders = (orders) => {
+        rowsBody.querySelector("[data-empty-row]")?.remove();
+        if (!orders.length) {
+          rowsBody.innerHTML = '<tr data-empty-row><td colspan="7" class="text-secondary">No shipping status found yet.</td></tr>';
+          return;
+        }
+        rowsBody.innerHTML = orders.map(rowHtml).join("");
+      };
+
+      const refresh = async () => {
+        try {
+          liveState.textContent = "Checking";
+          const response = await fetch("{{ url_for('shiprocket.shipping_status_live') }}", { credentials: "same-origin" });
+          if (!response.ok) throw new Error("Request failed");
+          const data = await response.json();
+          renderOrders(data.orders || []);
+          rowsBody.dataset.latestId = String(data.latest_id || 0);
+          orderCount.textContent = String((data.orders || []).length);
+          latestStatus.textContent = data.latest_status || "-";
+          lastRefresh.textContent = new Date().toLocaleTimeString();
+          liveState.textContent = "Live";
+        } catch (error) {
+          liveState.textContent = "Offline";
+        }
+      };
+
+      setInterval(refresh, 5000);
+      refresh();
+    })();
+  </script>
+{% endblock %}

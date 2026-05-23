@@ -127,6 +127,32 @@ def webhook_updates():
     )
 
 
+@shiprocket_bp.route("/shipping-status")
+@role_required("manager", "staff")
+def shipping_status():
+    orders = shipping_status_orders()
+    latest_event = ShiprocketWebhookEvent.query.order_by(ShiprocketWebhookEvent.id.desc()).first()
+    return render_template(
+        "shipping_status.html",
+        shipping_rows=[serialize_shipping_status_order(order) for order in orders],
+        latest_event=latest_event,
+    )
+
+
+@shiprocket_bp.get("/shipping-status/live")
+@role_required("manager", "staff")
+def shipping_status_live():
+    latest_event = ShiprocketWebhookEvent.query.order_by(ShiprocketWebhookEvent.id.desc()).first()
+    return jsonify(
+        {
+            "ok": True,
+            "latest_id": latest_event.id if latest_event else 0,
+            "latest_status": latest_event.current_status if latest_event else "",
+            "orders": [serialize_shipping_status_order(order) for order in shipping_status_orders()],
+        }
+    )
+
+
 @shiprocket_bp.get("/shiprocket/webhooks/events")
 @role_required("manager", "staff")
 def webhook_events():
@@ -651,6 +677,75 @@ def serialize_webhook_event(event):
         "location": event.location or "",
         "matched": bool(event.order_id),
     }
+
+
+def shipping_status_orders():
+    return (
+        Order.query.filter(
+            db.or_(
+                Order.courier_provider.isnot(None),
+                Order.courier_order_id.isnot(None),
+                Order.courier_shipment_id.isnot(None),
+                Order.courier_awb.isnot(None),
+                Order.courier_status.isnot(None),
+                Order.status.in_(["dispatched", "completed", "cancelled"]),
+            )
+        )
+        .order_by(Order.updated_at.desc(), Order.created_at.desc())
+        .limit(200)
+        .all()
+    )
+
+
+def serialize_shipping_status_order(order):
+    latest_event = latest_shiprocket_event(order)
+    destination = order_shipping_destination(order)
+    return {
+        "id": order.id,
+        "website_order_id": order.external_order_id or order.order_number or "",
+        "warehouse_order_number": order.order_number or "",
+        "shiprocket_order_id": order.courier_order_id or (latest_event.shiprocket_order_id if latest_event else "") or "",
+        "awb": order.courier_awb or (latest_event.awb if latest_event else "") or "",
+        "latest_status": order.courier_status or (latest_event.current_status if latest_event else "") or order.status or "",
+        "courier": (latest_event.courier_name if latest_event else "") or order.courier_provider or "",
+        "destination": destination,
+        "updated_at": shipping_status_updated_at(order, latest_event),
+        "order_url": url_for("orders.order_detail", order_id=order.id),
+    }
+
+
+def latest_shiprocket_event(order):
+    if not order:
+        return None
+    conditions = [ShiprocketWebhookEvent.order_id == order.id]
+    if order.courier_order_id:
+        conditions.append(ShiprocketWebhookEvent.shiprocket_order_id == order.courier_order_id)
+    if order.courier_awb:
+        conditions.append(ShiprocketWebhookEvent.awb == order.courier_awb)
+    if order.courier_shipment_id:
+        conditions.append(ShiprocketWebhookEvent.shipment_id == order.courier_shipment_id)
+    query = ShiprocketWebhookEvent.query.filter(db.or_(*conditions))
+    return query.order_by(ShiprocketWebhookEvent.created_at.desc(), ShiprocketWebhookEvent.id.desc()).first()
+
+
+def order_shipping_destination(order):
+    source = order_source_payload(order)
+    shipping_address = source_address(source, "shipping", order)
+    parts = [
+        shipping_address.get("city"),
+        shipping_address.get("state"),
+        shipping_address.get("pincode"),
+    ]
+    destination = ", ".join(str(part).strip() for part in parts if str(part or "").strip())
+    return destination or order.customer_address or ""
+
+
+def shipping_status_updated_at(order, latest_event):
+    value = None
+    if latest_event:
+        value = latest_event.event_time or latest_event.created_at
+    value = value or order.updated_at or order.created_at
+    return value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
 
 
 def default_line_items(order=None, source=None):
