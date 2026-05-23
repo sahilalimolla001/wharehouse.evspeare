@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block page_title %}Customer Return Orders{% endblock %}
+
+{% block content %}
+  <section class="panel mb-3">
+    <div class="panel-heading">
+      <h2>Create Return Order</h2>
+    </div>
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-3">
+        <label class="form-label">Return Number</label>
+        <input class="form-control" name="return_number" placeholder="Auto">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Original Order</label>
+        <select class="form-select" name="order_lookup">
+          <option value="">Manual return</option>
+          {% for order in recent_orders %}
+            <option value="{{ order.id }}">{{ order.order_number }}{% if order.external_order_id %} / {{ order.external_order_id }}{% endif %} / {{ order.customer_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Website Order ID</label>
+        <input class="form-control" name="website_order_id">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Customer Name</label>
+        <input class="form-control" name="customer_name">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Customer Phone</label>
+        <input class="form-control" name="customer_phone">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Reason</label>
+        <select class="form-select" name="reason">
+          <option value="damaged">Damaged</option>
+          <option value="wrong_item">Wrong Item</option>
+          <option value="size_issue">Size Issue</option>
+          <option value="not_required">Not Required</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Return Status</label>
+        <select class="form-select" name="status">
+          <option value="requested">Requested</option>
+          <option value="approved">Approved</option>
+          <option value="received">Received</option>
+          <option value="rejected">Rejected</option>
+          <option value="refunded">Refunded</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Refund Status</label>
+        <select class="form-select" name="refund_status">
+          <option value="pending">Pending</option>
+          <option value="processing">Processing</option>
+          <option value="paid">Paid</option>
+          <option value="not_applicable">Not Applicable</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Notes</label>
+        <input class="form-control" name="notes">
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Create Return</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <h2>Return Orders</h2>
+      <span class="text-secondary">{{ returns|length }} records</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Return</th>
+            <th>Website Order</th>
+            <th>Customer</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Refund</th>
+            <th>Requested</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in returns %}
+            <tr>
+              <td>
+                <strong>{{ item.return_number }}</strong>
+                {% if item.order %}
+                  <div><a href="{{ url_for('orders.order_detail', order_id=item.order.id) }}">{{ item.order.order_number }}</a></div>
+                {% endif %}
+              </td>
+              <td>{{ item.website_order_id or "-" }}</td>
+              <td>
+                {{ item.customer_name }}
+                {% if item.customer_phone %}<div class="text-secondary">{{ item.customer_phone }}</div>{% endif %}
+              </td>
+              <td>{{ item.reason.replace("_", " ")|title }}</td>
+              <td><span class="badge text-bg-secondary">{{ item.status|title }}</span></td>
+              <td><span class="badge text-bg-light">{{ item.refund_status.replace("_", " ")|title }}</span></td>
+              <td>{{ item.requested_at.strftime("%Y-%m-%d") if item.requested_at else "-" }}</td>
+              <td>
+                <form method="post" action="{{ url_for('returns.update_customer_return', return_id=item.id) }}" class="d-flex gap-2">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <select class="form-select form-select-sm" name="status">
+                    {% for status in ["requested", "approved", "received", "rejected", "refunded"] %}
+                      <option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status|title }}</option>
+                    {% endfor %}
+                  </select>
+                  <select class="form-select form-select-sm" name="refund_status">
+                    {% for status in ["pending", "processing", "paid", "not_applicable"] %}
+                      <option value="{{ status }}" {% if item.refund_status == status %}selected{% endif %}>{{ status.replace("_", " ")|title }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Update</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="text-secondary">No customer return orders yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

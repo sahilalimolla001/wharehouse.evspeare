@@ -282,6 +282,28 @@ class ShiprocketWebhookEvent(TimestampMixin, db.Model):
         return f"<ShiprocketWebhookEvent {self.id} {self.current_status}>"
 
 
+class CustomerReturnOrder(TimestampMixin, db.Model):
+    __tablename__ = "customer_return_orders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    return_number = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
+    website_order_id = db.Column(db.String(120), index=True)
+    customer_name = db.Column(db.String(160), nullable=False)
+    customer_phone = db.Column(db.String(30))
+    reason = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(40), default="requested", nullable=False, index=True)
+    refund_status = db.Column(db.String(40), default="pending", nullable=False)
+    notes = db.Column(db.Text)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    resolved_at = db.Column(db.DateTime)
+
+    order = db.relationship("Order")
+
+    def __repr__(self):
+        return f"<CustomerReturnOrder {self.return_number}>"
+
+
 class OrderItem(TimestampMixin, db.Model):
     __tablename__ = "order_items"
 

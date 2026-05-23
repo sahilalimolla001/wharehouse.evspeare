@@ -30,6 +30,7 @@
           {% if current_user_can("manager", "staff") %}
             <a class="nav-link {% if request.endpoint == 'shiprocket.create_order' %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
             <a class="nav-link {% if request.endpoint in ['shiprocket.shipping_status', 'shiprocket.webhook_updates'] %}active{% endif %}" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
+            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('returns.') %}active{% endif %}" href="{{ url_for('returns.customer_returns') }}">Customer Returns</a>
           {% endif %}
           {% if current_user_can("manager") %}
             <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}">Reports</a>
