@@ -349,6 +349,7 @@ function renderActiveReturn() {
   }
   const totalQty = returnOrder.items.reduce((sum, item) => sum + item.expected_quantity, 0);
   const pickedQty = returnOrder.items.reduce((sum, item) => sum + item.picked_quantity, 0);
+  const currentItem = nextReturnPickItem(returnOrder);
   card.innerHTML = `
     <article class="order-card active">
       <div class="order-top">
@@ -360,11 +361,18 @@ function renderActiveReturn() {
       </div>
     </article>
   `;
-  $("#return-items").innerHTML = returnOrder.items.map(returnItemHtml).join("");
+  $("#return-items").innerHTML = currentItem
+    ? returnItemHtml(currentItem)
+    : `<div class="empty-state">Return pick complete. Ab Initiate PV karein.</div>`;
   $("#return-items").querySelectorAll("[data-return-pick]").forEach((button) => {
     button.addEventListener("click", () => updateReturnPickedQuantity(Number(button.dataset.returnPick), Number(button.dataset.quantity)));
   });
+  $("#return-result").textContent = currentItem ? `${currentItem.product.sku} scan karein.` : "All items picked. PV start karein.";
   $("#initiate-pv").disabled = !returnOrder.items.every((item) => item.picked_quantity >= item.expected_quantity);
+}
+
+function nextReturnPickItem(returnOrder) {
+  return returnOrder.items.find((item) => item.picked_quantity < item.expected_quantity) || null;
 }
 
 function returnItemHtml(item) {
@@ -400,10 +408,15 @@ async function scanReturnCode(code) {
       $("#return-result").textContent = "Product SKU/barcode scan karein.";
       return;
     }
-    const item = returnOrder.items.find((row) => row.product.id === data.product.id || row.product.sku === data.product.sku);
+    const item = nextReturnPickItem(returnOrder);
     if (!item) {
-      $("#return-result").innerHTML = `<strong>${escapeHtml(data.product.sku)}</strong><br>Item is return me nahi hai.`;
-      toast("Return item match nahi hua.");
+      $("#return-result").textContent = "All return items picked. PV start karein.";
+      toast("PV start karein.");
+      return;
+    }
+    if (item.product.id !== data.product.id && item.product.sku !== data.product.sku) {
+      $("#return-result").innerHTML = `<strong>${escapeHtml(data.product.sku)}</strong><br>Abhi ${escapeHtml(item.product.sku)} scan karna hai.`;
+      toast("Next return item match nahi hua.");
       return;
     }
     const nextQuantity = Math.min(item.picked_quantity + 1, item.expected_quantity);
