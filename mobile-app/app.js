@@ -30,7 +30,7 @@ let refreshTimer = null;
 let stockPreviewTimer = null;
 let activeReturnConfirmed = false;
 let lastSlaAlertAt = 0;
-const defaultScreenId = "orders-screen";
+const defaultScreenId = "hub-screen";
 const standaloneApp = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 
 const $ = (selector) => document.querySelector(selector);
@@ -61,8 +61,12 @@ function bindActions() {
   $("#logout-btn").addEventListener("click", logout);
   $("#warehouse-select").addEventListener("change", changeWarehouse);
   $("#sync-btn").addEventListener("click", refreshAll);
+  $("#hub-refresh").addEventListener("click", refreshAll);
   $("#refresh-orders").addEventListener("click", refreshAll);
   $("#refresh-returns").addEventListener("click", refreshAll);
+  $$("[data-screen-jump]").forEach((button) => {
+    button.addEventListener("click", () => showScreen(button.dataset.screenJump));
+  });
   $("#priority-filter").value = store.priorityFilter;
   $("#priority-filter").addEventListener("change", changePriorityFilter);
   $("#optimize-route").addEventListener("click", optimizeRoute);
@@ -178,6 +182,7 @@ function showScreen(screenId, options = {}) {
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === screenId));
   $$(".bottom-nav [data-screen]").forEach((button) => button.classList.toggle("active", button.dataset.screen === screenId));
   const titles = {
+    "hub-screen": "Command",
     "orders-screen": "Orders",
     "pick-screen": "Order Picking",
     "automation-screen": "Ops Automation",
@@ -321,6 +326,7 @@ async function changeWarehouse(event) {
 
 async function refreshAll() {
   await Promise.all([loadDashboard(), loadOrders(), loadReturns()]);
+  renderHub();
   renderOpsAutomation();
 }
 
@@ -360,6 +366,7 @@ async function loadOrders() {
     renderQuickOps();
     renderBatchGroups();
     renderOpsAutomation();
+    renderHub();
     renderDispatchQueue();
     renderActiveOrder();
   } catch (error) {
@@ -374,9 +381,79 @@ async function loadReturns() {
     renderReturnQueue();
     renderActiveReturn();
     renderReturnPv();
+    renderHub();
   } catch (error) {
     toast(error.message);
   }
+}
+
+function renderHub() {
+  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
+  const packed = store.orders.filter((order) => order.status === "packed");
+  const returnDesk = store.returns.filter((item) => ["approved", "return_picking", "return_picked", "inspection"].includes(item.status));
+  const slaRisk = pickOrders.filter((order) => slaMinutesLeft(order) <= 10);
+  const name = store.user?.name || store.user?.email || "Picker";
+  const warehouse = currentWarehouseName();
+  $("#hub-greeting").textContent = `${name}, mission ready`;
+  $("#hub-warehouse").textContent = warehouse ? `${warehouse} live floor` : "Warehouse sync pending";
+  $("#hub-pick-load").textContent = pickOrders.length;
+  $("#hub-sla-heat").textContent = slaRisk.length;
+  $("#hub-pack-ready").textContent = packed.length;
+  $("#hub-return-desk").textContent = returnDesk.length;
+  renderHubMissions(pickOrders, packed, returnDesk);
+}
+
+function renderHubMissions(pickOrders, packed, returnDesk) {
+  const target = $("#hub-missions");
+  if (!target) return;
+  const missions = [
+    ...filteredPickOrders().slice(0, 3).map((order) => ({
+      title: orderShortCode(order),
+      detail: `${order.items?.length || 0} SKUs · ${Math.max(slaMinutesLeft(order), 0)} min SLA`,
+      tag: order.priority || order.status || "pick",
+      screen: "pick",
+      id: order.id,
+    })),
+    ...packed.slice(0, 1).map((order) => ({
+      title: `Ship ${orderShortCode(order)}`,
+      detail: order.customer_name || "Ready for rider handoff",
+      tag: "handoff",
+      screen: "dispatch-screen",
+    })),
+    ...returnDesk.slice(0, 1).map((item) => ({
+      title: item.return_number || item.website_order_id || `Return ${item.id}`,
+      detail: item.reason || "Return quality check",
+      tag: "return",
+      screen: "return-screen",
+    })),
+  ];
+  if (!missions.length) {
+    target.innerHTML = `<div class="empty-state">No live mission right now. Sync karke latest queue dekhein.</div>`;
+    return;
+  }
+  target.innerHTML = missions.map((mission) => `
+    <article class="order-card tappable" data-hub-screen="${mission.screen}" data-hub-order="${mission.id || ""}">
+      <div class="order-top">
+        <div>
+          <strong>${escapeHtml(mission.title)}</strong>
+          <span>${escapeHtml(mission.detail)}</span>
+        </div>
+        <span class="badge ${String(mission.tag).toLowerCase() === "urgent" ? "warn" : ""}">${escapeHtml(mission.tag)}</span>
+      </div>
+      <div class="order-cta">${mission.screen === "pick" ? "Start picking" : "Open mission"}</div>
+    </article>
+  `).join("");
+  target.querySelectorAll("[data-hub-screen]").forEach((card) => {
+    card.addEventListener("click", () => {
+      if (card.dataset.hubScreen === "pick" && card.dataset.hubOrder) startOrder(Number(card.dataset.hubOrder));
+      else showScreen(card.dataset.hubScreen);
+    });
+  });
+}
+
+function currentWarehouseName() {
+  const selected = store.warehouses.find((warehouse) => Number(warehouse.id) === Number(store.warehouseId));
+  return selected?.name || selected?.code || selected?.warehouse_name || "";
 }
 
 function renderOrderQueue() {
@@ -940,23 +1017,25 @@ async function submitReturnStockIn(event) {
 }
 
 function orderCardHtml(order) {
-  const totalQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const pickedQty = order.items.reduce((sum, item) => sum + item.picked_quantity, 0);
+  const items = order.items || [];
+  const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+  const pickedQty = items.reduce((sum, item) => sum + item.picked_quantity, 0);
   const progress = totalQty ? Math.round((pickedQty / totalQty) * 100) : 0;
+  const sla = slaMinutesLeft(order);
   return `
     <article class="order-card tappable" data-start-order="${order.id}">
       <div class="order-top">
         <div>
           <strong>${escapeHtml(order.order_number)}</strong>
-          <span>${escapeHtml(order.customer_name)}</span>
+          <span>${escapeHtml(order.customer_name)} · ${escapeHtml(routeKey(order) || "bin pending")}</span>
         </div>
         <span class="badge ${order.priority === "urgent" ? "warn" : ""}">${escapeHtml(order.priority)}</span>
       </div>
       <div class="progress-line"><span style="width:${progress}%"></span></div>
       <div class="order-meta">
-        <span>${order.items.length} SKUs</span>
+        <span>${items.length} SKUs</span>
         <span>${pickedQty}/${totalQty} picked</span>
-        <span>${escapeHtml(order.status)}</span>
+        <span>${sla <= 0 ? "SLA due" : `${sla} min left`}</span>
       </div>
       <div class="order-cta">${order.status === "pending" ? "Tap to start picking" : "Tap to continue"}</div>
     </article>

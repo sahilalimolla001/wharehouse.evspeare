@@ -3,17 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0f766e">
-    <title>Evsphere Picker</title>
+    <meta name="theme-color" content="#10251e">
+    <title>Evspeare Picker</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <section class="auth-gate active" id="auth-gate">
       <form class="login-panel" id="login-form">
-        <div>
-          <p class="section-kicker">Evsphere Quick Commerce</p>
-          <h1>Picker Login</h1>
+        <div class="brand-lockup">
+          <span>EV</span>
+          <div>
+            <p class="section-kicker">Evspeare Quick Commerce</p>
+            <h1>Picker Login</h1>
+          </div>
         </div>
         <label>Staff Email
           <input id="login-email" type="email" autocomplete="username" required>
@@ -29,25 +32,59 @@
           <button id="test-api" type="button">Test API</button>
           <div class="api-status" id="api-status"></div>
         </details>
-        <button class="primary" type="submit">Start Picking</button>
+        <button class="primary" type="submit">Start Shift</button>
       </form>
     </section>
 
     <div class="mobile-shell">
       <header class="app-header">
-        <div>
-          <p id="header-kicker">Picker App</p>
-          <h1 id="screen-title">Orders</h1>
+        <div class="brand-lockup compact">
+          <span>EV</span>
+          <div>
+            <p id="header-kicker">Express Picking</p>
+            <h1 id="screen-title">Command</h1>
+          </div>
         </div>
         <div class="header-actions">
           <select class="warehouse-select" id="warehouse-select" aria-label="Warehouse"></select>
           <button class="icon-btn" id="sync-btn" type="button">Sync</button>
-          <button class="icon-btn" id="logout-btn" type="button">Logout</button>
+          <button class="icon-btn ghost" id="logout-btn" type="button">Logout</button>
         </div>
       </header>
 
       <main>
-        <section class="screen active" id="orders-screen">
+        <section class="screen active" id="hub-screen">
+          <div class="shift-card">
+            <div>
+              <p class="section-kicker">Live Shift</p>
+              <h2 id="hub-greeting">Ready for express ops</h2>
+              <span id="hub-warehouse">Warehouse sync pending</span>
+            </div>
+            <button class="primary" data-screen-jump="orders-screen" type="button">Start Mission</button>
+          </div>
+
+          <div class="hub-grid">
+            <article><span>Pick Load</span><strong id="hub-pick-load">0</strong><small>Pending + active</small></article>
+            <article><span>SLA Heat</span><strong id="hub-sla-heat">0</strong><small>Risk orders</small></article>
+            <article><span>Pack Ready</span><strong id="hub-pack-ready">0</strong><small>Handoff queue</small></article>
+            <article><span>Return Desk</span><strong id="hub-return-desk">0</strong><small>Approved returns</small></article>
+          </div>
+
+          <div class="mission-rail">
+            <button data-screen-jump="orders-screen" type="button"><b>Pick</b><span>Express queue</span></button>
+            <button data-screen-jump="automation-screen" type="button"><b>Ops</b><span>Route + SLA</span></button>
+            <button data-screen-jump="dispatch-screen" type="button"><b>Handoff</b><span>Packed orders</span></button>
+            <button data-screen-jump="stock-screen" type="button"><b>Stock</b><span>Inward + bin</span></button>
+          </div>
+
+          <div class="section-head">
+            <h2>Priority Missions</h2>
+            <button id="hub-refresh" type="button">Refresh</button>
+          </div>
+          <div class="card-list" id="hub-missions"></div>
+        </section>
+
+        <section class="screen" id="orders-screen">
           <div class="status-strip">
             <article><span>Pending</span><strong id="m-pending">0</strong></article>
             <article><span>Picking</span><strong id="m-picking">0</strong></article>
@@ -76,7 +113,7 @@
           <div class="card-list" id="batch-groups"></div>
 
           <div class="section-head">
-            <h2>Pick Queue</h2>
+            <h2>Express Pick Queue</h2>
             <button id="refresh-orders" type="button">Refresh</button>
           </div>
           <div class="card-list" id="order-queue"></div>
@@ -84,29 +121,73 @@
 
         <section class="screen" id="pick-screen">
           <div class="active-order" id="active-order-card"></div>
-          <div class="result-card bin-card" id="pick-bin-card">Scan bin barcode first.</div>
-          <div class="scan-box compact">
-            <video id="scanner-video" playsinline muted></video>
-            <div class="scan-line"></div>
+          <div class="scan-stage">
+            <div class="result-card bin-card" id="pick-bin-card">Scan bin barcode first.</div>
+            <div class="scan-box compact">
+              <video id="scanner-video" playsinline muted></video>
+              <div class="scan-line"></div>
+            </div>
+            <div class="button-row">
+              <button class="primary" id="start-scan" type="button">Start Scan</button>
+              <button id="stop-scan" type="button">Stop</button>
+            </div>
+            <label><span id="pick-manual-label">Manual Bin / Product Barcode</span>
+              <span class="scan-input"><input id="manual-code" inputmode="numeric" placeholder="1001 or barcode"><button id="manual-scan" type="button">Find</button></span>
+            </label>
+            <div class="result-card" id="scan-result">Scan item barcode to match the active order.</div>
           </div>
-          <div class="button-row">
-            <button class="primary" id="start-scan" type="button">Start Scan</button>
-            <button id="stop-scan" type="button">Stop</button>
-          </div>
-          <label><span id="pick-manual-label">Manual Bin / Product Barcode</span>
-            <span class="scan-input"><input id="manual-code" inputmode="numeric" placeholder="1001 or barcode"><button id="manual-scan" type="button">Find</button></span>
-          </label>
-          <div class="result-card" id="scan-result">Scan item barcode to match the active order.</div>
           <div class="card-list" id="pick-items"></div>
-          <div class="action-bar">
+          <div class="action-bar sticky-action">
             <button id="back-to-orders" type="button">Back</button>
             <button class="primary" id="mark-packed" type="button">Mark Packed</button>
           </div>
         </section>
 
-        <section class="screen" id="dispatch-screen">
+        <section class="screen" id="automation-screen">
+          <div class="automation-hero">
+            <div>
+              <p class="section-kicker">Quick Commerce Ops</p>
+              <h2>Live Picker Automation</h2>
+            </div>
+            <button class="primary" id="run-automation" type="button">Run Check</button>
+          </div>
+
+          <div class="automation-grid">
+            <article><span>Auto Assign</span><strong id="auto-next-order">--</strong><small>Best order</small></article>
+            <article><span>ETA Breach</span><strong id="auto-sla-count">0</strong><small>Orders under pressure</small></article>
+            <article><span>Offline Queue</span><strong id="auto-offline-count">0</strong><small>Pending sync</small></article>
+            <article><span>Productivity</span><strong id="auto-productivity">--</strong><small>Picked progress</small></article>
+          </div>
+
+          <div class="settings-list">
+            <button class="setting-row" data-automation-toggle="autoAssign" type="button">
+              <span><strong>Smart auto assignment</strong><small>Next order SLA, urgency aur bin route se choose hoga.</small></span>
+              <b id="toggle-autoAssign">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="shortageAlert" type="button">
+              <span><strong>Shortage & substitution alert</strong><small>Missing SKU ko exception queue me turant dikhayega.</small></span>
+              <b id="toggle-shortageAlert">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="routeAssist" type="button">
+              <span><strong>Route assist</strong><small>Picker queue bin aisle order me sort hogi.</small></span>
+              <b id="toggle-routeAssist">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="slaAlerts" type="button">
+              <span><strong>SLA push alerts</strong><small>High-risk orders ke liye local device alert ready rakhega.</small></span>
+              <b id="toggle-slaAlerts">Off</b>
+            </button>
+          </div>
+
           <div class="section-head">
-            <h2>Ready To Ship</h2>
+            <h2>Exception Queue</h2>
+            <button data-refresh-orders type="button">Refresh</button>
+          </div>
+          <div class="card-list" id="exception-list"></div>
+        </section>
+
+        <section class="screen" id="dispatch-screen">
+          <div class="handoff-banner">
+            <div><p class="section-kicker">Rider Handoff</p><h2>Ready To Ship</h2></div>
             <button data-refresh-orders type="button">Refresh</button>
           </div>
           <div class="card-list" id="dispatch-list"></div>
@@ -131,7 +212,7 @@
           </label>
           <div class="result-card" id="return-result">Return select karne ke baad item scan karein.</div>
           <div class="card-list" id="return-items"></div>
-          <div class="action-bar">
+          <div class="action-bar sticky-action">
             <button id="back-to-returns" type="button">Return List</button>
             <button class="primary" id="initiate-pv" type="button" disabled>Initiate PV</button>
           </div>
@@ -198,74 +279,16 @@
           <div class="result-card" id="inventory-bin-card">Scan bin to see what items are inside.</div>
           <div class="card-list" id="inventory-items"></div>
         </section>
-
-        <section class="screen" id="automation-screen">
-          <div class="automation-hero">
-            <div>
-              <p class="section-kicker">Quick Commerce Ops</p>
-              <h2>Live Picker Automation</h2>
-            </div>
-            <button class="primary" id="run-automation" type="button">Run Check</button>
-          </div>
-
-          <div class="automation-grid">
-            <article>
-              <span>Auto Assign</span>
-              <strong id="auto-next-order">--</strong>
-              <small>Best order for current picker</small>
-            </article>
-            <article>
-              <span>ETA Breach</span>
-              <strong id="auto-sla-count">0</strong>
-              <small>Orders under pressure</small>
-            </article>
-            <article>
-              <span>Offline Queue</span>
-              <strong id="auto-offline-count">0</strong>
-              <small>Pending device sync</small>
-            </article>
-            <article>
-              <span>Productivity</span>
-              <strong id="auto-productivity">--</strong>
-              <small>Picked progress</small>
-            </article>
-          </div>
-
-          <div class="settings-list">
-            <button class="setting-row" data-automation-toggle="autoAssign" type="button">
-              <span><strong>Smart auto assignment</strong><small>Next order SLA, urgency aur bin route se choose hoga.</small></span>
-              <b id="toggle-autoAssign">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="shortageAlert" type="button">
-              <span><strong>Shortage & substitution alert</strong><small>Missing SKU ko exception queue me turant dikhayega.</small></span>
-              <b id="toggle-shortageAlert">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="routeAssist" type="button">
-              <span><strong>Route assist</strong><small>Picker queue bin aisle order me sort hogi.</small></span>
-              <b id="toggle-routeAssist">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="slaAlerts" type="button">
-              <span><strong>SLA push alerts</strong><small>High-risk orders ke liye local device alert ready rakhega.</small></span>
-              <b id="toggle-slaAlerts">Off</b>
-            </button>
-          </div>
-
-          <div class="section-head">
-            <h2>Exception Queue</h2>
-            <button data-refresh-orders type="button">Refresh</button>
-          </div>
-          <div class="card-list" id="exception-list"></div>
-        </section>
       </main>
 
       <nav class="bottom-nav" aria-label="Picker navigation">
-        <button class="active" data-screen="orders-screen" type="button">Orders</button>
+        <button class="active" data-screen="hub-screen" type="button">Home</button>
+        <button data-screen="orders-screen" type="button">Pick</button>
         <button data-screen="automation-screen" type="button">Ops</button>
         <button data-screen="dispatch-screen" type="button">Ship</button>
         <button data-screen="return-screen" type="button">Return</button>
         <button data-screen="stock-screen" type="button">Stock</button>
-        <button data-screen="move-screen" type="button">Move</button>
-        <button data-screen="inventory-screen" type="button">Inventory</button>
+        <button data-screen="inventory-screen" type="button">Bins</button>
       </nav>
     </div>
 
