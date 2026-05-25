@@ -36,6 +36,10 @@
             <span data-icon="clipboard-list"></span>
             <span>Orders</span>
           </button>
+          <button class="nav-item" type="button" data-view="ops" aria-label="Ops Config">
+            <span data-icon="check"></span>
+            <span>Ops Config</span>
+          </button>
         </nav>
 
         <div class="sidebar-panel">
@@ -324,6 +328,80 @@
             </section>
           </div>
         </section>
+
+        <section class="view" id="ops-view" data-view-panel="ops">
+          <div class="stats-grid">
+            <article class="stat-card"><div class="stat-icon success" data-icon="check"></div><p>Pick Flow</p><strong id="ops-pick-flow">Bin first</strong><span>Scanner rule</span></article>
+            <article class="stat-card"><div class="stat-icon info" data-icon="map-pin"></div><p>Route</p><strong id="ops-route-rule">SLA</strong><span>Queue priority</span></article>
+            <article class="stat-card"><div class="stat-icon warning" data-icon="triangle-alert"></div><p>Low Stock</p><strong id="ops-low-watch">3</strong><span>Watch qty</span></article>
+            <article class="stat-card"><div class="stat-icon" data-icon="truck"></div><p>Handoff</p><strong id="ops-handoff-rule">3/3</strong><span>Checks required</span></article>
+          </div>
+
+          <div class="work-grid">
+            <section class="panel form-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Quick commerce</p>
+                  <h3>Warehouse Workflow Rules</h3>
+                </div>
+              </div>
+              <form id="ops-config-form" class="form-grid">
+                <label>
+                  Pick Method
+                  <select id="ops-pick-method">
+                    <option>Bin first</option>
+                    <option>Wave pick</option>
+                    <option>Batch pick</option>
+                  </select>
+                </label>
+                <label>
+                  Route Rule
+                  <select id="ops-route-method">
+                    <option>SLA priority</option>
+                    <option>Bin sequence</option>
+                    <option>Zone wise</option>
+                  </select>
+                </label>
+                <label>
+                  Low Stock Watch
+                  <input id="ops-low-stock" type="number" min="0" value="3">
+                </label>
+                <label>
+                  Max Wave Orders
+                  <input id="ops-wave-orders" type="number" min="1" value="5">
+                </label>
+                <label>
+                  Tote Required
+                  <select id="ops-tote-required">
+                    <option>Yes</option>
+                    <option>No</option>
+                  </select>
+                </label>
+                <label>
+                  Incident Reporting
+                  <select id="ops-incident-reporting">
+                    <option>Enabled</option>
+                    <option>Disabled</option>
+                  </select>
+                </label>
+                <button class="primary-button full-span" type="submit">
+                  <span data-icon="save"></span>
+                  Save Ops Rules
+                </button>
+              </form>
+            </section>
+
+            <section class="panel table-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Floor readiness</p>
+                  <h3>End-to-end Checklist</h3>
+                </div>
+              </div>
+              <div class="compact-list" id="ops-readiness-list"></div>
+            </section>
+          </div>
+        </section>
       </main>
 
       <nav class="mobile-nav" aria-label="Mobile navigation">
@@ -338,6 +416,9 @@
         </button>
         <button class="mobile-nav-item" type="button" data-view="orders" aria-label="Orders">
           <span data-icon="clipboard-list"></span>
+        </button>
+        <button class="mobile-nav-item" type="button" data-view="ops" aria-label="Ops Config">
+          <span data-icon="check"></span>
         </button>
       </nav>
     </div>

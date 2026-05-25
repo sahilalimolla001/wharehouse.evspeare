@@ -21,6 +21,11 @@ const store = {
   automationSettings: JSON.parse(localStorage.getItem("warehouseAutomationSettings") || "{}"),
   offlineQueue: JSON.parse(localStorage.getItem("warehouseOfflineQueue") || "[]"),
   shiftStartedAt: localStorage.getItem("warehouseShiftStartedAt") || "",
+  incidents: JSON.parse(localStorage.getItem("warehouseIncidents") || "[]"),
+  totes: JSON.parse(localStorage.getItem("warehouseTotes") || "[]"),
+  waves: JSON.parse(localStorage.getItem("warehouseWaves") || "[]"),
+  preferences: JSON.parse(localStorage.getItem("warehousePickerPreferences") || "{}"),
+  breakMode: localStorage.getItem("warehouseBreakMode") === "true",
 };
 
 let videoStream = null;
@@ -80,6 +85,14 @@ function bindActions() {
   $("#retry-offline").addEventListener("click", retryOfflineQueue);
   $("#copy-shift-summary").addEventListener("click", copyShiftSummary);
   $("#copy-route-plan").addEventListener("click", copyRoutePlan);
+  $("#tools-refresh").addEventListener("click", renderTools);
+  $("#toggle-break-mode").addEventListener("click", toggleBreakMode);
+  $("#tote-form").addEventListener("submit", assignTote);
+  $("#incident-form").addEventListener("submit", saveIncident);
+  $("#create-wave").addEventListener("click", createWave);
+  $$("[data-pref-toggle]").forEach((button) => {
+    button.addEventListener("click", () => togglePreference(button.dataset.prefToggle));
+  });
   $$("[data-automation-toggle]").forEach((button) => {
     button.addEventListener("click", () => toggleAutomationSetting(button.dataset.automationToggle));
   });
@@ -203,8 +216,10 @@ function showScreen(screenId, options = {}) {
     "stock-screen": "Stock In",
     "move-screen": "Move Stock",
     "inventory-screen": "View Inventory",
+    "tools-screen": "Tools",
   };
   $("#screen-title").textContent = titles[screenId] || "Picker";
+  if (screenId === "tools-screen") renderTools();
   if (screenId !== "pick-screen") stopScanner();
   if (options.history !== false) {
     if (previousScreenId === screenId && !options.forceHistory) replaceAppHistory(screenId);
@@ -339,6 +354,7 @@ async function refreshAll() {
   await Promise.all([loadDashboard(), loadOrders(), loadReturns()]);
   renderHub();
   renderOpsAutomation();
+  renderTools();
 }
 
 function startAutoRefresh() {
@@ -874,6 +890,179 @@ function copyText(value, message) {
   } else {
     toast(value);
   }
+}
+
+function renderTools() {
+  const prefs = effectivePreferences();
+  $("#tool-break-state").textContent = store.breakMode ? "On" : "Off";
+  $("#tool-beep-state").textContent = prefs.scanBeep ? "On" : "Off";
+  $("#tool-vibrate-state").textContent = prefs.vibration ? "On" : "Off";
+  $("#tool-fastpack-state").textContent = prefs.fastPack ? "On" : "Off";
+  renderTotes();
+  renderIncidents();
+  renderWaves();
+}
+
+function effectivePreferences() {
+  return {
+    scanBeep: store.preferences.scanBeep !== false,
+    vibration: store.preferences.vibration !== false,
+    fastPack: store.preferences.fastPack === true,
+  };
+}
+
+function togglePreference(key) {
+  const prefs = effectivePreferences();
+  store.preferences[key] = !prefs[key];
+  localStorage.setItem("warehousePickerPreferences", JSON.stringify(store.preferences));
+  renderTools();
+  toast(`${key} ${store.preferences[key] ? "enabled" : "disabled"}.`);
+}
+
+function toggleBreakMode() {
+  store.breakMode = !store.breakMode;
+  localStorage.setItem("warehouseBreakMode", String(store.breakMode));
+  renderTools();
+  renderHub();
+  toast(store.breakMode ? "Break mode on." : "Break mode off.");
+}
+
+function assignTote(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const tote = form.elements.tote.value.trim();
+  const order = form.elements.order.value.trim();
+  if (!tote || !order) return;
+  store.totes.unshift({
+    id: crypto.randomUUID?.() || String(Date.now()),
+    tote,
+    order,
+    created_at: new Date().toISOString(),
+  });
+  store.totes = store.totes.slice(0, 20);
+  localStorage.setItem("warehouseTotes", JSON.stringify(store.totes));
+  form.reset();
+  renderTotes();
+  toast("Tote assigned.");
+}
+
+function renderTotes() {
+  const target = $("#tote-list");
+  if (!target) return;
+  if (!store.totes.length) {
+    target.innerHTML = `<div class="empty-state">No tote assigned yet.</div>`;
+    return;
+  }
+  target.innerHTML = store.totes.slice(0, 6).map((item) => `
+    <article class="tool-row">
+      <div><strong>${escapeHtml(item.tote)}</strong><span>${escapeHtml(item.order)} - ${timeAgo(item.created_at)}</span></div>
+      <button type="button" data-remove-tote="${item.id}">Clear</button>
+    </article>
+  `).join("");
+  target.querySelectorAll("[data-remove-tote]").forEach((button) => {
+    button.addEventListener("click", () => {
+      store.totes = store.totes.filter((item) => item.id !== button.dataset.removeTote);
+      localStorage.setItem("warehouseTotes", JSON.stringify(store.totes));
+      renderTotes();
+    });
+  });
+}
+
+function saveIncident(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const type = form.elements.type.value;
+  const detail = form.elements.detail.value.trim();
+  if (!detail) return;
+  store.incidents.unshift({
+    id: crypto.randomUUID?.() || String(Date.now()),
+    type,
+    detail,
+    status: "open",
+    created_at: new Date().toISOString(),
+  });
+  store.incidents = store.incidents.slice(0, 30);
+  localStorage.setItem("warehouseIncidents", JSON.stringify(store.incidents));
+  form.reset();
+  renderIncidents();
+  toast("Incident saved.");
+}
+
+function renderIncidents() {
+  const target = $("#incident-list");
+  if (!target) return;
+  if (!store.incidents.length) {
+    target.innerHTML = `<div class="empty-state">No incident logged.</div>`;
+    return;
+  }
+  target.innerHTML = store.incidents.slice(0, 6).map((item) => `
+    <article class="tool-row">
+      <div><strong>${escapeHtml(item.type.replaceAll("_", " "))}</strong><span>${escapeHtml(item.detail)} - ${timeAgo(item.created_at)}</span></div>
+      <button type="button" data-close-incident="${item.id}">${item.status === "closed" ? "Closed" : "Close"}</button>
+    </article>
+  `).join("");
+  target.querySelectorAll("[data-close-incident]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const incident = store.incidents.find((item) => item.id === button.dataset.closeIncident);
+      if (incident) incident.status = "closed";
+      localStorage.setItem("warehouseIncidents", JSON.stringify(store.incidents));
+      renderIncidents();
+    });
+  });
+}
+
+function createWave() {
+  const orders = filteredPickOrders().slice(0, 5);
+  if (!orders.length) {
+    toast("No orders available for wave.");
+    return;
+  }
+  const wave = {
+    id: crypto.randomUUID?.() || String(Date.now()),
+    code: `WAVE-${store.waves.length + 1}`,
+    orders: orders.map((order) => orderShortCode(order)),
+    bins: routeStops().slice(0, 6).map((stop) => stop.bin),
+    created_at: new Date().toISOString(),
+  };
+  store.waves.unshift(wave);
+  store.waves = store.waves.slice(0, 10);
+  localStorage.setItem("warehouseWaves", JSON.stringify(store.waves));
+  renderWaves();
+  toast("Wave created.");
+}
+
+function renderWaves() {
+  const target = $("#wave-list");
+  if (!target) return;
+  if (!store.waves.length) {
+    target.innerHTML = `<div class="empty-state">Create a wave from current priority queue.</div>`;
+    return;
+  }
+  target.innerHTML = store.waves.slice(0, 5).map((wave) => `
+    <article class="tool-row">
+      <div>
+        <strong>${escapeHtml(wave.code)}</strong>
+        <span>${wave.orders.length} orders - ${wave.bins.length} bins - ${timeAgo(wave.created_at)}</span>
+      </div>
+      <button type="button" data-copy-wave="${wave.id}">Copy</button>
+    </article>
+  `).join("");
+  target.querySelectorAll("[data-copy-wave]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const wave = store.waves.find((item) => item.id === button.dataset.copyWave);
+      if (!wave) return;
+      copyText(`${wave.code}\nOrders: ${wave.orders.join(", ")}\nBins: ${wave.bins.join(", ")}`, "Wave copied.");
+    });
+  });
+}
+
+function timeAgo(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "now";
+  const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
 }
 
 function orderPriorityScore(order) {

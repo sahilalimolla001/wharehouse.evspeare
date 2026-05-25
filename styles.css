@@ -775,7 +775,7 @@ tbody tr:hover {
     bottom: 10px;
     height: 58px;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 6px;
     padding: 6px;
     border: 1px solid var(--line);

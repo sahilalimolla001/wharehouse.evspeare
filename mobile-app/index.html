@@ -313,6 +313,68 @@
           <div class="result-card" id="inventory-bin-card">Scan bin to see what items are inside.</div>
           <div class="card-list" id="inventory-items"></div>
         </section>
+
+        <section class="screen" id="tools-screen">
+          <div class="automation-hero">
+            <div>
+              <p class="section-kicker">Picker Control</p>
+              <h2>All Floor Tools</h2>
+            </div>
+            <button class="primary" id="tools-refresh" type="button">Refresh</button>
+          </div>
+
+          <div class="mission-rail">
+            <button data-screen-jump="stock-screen" type="button"><b>Stock In</b><span>Receive inventory</span></button>
+            <button data-screen-jump="move-screen" type="button"><b>Move</b><span>Bin to bin</span></button>
+            <button data-screen-jump="inventory-screen" type="button"><b>Bins</b><span>Lookup stock</span></button>
+            <button data-screen-jump="automation-screen" type="button"><b>Ops</b><span>Automation</span></button>
+          </div>
+
+          <div class="tool-grid">
+            <article><span>Break Mode</span><strong id="tool-break-state">Off</strong><button id="toggle-break-mode" type="button">Toggle</button></article>
+            <article><span>Scan Beep</span><strong id="tool-beep-state">On</strong><button data-pref-toggle="scanBeep" type="button">Toggle</button></article>
+            <article><span>Vibration</span><strong id="tool-vibrate-state">On</strong><button data-pref-toggle="vibration" type="button">Toggle</button></article>
+            <article><span>Fast Pack</span><strong id="tool-fastpack-state">Off</strong><button data-pref-toggle="fastPack" type="button">Toggle</button></article>
+          </div>
+
+          <form class="form-card wide-card" id="tote-form">
+            <h2>Tote / Crate Assignment</h2>
+            <div class="two-col">
+              <label>Tote ID
+                <input name="tote" placeholder="TOTE-01" required>
+              </label>
+              <label>Order ID
+                <input name="order" placeholder="Website/order ID" required>
+              </label>
+            </div>
+            <button class="primary" type="submit">Assign Tote</button>
+          </form>
+          <div class="card-list" id="tote-list"></div>
+
+          <form class="form-card wide-card" id="incident-form">
+            <h2>Incident Report</h2>
+            <label>Issue Type
+              <select name="type">
+                <option value="stock_short">Stock short</option>
+                <option value="damaged">Damaged item</option>
+                <option value="barcode_issue">Barcode issue</option>
+                <option value="bin_blocked">Bin blocked</option>
+                <option value="rider_delay">Rider delay</option>
+              </select>
+            </label>
+            <label>Details
+              <input name="detail" placeholder="SKU/bin/order details" required>
+            </label>
+            <button class="primary" type="submit">Save Incident</button>
+          </form>
+          <div class="card-list" id="incident-list"></div>
+
+          <div class="section-head">
+            <h2>Wave Picking</h2>
+            <button id="create-wave" type="button">Create Wave</button>
+          </div>
+          <div class="card-list" id="wave-list"></div>
+        </section>
       </main>
 
       <nav class="bottom-nav" aria-label="Picker navigation">
@@ -321,7 +383,7 @@
         <button data-screen="automation-screen" type="button">Ops</button>
         <button data-screen="dispatch-screen" type="button">Ship</button>
         <button data-screen="return-screen" type="button">Return</button>
-        <button data-screen="stock-screen" type="button">Stock</button>
+        <button data-screen="tools-screen" type="button">Tools</button>
         <button data-screen="inventory-screen" type="button">Bins</button>
       </nav>
     </div>

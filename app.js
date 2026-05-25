@@ -33,6 +33,14 @@ const seedState = {
     { id: uid(), customer: "Aarav Traders", productId: "", qty: 6, priority: "High", status: "Pending", createdAt: new Date().toISOString() },
     { id: uid(), customer: "North Retail", productId: "", qty: 12, priority: "Normal", status: "Picking", createdAt: new Date().toISOString() },
   ],
+  opsConfig: {
+    pickMethod: "Bin first",
+    routeMethod: "SLA priority",
+    lowStock: 3,
+    waveOrders: 5,
+    toteRequired: "Yes",
+    incidentReporting: "Enabled",
+  },
 };
 
 seedState.orders[0].productId = seedState.products[0].id;
@@ -97,6 +105,18 @@ function cacheElements() {
     "order-qty",
     "order-priority",
     "order-board",
+    "ops-config-form",
+    "ops-pick-method",
+    "ops-route-method",
+    "ops-low-stock",
+    "ops-wave-orders",
+    "ops-tote-required",
+    "ops-incident-reporting",
+    "ops-pick-flow",
+    "ops-route-rule",
+    "ops-low-watch",
+    "ops-handoff-rule",
+    "ops-readiness-list",
     "toast",
   ].forEach((id) => {
     els[toCamel(id)] = document.getElementById(id);
@@ -129,6 +149,7 @@ function bindEvents() {
   els.resetProductForm.addEventListener("click", resetProductForm);
   els.movementForm.addEventListener("submit", handleMovementSubmit);
   els.orderForm.addEventListener("submit", handleOrderSubmit);
+  els.opsConfigForm.addEventListener("submit", handleOpsConfigSubmit);
   els.exportButton.addEventListener("click", exportData);
 }
 
@@ -162,6 +183,7 @@ function render() {
   renderInventory();
   renderMovements();
   renderOrders();
+  renderOpsConfig();
 }
 
 function setView(view) {
@@ -178,6 +200,7 @@ function setView(view) {
     inventory: "Inventory Manager",
     movements: "Stock Movement",
     orders: "Order Dispatch",
+    ops: "Ops Configuration",
   };
   els.viewTitle.textContent = titles[view] || "Warehouse Dashboard";
 }
@@ -195,6 +218,54 @@ function renderStats() {
   els.heroStockValue.textContent = `${totalStock.toLocaleString("en-IN")} units`;
   els.heroAlertCopy.textContent = lowItems.length ? `${lowItems.length} items reorder level par hain` : "All zones updated";
   els.warehouseStatus.textContent = lowItems.length ? "Reorder required" : "System ready";
+}
+
+function renderOpsConfig() {
+  state.opsConfig = { ...seedState.opsConfig, ...(state.opsConfig || {}) };
+  els.opsPickMethod.value = state.opsConfig.pickMethod;
+  els.opsRouteMethod.value = state.opsConfig.routeMethod;
+  els.opsLowStock.value = state.opsConfig.lowStock;
+  els.opsWaveOrders.value = state.opsConfig.waveOrders;
+  els.opsToteRequired.value = state.opsConfig.toteRequired;
+  els.opsIncidentReporting.value = state.opsConfig.incidentReporting;
+  els.opsPickFlow.textContent = state.opsConfig.pickMethod;
+  els.opsRouteRule.textContent = state.opsConfig.routeMethod.replace(" priority", "");
+  els.opsLowWatch.textContent = state.opsConfig.lowStock;
+  els.opsHandoffRule.textContent = state.opsConfig.toteRequired === "Yes" ? "3/3" : "2/3";
+  const lowItems = state.products.filter((product) => Number(product.qty) <= Number(state.opsConfig.lowStock));
+  const pendingOrders = state.orders.filter((order) => order.status !== "Completed");
+  const rows = [
+    ["Picker app", "Configured", `${state.opsConfig.pickMethod} / ${state.opsConfig.routeMethod}`],
+    ["Wave picking", `${state.opsConfig.waveOrders} orders`, "Max per wave"],
+    ["Tote flow", state.opsConfig.toteRequired, "Crate assignment"],
+    ["Low stock watch", `${lowItems.length} SKU`, `Qty <= ${state.opsConfig.lowStock}`],
+    ["Dispatch queue", `${pendingOrders.length} orders`, "Pending floor work"],
+    ["Incidents", state.opsConfig.incidentReporting, "Floor reporting"],
+  ];
+  els.opsReadinessList.innerHTML = rows.map(([title, value, help]) => `
+    <article class="compact-item">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <span class="muted">${escapeHtml(help)}</span>
+      </div>
+      <span class="pill">${escapeHtml(value)}</span>
+    </article>
+  `).join("");
+}
+
+function handleOpsConfigSubmit(event) {
+  event.preventDefault();
+  state.opsConfig = {
+    pickMethod: els.opsPickMethod.value,
+    routeMethod: els.opsRouteMethod.value,
+    lowStock: Number(els.opsLowStock.value || 0),
+    waveOrders: Number(els.opsWaveOrders.value || 1),
+    toteRequired: els.opsToteRequired.value,
+    incidentReporting: els.opsIncidentReporting.value,
+  };
+  saveState();
+  render();
+  showToast("Ops rules saved.");
 }
 
 function renderLowStockList() {

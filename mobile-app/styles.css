@@ -280,6 +280,7 @@ input[type="file"] {
 .hub-grid,
 .quick-ops-grid,
 .automation-grid,
+.tool-grid,
 .status-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -293,6 +294,7 @@ input[type="file"] {
 .hub-grid article,
 .quick-ops-grid article,
 .automation-grid article,
+.tool-grid article,
 .status-strip article {
   min-height: 88px;
   display: grid;
@@ -303,10 +305,12 @@ input[type="file"] {
 .hub-grid span,
 .quick-ops-grid span,
 .automation-grid span,
+.tool-grid span,
 .status-strip span,
 .hub-grid small,
 .quick-ops-grid small,
 .automation-grid small,
+.tool-grid small,
 .order-meta,
 .order-top span,
 .pick-item span,
@@ -324,9 +328,41 @@ input[type="file"] {
 .hub-grid strong,
 .quick-ops-grid strong,
 .automation-grid strong,
+.tool-grid strong,
 .status-strip strong {
   font-size: 1.25rem;
   overflow-wrap: anywhere;
+}
+
+.tool-grid article,
+.tool-row,
+.wide-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.tool-grid article {
+  gap: 8px;
+}
+
+.tool-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+
+.tool-row span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.wide-card {
+  width: 100%;
 }
 
 .mission-rail {
@@ -816,6 +852,7 @@ input[type="file"] {
   .hub-grid,
   .quick-ops-grid,
   .automation-grid,
+  .tool-grid,
   .mission-rail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -874,7 +911,8 @@ input[type="file"] {
   .pick-item,
   .batch-card,
   .exception-card,
-  .setting-row {
+  .setting-row,
+  .tool-row {
     grid-template-columns: 1fr;
   }
 
