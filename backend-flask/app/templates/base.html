@@ -37,6 +37,7 @@
           {% endif %}
           {% if current_user_can("admin") %}
             <a class="nav-link {% if request.endpoint == 'users.users' %}active{% endif %}" href="{{ url_for('users.users') }}">Users</a>
+            <a class="nav-link {% if request.endpoint == 'users.ops_config' %}active{% endif %}" href="{{ url_for('users.ops_config') }}">Ops Config</a>
             <a class="nav-link {% if request.endpoint == 'users.settings' %}active{% endif %}" href="{{ url_for('users.settings') }}">Settings</a>
           {% endif %}
         </nav>

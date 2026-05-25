@@ -1,7 +1,7 @@
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
-from ..models import Product, User, Warehouse
+from ..models import CustomerReturnOrder, Inventory, Order, Product, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import test_storage_connection
@@ -57,6 +57,39 @@ def settings():
         "shiprocket": "Connected" if is_shiprocket_configured(current_app.config) else "Not configured",
     }
     return render_template("settings.html", integrations=integrations)
+
+
+@users_bp.route("/ops-config")
+@role_required("admin")
+def ops_config():
+    rules = {
+        "Shift gate": "Enabled",
+        "Pick method": "Bin first",
+        "Route optimization": "SLA + bin sequence",
+        "Wave picking": "5 orders per wave",
+        "Tote assignment": "Required",
+        "Dispatch checklist": "Bag seal, label, payment/OTP",
+        "Shortage flow": "Exception queue",
+        "Return flow": "Virtual bin + PV",
+        "Customer app": "Express, buy again, stock badges",
+        "Shiprocket": "AWB and courier sync",
+    }
+    readiness = [
+        ("Warehouses", Warehouse.query.filter_by(is_active=True).count(), "Active warehouse nodes"),
+        ("Locations", WarehouseLocation.query.filter_by(is_active=True).count(), "Pickable bins"),
+        ("Inventory rows", Inventory.query.count(), "Stock ledger rows"),
+        ("Products", Product.query.filter_by(is_active=True).count(), "Sellable catalogue"),
+        ("Open orders", Order.query.filter(Order.status.in_(["pending", "picking", "packed"])).count(), "Needs floor action"),
+        ("Returns", CustomerReturnOrder.query.count(), "Customer return records"),
+        ("Staff users", User.query.count(), "Login accounts"),
+    ]
+    integrations = {
+        "Customer website": "Connected" if current_app.config.get("CUSTOMER_PRODUCT_WEBHOOK_URL") else "Feed only",
+        "Shiprocket": "Connected" if is_shiprocket_configured(current_app.config) else "Not configured",
+        "Google Sheets": "Connected" if current_app.config.get("GOOGLE_APPS_SCRIPT_WEBHOOK_URL") or current_app.config.get("GOOGLE_SHEETS_SPREADSHEET_ID") else "Not configured",
+        "Storage": "Connected" if current_app.config.get("GOOGLE_CLOUD_STORAGE_BUCKET") else "Not configured",
+    }
+    return render_template("ops_config.html", rules=rules, readiness=readiness, integrations=integrations)
 
 
 @users_bp.post("/settings/test-google-storage")
