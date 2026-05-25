@@ -32,7 +32,7 @@ def add_api_headers(response):
     elif not origin and not current_app.config.get("IS_PRODUCTION"):
         response.headers["Access-Control-Allow-Origin"] = "*"
     response.vary.add("Origin")
-    allowed_headers = ["Authorization", "Content-Type", "X-CSRF-Token", "X-Integration-Key"]
+    allowed_headers = ["Authorization", "Content-Type", "X-CSRF-Token", "X-Integration-Key", "X-Warehouse-Id"]
     if current_app.config.get("ALLOW_INSECURE_USER_HEADER"):
         allowed_headers.append("X-User-Id")
     response.headers["Access-Control-Allow-Headers"] = ", ".join(allowed_headers)
