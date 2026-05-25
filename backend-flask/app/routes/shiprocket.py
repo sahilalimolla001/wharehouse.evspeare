@@ -3,14 +3,14 @@ import secrets
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, current_app, flash, jsonify, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, render_template, request, url_for
 
 from ..extensions import db
 from ..models import Order, ShiprocketWebhookEvent
 from ..utils.customer_website import notify_shipping_status_change
 from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, is_shiprocket_configured
 from ..utils.stock import log_activity
-from .auth import get_current_user, role_required
+from .auth import get_current_user, role_required, selected_warehouse
 
 
 shiprocket_bp = Blueprint("shiprocket", __name__)
@@ -94,7 +94,11 @@ def create_order():
     else:
         form_data = default_form_data(selected_order)
 
-    recent_orders = Order.query.order_by(Order.created_at.desc()).limit(100).all()
+    warehouse = selected_warehouse()
+    recent_query = Order.query
+    if warehouse:
+        recent_query = recent_query.filter(Order.warehouse_id == warehouse.id)
+    recent_orders = recent_query.order_by(Order.created_at.desc()).limit(100).all()
     return render_template(
         "shiprocket_order.html",
         recent_orders=recent_orders,
@@ -158,6 +162,9 @@ def shipping_status_live():
 @role_required("manager", "staff")
 def shipping_status_detail(order_id):
     order = Order.query.get_or_404(order_id)
+    warehouse = selected_warehouse()
+    if warehouse and order.warehouse_id != warehouse.id:
+        abort(403)
     return render_template(
         "shipping_status_detail.html",
         tracking=serialize_shipping_tracking(order),
@@ -168,6 +175,9 @@ def shipping_status_detail(order_id):
 @role_required("manager", "staff")
 def shipping_status_detail_live(order_id):
     order = Order.query.get_or_404(order_id)
+    warehouse = selected_warehouse()
+    if warehouse and order.warehouse_id != warehouse.id:
+        return jsonify({"ok": False, "message": "Permission denied"}), 403
     return jsonify({"ok": True, "tracking": serialize_shipping_tracking(order)})
 
 
@@ -699,8 +709,12 @@ def serialize_webhook_event(event):
 
 
 def shipping_status_orders():
+    warehouse = selected_warehouse()
+    query = Order.query
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
     return (
-        Order.query.filter(
+        query.filter(
             db.or_(
                 Order.courier_provider.isnot(None),
                 Order.courier_order_id.isnot(None),
@@ -1161,7 +1175,11 @@ def load_order(value):
         return None
     if not order_id:
         return None
-    return Order.query.get(order_id)
+    order = Order.query.get(order_id)
+    warehouse = selected_warehouse()
+    if order and warehouse and order.warehouse_id != warehouse.id:
+        return None
+    return order
 
 
 def summarize_shiprocket_response(response):

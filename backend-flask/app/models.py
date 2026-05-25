@@ -260,11 +260,13 @@ class Order(TimestampMixin, db.Model):
     customer_address = db.Column(db.Text)
     status = db.Column(db.String(40), default="pending", nullable=False)
     priority = db.Column(db.String(20), default="normal", nullable=False)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
     assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     expected_dispatch_date = db.Column(db.Date)
     completed_at = db.Column(db.DateTime)
 
+    warehouse = db.relationship("Warehouse")
     assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     items = db.relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")

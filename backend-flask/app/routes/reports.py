@@ -5,9 +5,9 @@ from flask import Blueprint, Response, flash, redirect, render_template, url_for
 from sqlalchemy import func
 
 from ..extensions import db
-from ..models import Inventory, Product, StockIn, StockOut, Supplier
+from ..models import Inventory, Product, StockIn, StockOut, Supplier, WarehouseLocation
 from ..utils.google_sheets import current_stock_sheet_rows, format_google_sheets_error, write_rows_to_sheet
-from .auth import role_required
+from .auth import role_required, selected_warehouse
 
 reports_bp = Blueprint("reports", __name__)
 
@@ -15,11 +15,24 @@ reports_bp = Blueprint("reports", __name__)
 @reports_bp.route("/reports")
 @role_required("manager")
 def reports():
-    stock_value = sum(product.stock_value for product in Product.query.filter_by(is_active=True).all())
-    low_stock = [product for product in Product.query.filter_by(is_active=True).all() if product.is_low_stock]
+    warehouse = selected_warehouse()
+    products = Product.query.filter_by(is_active=True).all()
+    inventory_query = Inventory.query.join(WarehouseLocation)
+    stock_in_query = db.session.query(func.coalesce(func.sum(StockIn.quantity), 0)).join(WarehouseLocation, StockIn.location_id == WarehouseLocation.id)
+    stock_out_query = db.session.query(func.coalesce(func.sum(StockOut.quantity), 0)).join(WarehouseLocation, StockOut.location_id == WarehouseLocation.id)
+    if warehouse:
+        inventory_query = inventory_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+        stock_in_query = stock_in_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+        stock_out_query = stock_out_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    inventory_rows = inventory_query.all()
+    product_quantities = {}
+    for row in inventory_rows:
+        product_quantities[row.product_id] = product_quantities.get(row.product_id, 0) + row.quantity
+    stock_value = sum((row.product.purchase_price or 0) * row.quantity for row in inventory_rows)
+    low_stock = [product for product in products if product_quantities.get(product.id, 0) <= product.minimum_stock]
     supplier_count = Supplier.query.filter_by(is_active=True).count()
-    total_stock_in = db.session.query(func.coalesce(func.sum(StockIn.quantity), 0)).scalar()
-    total_stock_out = db.session.query(func.coalesce(func.sum(StockOut.quantity), 0)).scalar()
+    total_stock_in = stock_in_query.scalar()
+    total_stock_out = stock_out_query.scalar()
     return render_template(
         "reports.html",
         stock_value=stock_value,
@@ -36,7 +49,11 @@ def current_stock_csv():
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(["SKU", "Product", "Location", "Quantity", "Reserved", "Available", "Stock Value"])
-    for row in Inventory.query.join(Product).order_by(Product.sku).all():
+    warehouse = selected_warehouse()
+    query = Inventory.query.join(Product).join(WarehouseLocation)
+    if warehouse:
+        query = query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    for row in query.order_by(Product.sku).all():
         writer.writerow(
             [
                 row.product.sku,
@@ -58,7 +75,11 @@ def current_stock_csv():
 @reports_bp.post("/reports/export-google-sheet")
 @role_required("manager")
 def export_google_sheet():
-    inventory_rows = Inventory.query.join(Product).order_by(Product.sku).all()
+    warehouse = selected_warehouse()
+    query = Inventory.query.join(Product).join(WarehouseLocation)
+    if warehouse:
+        query = query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    inventory_rows = query.order_by(Product.sku).all()
     try:
         result = write_rows_to_sheet(current_stock_sheet_rows(inventory_rows))
         updated_range = result.get("updatedRange", "Google Sheet")

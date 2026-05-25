@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from ..extensions import db
 from ..models import CustomerReturnItem, CustomerReturnOrder, Inventory, Order, WarehouseLocation
 from .api import ensure_virtual_return_bins
-from .auth import get_current_user, role_required
+from .auth import get_current_user, role_required, selected_warehouse
 
 
 returns_bp = Blueprint("returns", __name__)
@@ -46,8 +46,14 @@ def customer_returns():
         flash("Customer return order created.", "success")
         return redirect(url_for("returns.customer_returns"))
 
-    returns = CustomerReturnOrder.query.order_by(CustomerReturnOrder.created_at.desc()).limit(200).all()
-    recent_orders = Order.query.order_by(Order.created_at.desc()).limit(100).all()
+    warehouse = selected_warehouse()
+    returns_query = CustomerReturnOrder.query.outerjoin(Order)
+    recent_orders_query = Order.query
+    if warehouse:
+        returns_query = returns_query.filter(or_(CustomerReturnOrder.order_id.is_(None), Order.warehouse_id == warehouse.id))
+        recent_orders_query = recent_orders_query.filter(Order.warehouse_id == warehouse.id)
+    returns = returns_query.order_by(CustomerReturnOrder.created_at.desc()).limit(200).all()
+    recent_orders = recent_orders_query.order_by(Order.created_at.desc()).limit(100).all()
     virtual_bins = (
         WarehouseLocation.query.filter_by(is_virtual=True)
         .order_by(WarehouseLocation.zone, WarehouseLocation.rack, WarehouseLocation.bin_code)
@@ -108,11 +114,15 @@ def find_original_order(value):
     cleaned = str(value or "").strip()
     if not cleaned:
         return None
+    warehouse = selected_warehouse()
     if cleaned.isdigit():
         order = Order.query.get(int(cleaned))
-        if order:
+        if order and (not warehouse or order.warehouse_id == warehouse.id):
             return order
-    return Order.query.filter(or_(Order.order_number == cleaned, Order.external_order_id == cleaned)).first()
+    query = Order.query.filter(or_(Order.order_number == cleaned, Order.external_order_id == cleaned))
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
+    return query.first()
 
 
 def next_return_number():

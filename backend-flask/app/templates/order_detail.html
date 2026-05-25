@@ -32,6 +32,7 @@
         <h2>Dispatch Status</h2>
         <p class="text-secondary mb-1">{{ order.customer_name }}</p>
         <p class="text-secondary">{{ order.customer_phone or "-" }}</p>
+        <p class="text-secondary">Warehouse: <code>{{ order.warehouse.code if order.warehouse else "-" }}</code></p>
         {% if order.courier_provider %}
           <div class="integration-box mb-3">
             <strong>{{ order.courier_provider|title }}</strong>

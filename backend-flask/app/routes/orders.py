@@ -5,7 +5,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from ..extensions import db
 from ..models import Order, OrderItem, Product, User
 from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
-from .auth import get_current_user, login_required, role_required, user_has_role
+from .auth import accessible_warehouses, get_current_user, login_required, role_required, selected_warehouse, user_has_role
 
 orders_bp = Blueprint("orders", __name__)
 
@@ -14,7 +14,10 @@ orders_bp = Blueprint("orders", __name__)
 @login_required
 def orders():
     user = get_current_user()
+    warehouse = selected_warehouse(user)
     query = Order.query
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
     if not can_manage_all_orders(user):
         query = query.filter(Order.assigned_to_id == user.id)
     orders_list = query.order_by(Order.created_at.desc()).all()
@@ -25,9 +28,17 @@ def orders():
 @role_required("manager", "staff")
 def add_order():
     products = Product.query.filter_by(is_active=True).order_by(Product.name).all()
-    staff = User.query.filter(User.role.in_(["staff", "picker", "packer", "delivery"])).order_by(User.full_name).all()
+    warehouse = selected_warehouse()
+    warehouses = accessible_warehouses()
+    staff_query = User.query.filter(User.role.in_(["staff", "picker", "packer", "delivery"]))
+    if warehouse:
+        staff_query = staff_query.filter(User.warehouses.any(id=warehouse.id))
+    staff = staff_query.order_by(User.full_name).all()
 
     if request.method == "POST":
+        if not warehouse:
+            flash("Select a warehouse before creating an order.", "warning")
+            return redirect(url_for("orders.add_order"))
         product_id = int(request.form["product_id"])
         product = Product.query.get_or_404(product_id)
         quantity = int(request.form["quantity"])
@@ -37,6 +48,7 @@ def add_order():
             customer_phone=request.form.get("customer_phone", "").strip(),
             customer_address=request.form.get("customer_address", "").strip(),
             priority=request.form.get("priority", "normal"),
+            warehouse_id=warehouse.id,
             assigned_to_id=int_or_none(request.form.get("assigned_to_id")),
             created_by_id=get_current_user().id if get_current_user() else None,
         )
@@ -52,7 +64,7 @@ def add_order():
         flash("Order created.", "success")
         return redirect(url_for("orders.orders"))
 
-    return render_template("add_order.html", products=products, staff=staff)
+    return render_template("add_order.html", products=products, staff=staff, warehouses=warehouses, warehouse=warehouse)
 
 
 @orders_bp.route("/order/<int:order_id>")
@@ -118,4 +130,6 @@ def can_manage_all_orders(user):
 
 
 def can_access_order(user, order):
-    return bool(user and (can_manage_all_orders(user) or order.assigned_to_id == user.id))
+    warehouse_ids = {warehouse.id for warehouse in accessible_warehouses(user)}
+    same_warehouse = not warehouse_ids or order.warehouse_id in warehouse_ids
+    return bool(user and same_warehouse and (can_manage_all_orders(user) or order.assigned_to_id == user.id))

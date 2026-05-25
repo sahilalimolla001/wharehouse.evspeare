@@ -11,11 +11,12 @@
     </div>
     <div class="table-responsive">
       <table class="table align-middle">
-        <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Priority</th><th>Status</th><th>Courier</th><th></th></tr></thead>
+        <thead><tr><th>Order</th><th>Warehouse</th><th>Customer</th><th>Items</th><th>Priority</th><th>Status</th><th>Courier</th><th></th></tr></thead>
         <tbody>
           {% for order in orders %}
             <tr>
               <td>{{ order.order_number }}</td>
+              <td><code>{{ order.warehouse.code if order.warehouse else "-" }}</code></td>
               <td>{{ order.customer_name }}</td>
               <td>{{ order.total_items }}</td>
               <td>{{ order.priority|title }}</td>
@@ -30,7 +31,7 @@
               <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=order.id) }}">Open</a></td>
             </tr>
           {% else %}
-            <tr><td colspan="7" class="text-secondary">No orders yet.</td></tr>
+            <tr><td colspan="8" class="text-secondary">No orders yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -168,8 +168,8 @@ def api_dashboard():
             "low_stock_items": len(low_stock),
             "today_stock_in": stock_in_query.scalar(),
             "today_stock_out": stock_out_query.scalar(),
-            "pending_orders": Order.query.filter(Order.status.in_(["pending", "picking", "packed"])).count(),
-            "completed_orders": Order.query.filter_by(status="completed").count(),
+            "pending_orders": order_count_query(["pending", "picking", "packed"], warehouse).count(),
+            "completed_orders": order_count_query(["completed"], warehouse).count(),
             "top_selling_products": [
                 {"id": row.id, "name": row.name, "sku": row.sku, "sold_qty": int(row.sold_qty or 0)}
                 for row in top_selling
@@ -436,7 +436,10 @@ def api_location_update():
 @api_role_required("manager", "staff", "picker", "packer", "delivery")
 def api_pick_list():
     user = current_api_user()
+    warehouse = current_api_warehouse()
     query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
     if user and not can_manage_all_orders(user):
         query = query.filter(or_(Order.assigned_to_id == user.id, Order.assigned_to_id.is_(None)))
     orders = query.order_by(Order.priority.desc(), Order.created_at).all()
@@ -688,6 +691,13 @@ def current_api_user_id():
     return user.id if user else None
 
 
+def order_count_query(statuses, warehouse=None):
+    query = Order.query.filter(Order.status.in_(statuses))
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
+    return query
+
+
 def current_api_user():
     bearer_user = current_bearer_user()
     if bearer_user:
@@ -772,7 +782,9 @@ def can_manage_all_orders(user):
 
 
 def can_access_order(user, order):
-    return bool(user and (can_manage_all_orders(user) or order.assigned_to_id in {None, user.id}))
+    warehouse_ids = {warehouse.id for warehouse in accessible_api_warehouses(user)}
+    same_warehouse = not warehouse_ids or order.warehouse_id in warehouse_ids
+    return bool(user and same_warehouse and (can_manage_all_orders(user) or order.assigned_to_id in {None, user.id}))
 
 
 def sync_order_product_pick_stock(order, product_id, location_identifier=None):
@@ -902,17 +914,20 @@ def create_order_from_integration(data):
     priority = trim_text(data.get("priority") or "normal", 20).lower()
     if priority not in {"normal", "high", "urgent"}:
         raise ValueError("priority must be normal, high, or urgent")
+    warehouse = resolve_order_warehouse(data)
+    assignee_id = resolve_assignee(data, warehouse=warehouse)
 
     order = Order(
         order_number=order_number,
         external_source=source,
         external_order_id=external_order_id,
         source_payload=json.dumps(data, default=str, separators=(",", ":"))[:20000],
+        warehouse_id=warehouse.id,
         customer_name=customer_name,
         customer_phone=trim_text(data.get("customer_phone") or customer.get("phone"), 30),
         customer_address=trim_text(data.get("customer_address") or customer.get("address") or format_address(data.get("shipping_address") or customer.get("shipping_address")), 2000),
         priority=priority,
-        assigned_to_id=resolve_assignee(data),
+        assigned_to_id=assignee_id,
         expected_dispatch_date=parse_expected_dispatch_date(data.get("expected_dispatch_date")),
     )
 
@@ -1085,12 +1100,37 @@ def parse_expected_dispatch_date(value):
         raise ValueError("expected_dispatch_date must be YYYY-MM-DD or ISO datetime") from error
 
 
-def resolve_assignee(data):
+def resolve_order_warehouse(data):
+    raw_warehouse_id = data.get("warehouse_id")
+    try:
+        warehouse_id = int_or_none(raw_warehouse_id)
+    except (TypeError, ValueError):
+        warehouse_id = None
+    if warehouse_id:
+        warehouse = Warehouse.query.filter_by(id=warehouse_id, is_active=True).first()
+        if not warehouse:
+            raise ValueError("warehouse_id not found")
+        return warehouse
+    warehouse_code = trim_text(data.get("warehouse_code") or data.get("warehouse") or data.get("warehouse_id_code") or raw_warehouse_id, 40).lower()
+    if warehouse_code:
+        warehouse = Warehouse.query.filter(func.lower(Warehouse.code) == warehouse_code, Warehouse.is_active.is_(True)).first()
+        if not warehouse:
+            raise ValueError("warehouse_code not found")
+        return warehouse
+    warehouse = current_api_warehouse() or default_warehouse()
+    if not warehouse:
+        raise ValueError("Warehouse is required")
+    return warehouse
+
+
+def resolve_assignee(data, warehouse=None):
     assigned_to_id = int_or_none(data.get("assigned_to_id"))
     if assigned_to_id:
         user = User.query.filter_by(id=assigned_to_id, is_active=True).first()
         if not user:
             raise ValueError("assigned_to_id not found")
+        if warehouse and user.warehouses and warehouse not in user.warehouses:
+            raise ValueError("assigned user is not mapped to this warehouse")
         return user.id
 
     assigned_to_email = trim_text(data.get("assigned_to_email"), 180).lower()
@@ -1098,6 +1138,8 @@ def resolve_assignee(data):
         user = User.query.filter_by(email=assigned_to_email, is_active=True).first()
         if not user:
             raise ValueError("assigned_to_email not found")
+        if warehouse and user.warehouses and warehouse not in user.warehouses:
+            raise ValueError("assigned user is not mapped to this warehouse")
         return user.id
     return None
 
@@ -1410,6 +1452,8 @@ def serialize_order(order):
         "order_number": order.order_number,
         "external_source": order.external_source,
         "external_order_id": order.external_order_id,
+        "warehouse": serialize_warehouse(order.warehouse) if order.warehouse else None,
+        "warehouse_id": order.warehouse_id,
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
         "status": order.status,

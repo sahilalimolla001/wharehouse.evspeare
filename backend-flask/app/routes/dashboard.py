@@ -36,8 +36,13 @@ def dashboard():
     low_stock_items = [product for product in products if product_quantities.get(product.id, 0) <= product.minimum_stock]
     today_stock_in = stock_in_query.scalar()
     today_stock_out = stock_out_query.scalar()
-    pending_orders = Order.query.filter(Order.status.in_(["pending", "picking", "packed"])).count()
-    completed_orders = Order.query.filter_by(status="completed").count()
+    pending_query = Order.query.filter(Order.status.in_(["pending", "picking", "packed"]))
+    completed_query = Order.query.filter_by(status="completed")
+    if warehouse:
+        pending_query = pending_query.filter(Order.warehouse_id == warehouse.id)
+        completed_query = completed_query.filter(Order.warehouse_id == warehouse.id)
+    pending_orders = pending_query.count()
+    completed_orders = completed_query.count()
 
     top_selling_rows = (
         db.session.query(Product.name, Product.sku, func.coalesce(func.sum(StockOut.quantity), 0).label("sold_qty"))

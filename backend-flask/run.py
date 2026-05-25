@@ -2,7 +2,7 @@ import os
 
 from app import create_app
 from app.extensions import db
-from app.models import Barcode, Category, Product, Supplier, User, WarehouseLocation
+from app.models import Barcode, Category, Product, Supplier, User, Warehouse, WarehouseLocation
 from app.utils.barcode import build_location_barcode, build_product_barcode, product_payload
 from app.utils.database_url import parse_database_url
 from app.utils.google_sheets import auto_sync_current_stock_sheet
@@ -146,7 +146,17 @@ def seed_demo():
     )
     db.session.add(supplier)
 
-    location = WarehouseLocation.query.filter_by(zone="A", rack="2", shelf="4", bin_code="08").first() or WarehouseLocation(
+    warehouse = Warehouse.query.filter_by(code="kol-136-wh-01").first() or Warehouse(
+        code="kol-136-wh-01",
+        name="Kolkata 700136 Warehouse",
+        pincode="700136",
+        is_active=True,
+    )
+    db.session.add(warehouse)
+    db.session.flush()
+
+    location = WarehouseLocation.query.filter_by(warehouse_id=warehouse.id, zone="A", rack="2", shelf="4", bin_code="08").first() or WarehouseLocation(
+        warehouse_id=warehouse.id,
         zone="A",
         rack="2",
         shelf="4",
