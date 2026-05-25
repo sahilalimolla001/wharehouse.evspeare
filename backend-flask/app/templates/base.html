@@ -25,7 +25,6 @@
             <a class="nav-link {% if request.endpoint == 'stock.stock_out' %}active{% endif %}" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
           {% endif %}
           <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
-          <a class="nav-link {% if request.endpoint in ['stock.warehouses', 'stock.add_warehouse'] %}active{% endif %}" href="{{ url_for('stock.warehouses') }}">Warehouses</a>
           <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
           <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
           {% if current_user_can("manager", "staff") %}
@@ -51,6 +50,17 @@
           </div>
           <div class="d-flex align-items-center gap-2">
             {% if current_user %}
+              {% set topbar_warehouses = accessible_warehouses() %}
+              {% set topbar_warehouse = selected_warehouse() %}
+              {% if topbar_warehouses %}
+                <form method="get" action="{{ request.path }}" class="m-0">
+                  <select class="form-select form-select-sm" name="warehouse_id" onchange="this.form.submit()" aria-label="Select warehouse">
+                    {% for warehouse in topbar_warehouses %}
+                      <option value="{{ warehouse.id }}" {% if topbar_warehouse and topbar_warehouse.id == warehouse.id %}selected{% endif %}>{{ warehouse.code }}</option>
+                    {% endfor %}
+                  </select>
+                </form>
+              {% endif %}
               <span class="user-pill">{{ current_user.full_name }} / {{ role_label(current_user.role) }}</span>
               <a class="btn btn-outline-dark btn-sm" href="{{ url_for('auth.logout') }}">Logout</a>
             {% endif %}

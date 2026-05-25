@@ -104,11 +104,12 @@ button:disabled {
 }
 
 .warehouse-select {
-  width: 128px;
+  width: 132px;
   height: 40px;
   padding: 0 8px;
   font-size: 0.78rem;
   font-weight: 850;
+  color: var(--primary-dark);
 }
 
 .icon-btn {
