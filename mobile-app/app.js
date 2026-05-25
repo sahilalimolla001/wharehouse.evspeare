@@ -20,6 +20,7 @@ const store = {
   batchMode: localStorage.getItem("warehouseBatchMode") === "true",
   automationSettings: JSON.parse(localStorage.getItem("warehouseAutomationSettings") || "{}"),
   offlineQueue: JSON.parse(localStorage.getItem("warehouseOfflineQueue") || "[]"),
+  shiftStartedAt: localStorage.getItem("warehouseShiftStartedAt") || "",
 };
 
 let videoStream = null;
@@ -62,6 +63,9 @@ function bindActions() {
   $("#warehouse-select").addEventListener("change", changeWarehouse);
   $("#sync-btn").addEventListener("click", refreshAll);
   $("#hub-refresh").addEventListener("click", refreshAll);
+  $("#shift-toggle").addEventListener("click", toggleShift);
+  $("#global-search").addEventListener("input", renderGlobalSearch);
+  $("#clear-global-search").addEventListener("click", clearGlobalSearch);
   $("#refresh-orders").addEventListener("click", refreshAll);
   $("#refresh-returns").addEventListener("click", refreshAll);
   $$("[data-screen-jump]").forEach((button) => {
@@ -72,6 +76,10 @@ function bindActions() {
   $("#optimize-route").addEventListener("click", optimizeRoute);
   $("#batch-mode-toggle").addEventListener("click", toggleBatchMode);
   $("#run-automation").addEventListener("click", runAutomationCheck);
+  $("#auto-start-next").addEventListener("click", startBestOrder);
+  $("#retry-offline").addEventListener("click", retryOfflineQueue);
+  $("#copy-shift-summary").addEventListener("click", copyShiftSummary);
+  $("#copy-route-plan").addEventListener("click", copyRoutePlan);
   $$("[data-automation-toggle]").forEach((button) => {
     button.addEventListener("click", () => toggleAutomationSetting(button.dataset.automationToggle));
   });
@@ -81,6 +89,9 @@ function bindActions() {
   $("#initiate-pv").addEventListener("click", initiateReturnPv);
   $("#pv-back").addEventListener("click", () => showScreen("return-screen"));
   $$("[data-refresh-orders]").forEach((button) => button.addEventListener("click", refreshAll));
+  $$("#handoff-bag-check, #handoff-label-check, #handoff-payment-check").forEach((input) => {
+    input.addEventListener("change", renderDispatchQueue);
+  });
   $("#start-scan").addEventListener("click", startScanner);
   $("#stop-scan").addEventListener("click", stopScanner);
   $("#manual-scan").addEventListener("click", () => scanCode($("#manual-code").value.trim()));
@@ -392,6 +403,9 @@ function renderHub() {
   const packed = store.orders.filter((order) => order.status === "packed");
   const returnDesk = store.returns.filter((item) => ["approved", "return_picking", "return_picked", "inspection"].includes(item.status));
   const slaRisk = pickOrders.filter((order) => slaMinutesLeft(order) <= 10);
+  const pickedQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.picked_quantity || 0), 0), 0);
+  const totalItems = pickOrders.reduce((sum, order) => sum + (order.items || []).length, 0);
+  const shortageCount = exceptionOrders().filter((item) => item.action === "Substitute").length;
   const name = store.user?.name || store.user?.email || "Picker";
   const warehouse = currentWarehouseName();
   $("#hub-greeting").textContent = `${name}, mission ready`;
@@ -400,7 +414,14 @@ function renderHub() {
   $("#hub-sla-heat").textContent = slaRisk.length;
   $("#hub-pack-ready").textContent = packed.length;
   $("#hub-return-desk").textContent = returnDesk.length;
+  $("#hub-picked-qty").textContent = pickedQty;
+  $("#hub-avg-items").textContent = pickOrders.length ? (totalItems / pickOrders.length).toFixed(1) : "0";
+  $("#hub-shortage").textContent = shortageCount;
+  $("#hub-shift").textContent = store.shiftStartedAt ? "On" : "Off";
+  $("#hub-shift-time").textContent = store.shiftStartedAt ? shiftDurationLabel() : "Not started";
+  $("#shift-toggle").textContent = store.shiftStartedAt ? "End Shift" : "Start Shift";
   renderHubMissions(pickOrders, packed, returnDesk);
+  renderGlobalSearch();
 }
 
 function renderHubMissions(pickOrders, packed, returnDesk) {
@@ -449,6 +470,103 @@ function renderHubMissions(pickOrders, packed, returnDesk) {
       else showScreen(card.dataset.hubScreen);
     });
   });
+}
+
+function toggleShift() {
+  if (store.shiftStartedAt) {
+    store.shiftStartedAt = "";
+    localStorage.removeItem("warehouseShiftStartedAt");
+    toast("Shift ended.");
+  } else {
+    store.shiftStartedAt = new Date().toISOString();
+    localStorage.setItem("warehouseShiftStartedAt", store.shiftStartedAt);
+    toast("Shift started.");
+  }
+  renderHub();
+  renderOpsAutomation();
+}
+
+function shiftDurationLabel() {
+  const started = new Date(store.shiftStartedAt);
+  if (Number.isNaN(started.getTime())) return "Live";
+  const minutes = Math.max(0, Math.floor((Date.now() - started.getTime()) / 60000));
+  if (minutes < 60) return `${minutes}m live`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+function renderGlobalSearch() {
+  const input = $("#global-search");
+  const target = $("#global-search-results");
+  if (!input || !target) return;
+  const query = input.value.trim().toLowerCase();
+  target.classList.toggle("hidden", !query);
+  if (!query) {
+    target.innerHTML = "";
+    return;
+  }
+  const orderResults = store.orders
+    .filter((order) => searchTextForOrder(order).includes(query))
+    .slice(0, 6)
+    .map((order) => ({ type: "order", order }));
+  const returnResults = store.returns
+    .filter((item) => searchTextForReturn(item).includes(query))
+    .slice(0, 3)
+    .map((returnOrder) => ({ type: "return", returnOrder }));
+  const results = [...orderResults, ...returnResults];
+  target.innerHTML = results.length ? results.map(searchResultHtml).join("") : `<div class="empty-state">No match found.</div>`;
+  target.querySelectorAll("[data-search-order]").forEach((card) => {
+    card.addEventListener("click", () => startOrder(Number(card.dataset.searchOrder)));
+  });
+  target.querySelectorAll("[data-search-return]").forEach((card) => {
+    card.addEventListener("click", () => startReturn(Number(card.dataset.searchReturn)));
+  });
+}
+
+function clearGlobalSearch() {
+  $("#global-search").value = "";
+  renderGlobalSearch();
+}
+
+function searchResultHtml(result) {
+  if (result.type === "return") {
+    const item = result.returnOrder;
+    return `
+      <article class="order-card tappable" data-search-return="${item.id}">
+        <div class="order-top">
+          <div><strong>${escapeHtml(item.return_number || item.website_order_id || item.id)}</strong><span>${escapeHtml(item.reason || item.status || "return")}</span></div>
+          <span class="badge">return</span>
+        </div>
+      </article>
+    `;
+  }
+  const order = result.order;
+  return `
+    <article class="order-card tappable" data-search-order="${order.id}">
+      <div class="order-top">
+        <div><strong>${escapeHtml(orderShortCode(order))}</strong><span>${escapeHtml(order.customer_name || order.status || "order")}</span></div>
+        <span class="badge">${escapeHtml(order.status || "order")}</span>
+      </div>
+    </article>
+  `;
+}
+
+function searchTextForOrder(order) {
+  return [
+    order.id,
+    order.order_number,
+    order.website_order_id,
+    order.customer_name,
+    order.customer_phone,
+    order.pincode,
+    order.awb,
+    order.tracking_number,
+    order.status,
+    ...(order.items || []).flatMap((item) => [item.sku, item.product_sku, item.product?.sku, item.product?.name, item.product_name]),
+  ].join(" ").toLowerCase();
+}
+
+function searchTextForReturn(item) {
+  return [item.id, item.return_number, item.website_order_id, item.order_id, item.reason, item.status, item.customer_name].join(" ").toLowerCase();
 }
 
 function currentWarehouseName() {
@@ -585,15 +703,40 @@ function renderOpsAutomation() {
   const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
   const totalQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
   const pickedQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.picked_quantity || 0), 0), 0);
+  const packedOrders = store.orders.filter((order) => order.status === "packed");
   $("#auto-next-order").textContent = best ? orderShortCode(best) : "--";
   $("#auto-sla-count").textContent = pickOrders.filter((order) => slaMinutesLeft(order) <= 10).length;
   $("#auto-offline-count").textContent = store.offlineQueue.length;
   $("#auto-productivity").textContent = totalQty ? `${Math.round((pickedQty / totalQty) * 100)}%` : "--";
+  $("#auto-route-stops").textContent = routeStops().length;
+  $("#auto-batchable").textContent = batchGroups().length;
+  $("#auto-quality").textContent = packedOrders.length ? `${packedOrders.length} ready` : "Clear";
+  $("#auto-workload").textContent = pickOrders.length > 15 ? "High" : pickOrders.length > 5 ? "Medium" : "Low";
   Object.entries({ autoAssign: "autoAssign", shortageAlert: "shortageAlert", routeAssist: "routeAssist", slaAlerts: "slaAlerts" }).forEach(([key, id]) => {
     const node = $(`#toggle-${id}`);
     if (node) node.textContent = store.automationSettings[key] ? "On" : "Off";
   });
   renderExceptionQueue();
+  renderRouteTimeline();
+}
+
+function renderRouteTimeline() {
+  const target = $("#route-timeline");
+  if (!target) return;
+  const stops = routeStops();
+  if (!stops.length) {
+    target.innerHTML = `<div class="empty-state">No route stops. Queue me bin data aate hi timeline ban jayega.</div>`;
+    return;
+  }
+  target.innerHTML = stops.slice(0, 8).map((stop, index) => `
+    <article class="route-stop">
+      <b>${index + 1}</b>
+      <div>
+        <strong>${escapeHtml(stop.bin || "Bin pending")}</strong>
+        <span>${stop.orders.length} orders - ${stop.quantity} qty - ${escapeHtml(stop.skus.slice(0, 3).join(", "))}</span>
+      </div>
+    </article>
+  `).join("");
 }
 
 function renderExceptionQueue() {
@@ -653,6 +796,84 @@ function batchGroups() {
   return Array.from(groups.values())
     .filter((group) => group.orders.length > 1 || group.quantity > 1)
     .sort((a, b) => b.orders.length - a.orders.length || a.sku.localeCompare(b.sku));
+}
+
+function routeStops() {
+  const stops = new Map();
+  filteredPickOrders().forEach((order) => {
+    (order.items || []).forEach((item) => {
+      const remaining = Number(item.quantity || 0) - Number(item.picked_quantity || 0);
+      if (remaining <= 0) return;
+      const bin = item.location_barcode || item.location_name || item.bin || item.location || routeKey(order) || "";
+      if (!bin) return;
+      if (!stops.has(bin)) stops.set(bin, { bin, orders: [], quantity: 0, skus: [] });
+      const stop = stops.get(bin);
+      stop.quantity += remaining;
+      if (!stop.orders.includes(order.id)) stop.orders.push(order.id);
+      const sku = itemLabel(item);
+      if (!stop.skus.includes(sku)) stop.skus.push(sku);
+    });
+  });
+  return Array.from(stops.values()).sort((a, b) => a.bin.localeCompare(b.bin));
+}
+
+function startBestOrder() {
+  const best = filteredPickOrders()[0];
+  if (!best) {
+    toast("No best order available.");
+    return;
+  }
+  startOrder(best.id);
+}
+
+async function retryOfflineQueue() {
+  if (!store.offlineQueue.length) {
+    toast("Offline queue empty.");
+    return;
+  }
+  const pending = [...store.offlineQueue];
+  const failed = [];
+  store.offlineQueue = [];
+  localStorage.setItem("warehouseOfflineQueue", JSON.stringify(store.offlineQueue));
+  for (const item of pending) {
+    try {
+      await apiFetch(item.path, { method: item.method, body: item.body });
+    } catch {
+      failed.push(item);
+    }
+  }
+  store.offlineQueue = failed.slice(-25);
+  localStorage.setItem("warehouseOfflineQueue", JSON.stringify(store.offlineQueue));
+  await refreshAll();
+  toast(failed.length ? `${failed.length} offline action pending.` : "Offline sync complete.");
+}
+
+function copyShiftSummary() {
+  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
+  const packed = store.orders.filter((order) => order.status === "packed").length;
+  const summary = [
+    `Picker: ${store.user?.name || store.user?.email || "Picker"}`,
+    `Warehouse: ${currentWarehouseName() || store.warehouseId || "NA"}`,
+    `Shift: ${store.shiftStartedAt ? shiftDurationLabel() : "Off"}`,
+    `Pick load: ${pickOrders.length}`,
+    `Packed: ${packed}`,
+    `SLA risk: ${pickOrders.filter((order) => slaMinutesLeft(order) <= 10).length}`,
+    `Exceptions: ${exceptionOrders().length}`,
+  ].join("\n");
+  copyText(summary, "Shift summary copied.");
+}
+
+function copyRoutePlan() {
+  const plan = routeStops().map((stop, index) => `${index + 1}. ${stop.bin} - ${stop.quantity} qty - ${stop.skus.join(", ")}`).join("\n");
+  copyText(plan || "No route stops.", "Route plan copied.");
+}
+
+function copyText(value, message) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(value).then(() => toast(message)).catch(() => toast(value));
+  } else {
+    toast(value);
+  }
 }
 
 function orderPriorityScore(order) {
@@ -1216,6 +1437,7 @@ async function markActiveOrderPacked() {
 function renderDispatchQueue() {
   const orders = store.orders.filter((order) => order.status === "packed");
   const target = $("#dispatch-list");
+  const handoffReady = handoffChecklistReady();
   if (!orders.length) {
     target.innerHTML = `<div class="empty-state">No packed orders waiting.</div>`;
     return;
@@ -1227,12 +1449,17 @@ function renderDispatchQueue() {
         <div class="order-top">
           <div>
             <strong>${escapeHtml(order.order_number)}</strong>
-            <span>${escapeHtml(order.customer_name)}</span>
+            <span>${escapeHtml(order.customer_name)} - ${escapeHtml(order.awb || order.tracking_number || "AWB pending")}</span>
           </div>
           <span class="badge">${escapeHtml(order.status)}</span>
         </div>
+        <div class="order-meta">
+          <span>${escapeHtml(order.pincode || "PIN NA")}</span>
+          <span>${escapeHtml(order.payment_method || order.payment_status || "payment")}</span>
+          <span>${handoffReady ? "Checklist ok" : "Checklist pending"}</span>
+        </div>
         <div class="order-actions">
-          <button class="primary" type="button" data-manual-dispatch="${order.id}">Dispatch</button>
+          <button class="primary" type="button" data-manual-dispatch="${order.id}" ${handoffReady ? "" : "disabled"}>Dispatch</button>
         </div>
       </article>
     `)
@@ -1241,6 +1468,10 @@ function renderDispatchQueue() {
   target.querySelectorAll("[data-manual-dispatch]").forEach((button) => {
     button.addEventListener("click", () => dispatchOrderManually(button.dataset.manualDispatch));
   });
+}
+
+function handoffChecklistReady() {
+  return ["#handoff-bag-check", "#handoff-label-check", "#handoff-payment-check"].every((selector) => $(selector)?.checked);
 }
 
 function numberInput(value) {

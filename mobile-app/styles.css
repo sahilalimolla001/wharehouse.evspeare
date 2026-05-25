@@ -261,6 +261,17 @@ input[type="file"] {
   color: #fff;
 }
 
+.shift-actions,
+.command-search {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  gap: 8px;
+}
+
+.command-search {
+  grid-template-columns: minmax(0, 1fr) 72px;
+}
+
 .shift-card .section-kicker,
 .shift-card span {
   color: rgba(255, 255, 255, 0.76);
@@ -339,6 +350,30 @@ input[type="file"] {
 .mission-rail span {
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.handoff-checklist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.handoff-checklist label {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+
+.handoff-checklist input {
+  width: 18px;
+  min-height: 18px;
 }
 
 .section-head,
@@ -507,6 +542,7 @@ input[type="file"] {
 .batch-card,
 .exception-card,
 .setting-row,
+.route-stop,
 .inventory-item,
 .pick-item,
 .dispatch-package {
@@ -517,10 +553,36 @@ input[type="file"] {
 
 .batch-card,
 .exception-card,
-.setting-row {
+.setting-row,
+.route-stop {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   text-align: left;
+}
+
+.route-stop {
+  grid-template-columns: 34px minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.route-stop > b {
+  width: 28px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--dark);
+  color: #fff;
+  font-size: 0.78rem;
+}
+
+.route-stop span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
 }
 
 .batch-card b,
@@ -742,9 +804,11 @@ input[type="file"] {
   }
 
   .shift-card,
+  .shift-actions,
   .ops-toolbar,
   .automation-hero,
-  .handoff-banner {
+  .handoff-banner,
+  .handoff-checklist {
     grid-template-columns: 1fr;
     display: grid;
   }

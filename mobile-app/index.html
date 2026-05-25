@@ -60,14 +60,27 @@
               <h2 id="hub-greeting">Ready for express ops</h2>
               <span id="hub-warehouse">Warehouse sync pending</span>
             </div>
-            <button class="primary" data-screen-jump="orders-screen" type="button">Start Mission</button>
+            <div class="shift-actions">
+              <button class="primary" data-screen-jump="orders-screen" type="button">Start Mission</button>
+              <button id="shift-toggle" type="button">Start Shift</button>
+            </div>
           </div>
+
+          <div class="command-search">
+            <input id="global-search" placeholder="Search order, customer, SKU, AWB, pincode">
+            <button id="clear-global-search" type="button">Clear</button>
+          </div>
+          <div class="card-list hidden" id="global-search-results"></div>
 
           <div class="hub-grid">
             <article><span>Pick Load</span><strong id="hub-pick-load">0</strong><small>Pending + active</small></article>
             <article><span>SLA Heat</span><strong id="hub-sla-heat">0</strong><small>Risk orders</small></article>
             <article><span>Pack Ready</span><strong id="hub-pack-ready">0</strong><small>Handoff queue</small></article>
             <article><span>Return Desk</span><strong id="hub-return-desk">0</strong><small>Approved returns</small></article>
+            <article><span>Picked Qty</span><strong id="hub-picked-qty">0</strong><small>Today progress</small></article>
+            <article><span>Avg Items</span><strong id="hub-avg-items">0</strong><small>Per order</small></article>
+            <article><span>Shortage</span><strong id="hub-shortage">0</strong><small>Possible issue</small></article>
+            <article><span>Shift</span><strong id="hub-shift">Off</strong><small id="hub-shift-time">Not started</small></article>
           </div>
 
           <div class="mission-rail">
@@ -157,6 +170,16 @@
             <article><span>ETA Breach</span><strong id="auto-sla-count">0</strong><small>Orders under pressure</small></article>
             <article><span>Offline Queue</span><strong id="auto-offline-count">0</strong><small>Pending sync</small></article>
             <article><span>Productivity</span><strong id="auto-productivity">--</strong><small>Picked progress</small></article>
+            <article><span>Route Stops</span><strong id="auto-route-stops">0</strong><small>Bins in sequence</small></article>
+            <article><span>Batchable</span><strong id="auto-batchable">0</strong><small>SKU groups</small></article>
+            <article><span>Quality Gate</span><strong id="auto-quality">--</strong><small>Pack readiness</small></article>
+            <article><span>Workload</span><strong id="auto-workload">--</strong><small>Queue pressure</small></article>
+          </div>
+
+          <div class="ops-toolbar">
+            <button id="auto-start-next" class="primary" type="button">Start Best Order</button>
+            <button id="retry-offline" type="button">Retry Offline Sync</button>
+            <button id="copy-shift-summary" type="button">Copy Shift Summary</button>
           </div>
 
           <div class="settings-list">
@@ -183,12 +206,23 @@
             <button data-refresh-orders type="button">Refresh</button>
           </div>
           <div class="card-list" id="exception-list"></div>
+
+          <div class="section-head">
+            <h2>Route Timeline</h2>
+            <button id="copy-route-plan" type="button">Copy Route</button>
+          </div>
+          <div class="card-list" id="route-timeline"></div>
         </section>
 
         <section class="screen" id="dispatch-screen">
           <div class="handoff-banner">
             <div><p class="section-kicker">Rider Handoff</p><h2>Ready To Ship</h2></div>
             <button data-refresh-orders type="button">Refresh</button>
+          </div>
+          <div class="handoff-checklist">
+            <label><input id="handoff-bag-check" type="checkbox"> Bag sealed</label>
+            <label><input id="handoff-label-check" type="checkbox"> Label verified</label>
+            <label><input id="handoff-payment-check" type="checkbox"> Payment/OTP checked</label>
           </div>
           <div class="card-list" id="dispatch-list"></div>
         </section>
