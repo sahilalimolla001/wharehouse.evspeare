@@ -23,6 +23,8 @@ let scanReturnScreen = null;
 let refreshTimer = null;
 let stockPreviewTimer = null;
 let activeReturnConfirmed = false;
+const defaultScreenId = "orders-screen";
+const standaloneApp = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -31,6 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#api-base").value = store.apiBase;
   bindNavigation();
   bindActions();
+  initializeBackNavigation();
   await autoConnectApi();
   initializeSession();
 
@@ -92,7 +95,70 @@ function beginScanFill(target) {
   startScanner();
 }
 
-function showScreen(screenId) {
+function initializeBackNavigation() {
+  if (!window.history?.replaceState) return;
+  const currentScreenId = activeScreenId();
+  replaceAppHistory(currentScreenId);
+  if (standaloneApp && window.history.pushState) pushAppHistory(currentScreenId);
+  window.addEventListener("popstate", restoreFromHistory);
+}
+
+function activeScreenId() {
+  return $(".screen.active")?.id || defaultScreenId;
+}
+
+function appHistoryState(screenId) {
+  return {
+    warehouseScreen: screenId,
+    activeOrderId: store.activeOrderId || 0,
+    activeReturnId: store.activeReturnId || 0,
+  };
+}
+
+function pushAppHistory(screenId) {
+  if (!window.history?.pushState) return;
+  window.history.pushState(appHistoryState(screenId), "", window.location.href);
+}
+
+function replaceAppHistory(screenId) {
+  if (!window.history?.replaceState) return;
+  window.history.replaceState(appHistoryState(screenId), "", window.location.href);
+}
+
+function restoreFromHistory(event) {
+  const state = event.state || {};
+  const screenId = state.warehouseScreen;
+  if (!screenId || !document.getElementById(screenId)) {
+    if (standaloneApp) {
+      pushAppHistory(activeScreenId());
+      toast("App close nahi hoga. Navigation buttons use karein.");
+    }
+    return;
+  }
+
+  if (standaloneApp && screenId === activeScreenId() && screenId === defaultScreenId) {
+    pushAppHistory(screenId);
+    toast("App close nahi hoga. Navigation buttons use karein.");
+    return;
+  }
+
+  store.activeOrderId = Number(state.activeOrderId || 0);
+  store.activeReturnId = Number(state.activeReturnId || 0);
+  if (store.activeOrderId) localStorage.setItem("warehouseActiveOrderId", String(store.activeOrderId));
+  else localStorage.removeItem("warehouseActiveOrderId");
+  if (store.activeReturnId) localStorage.setItem("warehouseActiveReturnId", String(store.activeReturnId));
+  else localStorage.removeItem("warehouseActiveReturnId");
+
+  if (scanFillTarget) clearScanFillTarget();
+  showScreen(screenId, { history: false });
+  renderActiveOrder();
+  renderReturnQueue();
+  renderActiveReturn();
+  renderReturnPv();
+}
+
+function showScreen(screenId, options = {}) {
+  const previousScreenId = activeScreenId();
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === screenId));
   $$(".bottom-nav [data-screen]").forEach((button) => button.classList.toggle("active", button.dataset.screen === screenId));
   const titles = {
@@ -107,6 +173,10 @@ function showScreen(screenId) {
   };
   $("#screen-title").textContent = titles[screenId] || "Picker";
   if (screenId !== "pick-screen") stopScanner();
+  if (options.history !== false) {
+    if (previousScreenId === screenId && !options.forceHistory) replaceAppHistory(screenId);
+    else pushAppHistory(screenId);
+  }
 }
 
 async function initializeSession() {
@@ -337,7 +407,7 @@ function startReturn(returnId) {
   localStorage.setItem("warehouseActiveReturnId", String(returnId));
   const returnOrder = activeReturn();
   if (returnOrder?.status === "inspection") showScreen("pv-screen");
-  else showScreen("return-screen");
+  else showScreen("return-screen", { forceHistory: true });
   renderReturnQueue();
   renderActiveReturn();
   renderReturnPv();
