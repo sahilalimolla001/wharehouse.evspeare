@@ -5,6 +5,14 @@
   <section class="panel">
     <form method="post" class="row g-3">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-4">
+        <label class="form-label">Warehouse</label>
+        <select class="form-select" name="warehouse_id" required>
+          {% for warehouse in warehouses %}
+            <option value="{{ warehouse.id }}">{{ warehouse.code }} / {{ warehouse.pincode }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="col-md-3">
         <label class="form-label">Zone</label>
         <input class="form-control" name="zone" required placeholder="A">

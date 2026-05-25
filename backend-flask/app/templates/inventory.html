@@ -6,8 +6,14 @@
     <div class="panel-heading">
       <form class="d-flex gap-2" method="get">
         <input class="form-control" name="q" placeholder="Search SKU, product, brand, or location" value="{{ q }}">
+        <select class="form-select" name="warehouse_id">
+          <option value="">All warehouses</option>
+          {% for warehouse in warehouses %}
+            <option value="{{ warehouse.id }}" {% if warehouse_id == warehouse.id %}selected{% endif %}>{{ warehouse.code }}</option>
+          {% endfor %}
+        </select>
         <button class="btn btn-outline-dark" type="submit">Search</button>
-        {% if q %}
+        {% if q or warehouse_id %}
           <a class="btn btn-outline-secondary" href="{{ url_for('stock.inventory') }}">Clear</a>
         {% endif %}
       </form>
@@ -18,12 +24,13 @@
     </div>
     <div class="table-responsive">
       <table class="table align-middle">
-        <thead><tr><th>SKU</th><th>Product</th><th>Bin ID</th><th>Qty</th><th>Reserved</th><th>Available</th><th>Status</th></tr></thead>
+        <thead><tr><th>SKU</th><th>Product</th><th>Warehouse</th><th>Bin ID</th><th>Qty</th><th>Reserved</th><th>Available</th><th>Status</th></tr></thead>
         <tbody>
           {% for row in inventory_rows %}
             <tr>
               <td>{{ row.product.sku }}</td>
               <td>{{ row.product.name }}</td>
+              <td>{{ row.location.warehouse.code if row.location.warehouse else "-" }}</td>
               <td>{{ row.location.bin_code }}</td>
               <td>{{ row.quantity }}</td>
               <td>{{ row.reserved_quantity }}</td>
@@ -37,7 +44,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="7" class="text-secondary">{{ "No inventory found." if q else "No inventory yet." }}</td></tr>
+            <tr><td colspan="8" class="text-secondary">{{ "No inventory found." if q or warehouse_id else "No inventory yet." }}</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -10,7 +10,7 @@ from sqlalchemy import func, or_
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, WarehouseLocation
+from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
@@ -263,8 +263,15 @@ def api_scan(code):
 @api_bp.get("/locations")
 @api_login_required
 def api_locations():
-    locations = WarehouseLocation.query.filter_by(is_active=True).order_by(WarehouseLocation.zone, WarehouseLocation.rack).all()
+    locations = WarehouseLocation.query.join(Warehouse).filter(WarehouseLocation.is_active.is_(True)).order_by(Warehouse.code, WarehouseLocation.zone, WarehouseLocation.rack).all()
     return jsonify({"locations": [serialize_location(location) for location in locations]})
+
+
+@api_bp.get("/warehouses")
+@api_login_required
+def api_warehouses():
+    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    return jsonify({"warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses]})
 
 
 @api_bp.get("/location-inventory/<path:identifier>")
@@ -966,10 +973,13 @@ def ensure_virtual_return_bins():
 def ensure_virtual_location(barcode, zone, rack, shelf, bin_code):
     location = WarehouseLocation.query.filter_by(barcode=barcode).first()
     if location:
+        if not location.warehouse_id:
+            location.warehouse_id = default_warehouse().id
         location.is_virtual = True
         location.is_active = True
         return location
     location = WarehouseLocation(
+        warehouse_id=default_warehouse().id,
         zone=zone,
         rack=rack,
         shelf=shelf,
@@ -1133,13 +1143,26 @@ def find_location(identifier=None, required=False):
     cleaned_identifier = identifier.removeprefix("LOC:").strip()
     parts = [part.strip() for part in cleaned_identifier.replace("/", "-").split("-") if part.strip()]
     if len(parts) >= 4:
-        zone, rack, shelf = parts[0], parts[1], parts[2]
-        bin_code = "-".join(parts[3:])
-        location = WarehouseLocation.query.filter(
+        warehouse = None
+        if len(parts) >= 5:
+            possible_code = "-".join(parts[:4]).lower()
+            warehouse = Warehouse.query.filter(func.lower(Warehouse.code) == possible_code).first()
+        offset = 4 if warehouse else 0
+        if len(parts) < offset + 4:
+            warehouse = None
+            offset = 0
+        zone, rack, shelf = parts[offset], parts[offset + 1], parts[offset + 2]
+        bin_code = "-".join(parts[offset + 3:])
+        filters = [
             func.lower(WarehouseLocation.zone) == zone.lower(),
             func.lower(WarehouseLocation.rack) == rack.lower(),
             func.lower(WarehouseLocation.shelf) == shelf.lower(),
             func.lower(WarehouseLocation.bin_code) == bin_code.lower(),
+        ]
+        if warehouse:
+            filters.append(WarehouseLocation.warehouse_id == warehouse.id)
+        location = WarehouseLocation.query.filter(
+            *filters
         ).first()
         if location:
             return location
@@ -1159,6 +1182,13 @@ def find_or_create_stock_in_location(identifier):
 
     cleaned_code = location_code.removeprefix("LOC:").strip()
     parts = [part.strip() for part in cleaned_code.replace("/", "-").split("-") if part.strip()]
+    warehouse = default_warehouse()
+    if len(parts) >= 5:
+        possible_code = "-".join(parts[:4]).lower()
+        matched_warehouse = Warehouse.query.filter(func.lower(Warehouse.code) == possible_code).first()
+        if matched_warehouse:
+            warehouse = matched_warehouse
+            parts = parts[4:]
     if len(parts) >= 4:
         zone, rack, shelf = parts[0], parts[1], parts[2]
         bin_code = "-".join(parts[3:])
@@ -1169,6 +1199,7 @@ def find_or_create_stock_in_location(identifier):
         bin_code = cleaned_code
 
     location = WarehouseLocation(
+        warehouse_id=warehouse.id,
         zone=trim_location_part(zone),
         rack=trim_location_part(rack),
         shelf=trim_location_part(shelf),
@@ -1178,6 +1209,16 @@ def find_or_create_stock_in_location(identifier):
     db.session.add(location)
     db.session.flush()
     return location
+
+
+def default_warehouse():
+    warehouse = Warehouse.query.filter_by(code="kol-136-wh-01").first()
+    if warehouse:
+        return warehouse
+    warehouse = Warehouse(code="kol-136-wh-01", name="Kolkata 700136 Warehouse", pincode="700136", is_active=True)
+    db.session.add(warehouse)
+    db.session.flush()
+    return warehouse
 
 
 def trim_location_part(value):
@@ -1201,9 +1242,22 @@ def serialize_user(user):
     return {"id": user.id, "name": user.full_name, "email": user.email, "role": user.role}
 
 
+def serialize_warehouse(warehouse):
+    return {
+        "id": warehouse.id,
+        "code": warehouse.code,
+        "name": warehouse.name,
+        "pincode": warehouse.pincode,
+        "address": warehouse.address,
+        "is_active": warehouse.is_active,
+    }
+
+
 def serialize_location(location):
     return {
         "id": location.id,
+        "warehouse": serialize_warehouse(location.warehouse) if location.warehouse else None,
+        "warehouse_id": location.warehouse_id,
         "zone": location.zone,
         "rack": location.rack,
         "shelf": location.shelf,

@@ -4,17 +4,26 @@
 {% block content %}
   <section class="panel">
     <div class="panel-heading">
-      <h2>Rack / Shelf / Bin</h2>
+      <form class="d-flex gap-2" method="get">
+        <select class="form-select" name="warehouse_id">
+          <option value="">All warehouses</option>
+          {% for warehouse in warehouses %}
+            <option value="{{ warehouse.id }}" {% if warehouse_id == warehouse.id %}selected{% endif %}>{{ warehouse.code }} / {{ warehouse.pincode }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-outline-dark" type="submit">Filter</button>
+      </form>
       {% if current_user_can("manager") %}
         <a class="btn btn-primary" href="{{ url_for('stock.add_location') }}">Add Location</a>
       {% endif %}
     </div>
     <div class="table-responsive">
       <table class="table align-middle">
-        <thead><tr><th>Zone</th><th>Rack</th><th>Shelf</th><th>Bin</th><th>Barcode</th><th>Status</th></tr></thead>
+        <thead><tr><th>Warehouse</th><th>Zone</th><th>Rack</th><th>Shelf</th><th>Bin</th><th>Barcode</th><th>Status</th></tr></thead>
         <tbody>
           {% for location in locations %}
             <tr>
+              <td>{{ location.warehouse.code if location.warehouse else "-" }}</td>
               <td>{{ location.zone }}</td>
               <td>{{ location.rack }}</td>
               <td>{{ location.shelf }}</td>
@@ -23,7 +32,7 @@
               <td>{{ "Active" if location.is_active else "Inactive" }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="6" class="text-secondary">No locations yet.</td></tr>
+            <tr><td colspan="7" class="text-secondary">No locations yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

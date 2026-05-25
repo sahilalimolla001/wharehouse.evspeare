@@ -25,6 +25,7 @@
             <a class="nav-link {% if request.endpoint == 'stock.stock_out' %}active{% endif %}" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
           {% endif %}
           <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
+          <a class="nav-link {% if request.endpoint in ['stock.warehouses', 'stock.add_warehouse'] %}active{% endif %}" href="{{ url_for('stock.warehouses') }}">Warehouses</a>
           <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
           <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
           {% if current_user_can("manager", "staff") %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block page_title %}Add Warehouse{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <form method="post" class="row g-3">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-4">
+        <label class="form-label">Warehouse ID</label>
+        <input class="form-control" name="code" required value="kol-136-wh-01" placeholder="kol-136-wh-01">
+        <div class="form-text">Format: city-pincode-part-wh-number, example kol-136-wh-01.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Name</label>
+        <input class="form-control" name="name" required value="Kolkata 700136 Warehouse">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Pincode</label>
+        <input class="form-control" name="pincode" required value="700136" inputmode="numeric">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Address</label>
+        <textarea class="form-control" name="address" rows="3"></textarea>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Save Warehouse</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

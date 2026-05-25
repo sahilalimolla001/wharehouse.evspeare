@@ -68,10 +68,27 @@ class Supplier(TimestampMixin, db.Model):
         return f"<Supplier {self.name}>"
 
 
+class Warehouse(TimestampMixin, db.Model):
+    __tablename__ = "warehouses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(40), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(160), nullable=False)
+    pincode = db.Column(db.String(12), nullable=False)
+    address = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    locations = db.relationship("WarehouseLocation", back_populates="warehouse")
+
+    def __repr__(self):
+        return f"<Warehouse {self.code}>"
+
+
 class WarehouseLocation(TimestampMixin, db.Model):
     __tablename__ = "warehouse_locations"
 
     id = db.Column(db.Integer, primary_key=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
     zone = db.Column(db.String(30), nullable=False)
     rack = db.Column(db.String(30), nullable=False)
     shelf = db.Column(db.String(30), nullable=False)
@@ -80,15 +97,17 @@ class WarehouseLocation(TimestampMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     is_virtual = db.Column(db.Boolean, default=False, nullable=False)
 
+    warehouse = db.relationship("Warehouse", back_populates="locations")
     inventory_items = db.relationship("Inventory", back_populates="location")
 
     __table_args__ = (
-        db.UniqueConstraint("zone", "rack", "shelf", "bin_code", name="uq_location_path"),
+        db.UniqueConstraint("warehouse_id", "zone", "rack", "shelf", "bin_code", name="uq_location_warehouse_path"),
     )
 
     @property
     def full_code(self):
-        return f"Zone {self.zone} / Rack {self.rack} / Shelf {self.shelf} / Bin {self.bin_code}"
+        warehouse_code = self.warehouse.code if self.warehouse else "Warehouse"
+        return f"{warehouse_code} / Zone {self.zone} / Rack {self.rack} / Shelf {self.shelf} / Bin {self.bin_code}"
 
     def __repr__(self):
         return f"<WarehouseLocation {self.full_code}>"
