@@ -54,6 +54,27 @@
             <article><span>Packed</span><strong id="m-packed">0</strong></article>
           </div>
 
+          <div class="quick-ops-grid" aria-label="Live quick commerce operations">
+            <article><span>SLA Risk</span><strong id="m-sla-risk">0</strong><small>Need fast pick</small></article>
+            <article><span>Next Pick</span><strong id="m-next-pick">--</strong><small>Priority route</small></article>
+            <article><span>Route Score</span><strong id="m-route-score">--</strong><small>Bin sequence</small></article>
+            <article><span>Exceptions</span><strong id="m-exceptions">0</strong><small>Stock / data issue</small></article>
+          </div>
+
+          <div class="ops-toolbar">
+            <select id="priority-filter" aria-label="Priority filter">
+              <option value="all">All Priority</option>
+              <option value="urgent">Urgent</option>
+              <option value="sla">SLA Risk</option>
+              <option value="pending">Pending</option>
+              <option value="picking">Picking</option>
+            </select>
+            <button id="optimize-route" type="button">Optimize Route</button>
+            <button id="batch-mode-toggle" type="button">Batch Off</button>
+          </div>
+
+          <div class="card-list" id="batch-groups"></div>
+
           <div class="section-head">
             <h2>Pick Queue</h2>
             <button id="refresh-orders" type="button">Refresh</button>
@@ -177,10 +198,69 @@
           <div class="result-card" id="inventory-bin-card">Scan bin to see what items are inside.</div>
           <div class="card-list" id="inventory-items"></div>
         </section>
+
+        <section class="screen" id="automation-screen">
+          <div class="automation-hero">
+            <div>
+              <p class="section-kicker">Quick Commerce Ops</p>
+              <h2>Live Picker Automation</h2>
+            </div>
+            <button class="primary" id="run-automation" type="button">Run Check</button>
+          </div>
+
+          <div class="automation-grid">
+            <article>
+              <span>Auto Assign</span>
+              <strong id="auto-next-order">--</strong>
+              <small>Best order for current picker</small>
+            </article>
+            <article>
+              <span>ETA Breach</span>
+              <strong id="auto-sla-count">0</strong>
+              <small>Orders under pressure</small>
+            </article>
+            <article>
+              <span>Offline Queue</span>
+              <strong id="auto-offline-count">0</strong>
+              <small>Pending device sync</small>
+            </article>
+            <article>
+              <span>Productivity</span>
+              <strong id="auto-productivity">--</strong>
+              <small>Picked progress</small>
+            </article>
+          </div>
+
+          <div class="settings-list">
+            <button class="setting-row" data-automation-toggle="autoAssign" type="button">
+              <span><strong>Smart auto assignment</strong><small>Next order SLA, urgency aur bin route se choose hoga.</small></span>
+              <b id="toggle-autoAssign">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="shortageAlert" type="button">
+              <span><strong>Shortage & substitution alert</strong><small>Missing SKU ko exception queue me turant dikhayega.</small></span>
+              <b id="toggle-shortageAlert">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="routeAssist" type="button">
+              <span><strong>Route assist</strong><small>Picker queue bin aisle order me sort hogi.</small></span>
+              <b id="toggle-routeAssist">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="slaAlerts" type="button">
+              <span><strong>SLA push alerts</strong><small>High-risk orders ke liye local device alert ready rakhega.</small></span>
+              <b id="toggle-slaAlerts">Off</b>
+            </button>
+          </div>
+
+          <div class="section-head">
+            <h2>Exception Queue</h2>
+            <button data-refresh-orders type="button">Refresh</button>
+          </div>
+          <div class="card-list" id="exception-list"></div>
+        </section>
       </main>
 
       <nav class="bottom-nav" aria-label="Picker navigation">
         <button class="active" data-screen="orders-screen" type="button">Orders</button>
+        <button data-screen="automation-screen" type="button">Ops</button>
         <button data-screen="dispatch-screen" type="button">Ship</button>
         <button data-screen="return-screen" type="button">Return</button>
         <button data-screen="stock-screen" type="button">Stock</button>

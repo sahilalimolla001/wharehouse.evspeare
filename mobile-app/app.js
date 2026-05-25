@@ -16,6 +16,10 @@ const store = {
   activePickInventory: [],
   inventoryView: null,
   moveInventory: [],
+  priorityFilter: localStorage.getItem("warehousePriorityFilter") || "all",
+  batchMode: localStorage.getItem("warehouseBatchMode") === "true",
+  automationSettings: JSON.parse(localStorage.getItem("warehouseAutomationSettings") || "{}"),
+  offlineQueue: JSON.parse(localStorage.getItem("warehouseOfflineQueue") || "[]"),
 };
 
 let videoStream = null;
@@ -25,6 +29,7 @@ let scanReturnScreen = null;
 let refreshTimer = null;
 let stockPreviewTimer = null;
 let activeReturnConfirmed = false;
+let lastSlaAlertAt = 0;
 const defaultScreenId = "orders-screen";
 const standaloneApp = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 
@@ -58,6 +63,14 @@ function bindActions() {
   $("#sync-btn").addEventListener("click", refreshAll);
   $("#refresh-orders").addEventListener("click", refreshAll);
   $("#refresh-returns").addEventListener("click", refreshAll);
+  $("#priority-filter").value = store.priorityFilter;
+  $("#priority-filter").addEventListener("change", changePriorityFilter);
+  $("#optimize-route").addEventListener("click", optimizeRoute);
+  $("#batch-mode-toggle").addEventListener("click", toggleBatchMode);
+  $("#run-automation").addEventListener("click", runAutomationCheck);
+  $$("[data-automation-toggle]").forEach((button) => {
+    button.addEventListener("click", () => toggleAutomationSetting(button.dataset.automationToggle));
+  });
   $("#return-lookup-form").addEventListener("submit", startReturnFromLookup);
   $("#return-scan-item").addEventListener("click", () => scanReturnCode($("#return-code").value.trim()));
   $("#back-to-returns").addEventListener("click", closeActiveReturn);
@@ -167,6 +180,7 @@ function showScreen(screenId, options = {}) {
   const titles = {
     "orders-screen": "Orders",
     "pick-screen": "Order Picking",
+    "automation-screen": "Ops Automation",
     "dispatch-screen": "Dispatch",
     "return-screen": "Returns",
     "pv-screen": "Return PV",
@@ -307,6 +321,7 @@ async function changeWarehouse(event) {
 
 async function refreshAll() {
   await Promise.all([loadDashboard(), loadOrders(), loadReturns()]);
+  renderOpsAutomation();
 }
 
 function startAutoRefresh() {
@@ -342,6 +357,9 @@ async function loadOrders() {
     $("#m-picking").textContent = picking;
     $("#m-packed").textContent = packed;
     renderOrderQueue();
+    renderQuickOps();
+    renderBatchGroups();
+    renderOpsAutomation();
     renderDispatchQueue();
     renderActiveOrder();
   } catch (error) {
@@ -362,7 +380,7 @@ async function loadReturns() {
 }
 
 function renderOrderQueue() {
-  const orders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
+  const orders = filteredPickOrders();
   const target = $("#order-queue");
   if (!orders.length) {
     target.innerHTML = `<div class="empty-state">No pick orders right now.</div>`;
@@ -373,6 +391,237 @@ function renderOrderQueue() {
   target.querySelectorAll("[data-start-order]").forEach((card) => {
     card.addEventListener("click", () => startOrder(Number(card.dataset.startOrder)));
   });
+}
+
+function filteredPickOrders() {
+  const filter = store.priorityFilter;
+  return store.orders
+    .filter((order) => ["pending", "picking"].includes(order.status))
+    .filter((order) => {
+      if (filter === "all") return true;
+      if (filter === "sla") return slaMinutesLeft(order) <= 10;
+      if (filter === "pending" || filter === "picking") return order.status === filter;
+      return String(order.priority || "").toLowerCase() === filter;
+    })
+    .sort((a, b) => orderPriorityScore(b) - orderPriorityScore(a) || routeKey(a).localeCompare(routeKey(b)));
+}
+
+function changePriorityFilter(event) {
+  store.priorityFilter = event.target.value;
+  localStorage.setItem("warehousePriorityFilter", store.priorityFilter);
+  renderOrderQueue();
+  renderBatchGroups();
+}
+
+function toggleBatchMode() {
+  store.batchMode = !store.batchMode;
+  localStorage.setItem("warehouseBatchMode", String(store.batchMode));
+  renderBatchGroups();
+  toast(store.batchMode ? "Batch picking enabled." : "Batch picking disabled.");
+}
+
+function optimizeRoute() {
+  store.automationSettings.routeAssist = true;
+  saveAutomationSettings();
+  renderOrderQueue();
+  renderQuickOps();
+  renderBatchGroups();
+  renderOpsAutomation();
+  toast("Route optimized by priority and bin sequence.");
+}
+
+function runAutomationCheck() {
+  renderQuickOps();
+  renderBatchGroups();
+  renderOpsAutomation();
+  toast("Automation check complete.");
+}
+
+function toggleAutomationSetting(key) {
+  store.automationSettings[key] = !store.automationSettings[key];
+  saveAutomationSettings();
+  if (key === "slaAlerts" && store.automationSettings[key]) requestLocalNotifications();
+  renderOrderQueue();
+  renderOpsAutomation();
+  if (key === "routeAssist") renderBatchGroups();
+}
+
+function requestLocalNotifications() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  Notification.requestPermission().catch(() => {});
+}
+
+function saveAutomationSettings() {
+  localStorage.setItem("warehouseAutomationSettings", JSON.stringify(store.automationSettings));
+}
+
+function renderQuickOps() {
+  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
+  const next = filteredPickOrders()[0];
+  const exceptions = exceptionOrders();
+  const slaRisk = pickOrders.filter((order) => slaMinutesLeft(order) <= 10).length;
+  $("#m-sla-risk").textContent = slaRisk;
+  $("#m-next-pick").textContent = next ? orderShortCode(next) : "--";
+  $("#m-route-score").textContent = routeScore(pickOrders);
+  $("#m-exceptions").textContent = exceptions.length;
+  maybeNotifySlaRisk(slaRisk, next);
+}
+
+function maybeNotifySlaRisk(count, nextOrder) {
+  if (!store.automationSettings.slaAlerts || !count || !("Notification" in window) || Notification.permission !== "granted") return;
+  if (Date.now() - lastSlaAlertAt < 120000) return;
+  lastSlaAlertAt = Date.now();
+  new Notification("Picker SLA alert", {
+    body: `${count} order SLA risk me hai. Next: ${nextOrder ? orderShortCode(nextOrder) : "open queue"}`,
+  });
+}
+
+function renderBatchGroups() {
+  const target = $("#batch-groups");
+  $("#batch-mode-toggle").textContent = store.batchMode ? "Batch On" : "Batch Off";
+  $("#batch-mode-toggle").classList.toggle("primary", store.batchMode);
+  if (!store.batchMode) {
+    target.innerHTML = "";
+    return;
+  }
+  const groups = batchGroups();
+  if (!groups.length) {
+    target.innerHTML = `<div class="empty-state">No batchable SKUs in current queue.</div>`;
+    return;
+  }
+  target.innerHTML = groups
+    .slice(0, 3)
+    .map((group) => `
+      <article class="batch-card">
+        <div>
+          <strong>${escapeHtml(group.sku)}</strong>
+          <span>${group.orders.length} orders · ${group.quantity} qty</span>
+        </div>
+        <b>${escapeHtml(group.bin || "Bin pending")}</b>
+      </article>
+    `)
+    .join("");
+}
+
+function renderOpsAutomation() {
+  const best = filteredPickOrders()[0];
+  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
+  const totalQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
+  const pickedQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.picked_quantity || 0), 0), 0);
+  $("#auto-next-order").textContent = best ? orderShortCode(best) : "--";
+  $("#auto-sla-count").textContent = pickOrders.filter((order) => slaMinutesLeft(order) <= 10).length;
+  $("#auto-offline-count").textContent = store.offlineQueue.length;
+  $("#auto-productivity").textContent = totalQty ? `${Math.round((pickedQty / totalQty) * 100)}%` : "--";
+  Object.entries({ autoAssign: "autoAssign", shortageAlert: "shortageAlert", routeAssist: "routeAssist", slaAlerts: "slaAlerts" }).forEach(([key, id]) => {
+    const node = $(`#toggle-${id}`);
+    if (node) node.textContent = store.automationSettings[key] ? "On" : "Off";
+  });
+  renderExceptionQueue();
+}
+
+function renderExceptionQueue() {
+  const target = $("#exception-list");
+  if (!target) return;
+  const exceptions = exceptionOrders();
+  if (!exceptions.length) {
+    target.innerHTML = `<div class="empty-state">No exceptions. Picker flow healthy.</div>`;
+    return;
+  }
+  target.innerHTML = exceptions.map((item) => `
+    <article class="exception-card">
+      <div>
+        <strong>${escapeHtml(orderShortCode(item.order))}</strong>
+        <span>${escapeHtml(item.reason)}</span>
+      </div>
+      <b>${escapeHtml(item.action)}</b>
+    </article>
+  `).join("");
+}
+
+function exceptionOrders() {
+  return store.orders.flatMap((order) => {
+    const rows = [];
+    if (["pending", "picking"].includes(order.status) && slaMinutesLeft(order) <= 10) {
+      rows.push({ order, reason: "SLA risk: pick fast", action: "Priority" });
+    }
+    if (!Array.isArray(order.items) || !order.items.length) {
+      rows.push({ order, reason: "Items missing in order payload", action: "Check" });
+    }
+    (order.items || []).forEach((item) => {
+      const available = Number(item.available_quantity ?? item.stock_quantity ?? item.inventory_quantity ?? 0);
+      const needed = Number(item.quantity || 0) - Number(item.picked_quantity || 0);
+      if (needed > 0 && available < needed && store.automationSettings.shortageAlert) {
+        rows.push({ order, reason: `${itemLabel(item)} stock short by ${needed - available}`, action: "Substitute" });
+      }
+    });
+    return rows;
+  });
+}
+
+function batchGroups() {
+  const groups = new Map();
+  filteredPickOrders().forEach((order) => {
+    (order.items || []).forEach((item) => {
+      const remaining = Number(item.quantity || 0) - Number(item.picked_quantity || 0);
+      if (remaining <= 0) return;
+      const sku = itemLabel(item);
+      const bin = item.location_barcode || item.location_name || item.bin || item.location || "";
+      const key = `${sku}|${bin}`;
+      if (!groups.has(key)) groups.set(key, { sku, bin, quantity: 0, orders: [] });
+      const group = groups.get(key);
+      group.quantity += remaining;
+      group.orders.push(order.id);
+    });
+  });
+  return Array.from(groups.values())
+    .filter((group) => group.orders.length > 1 || group.quantity > 1)
+    .sort((a, b) => b.orders.length - a.orders.length || a.sku.localeCompare(b.sku));
+}
+
+function orderPriorityScore(order) {
+  const priority = String(order.priority || "").toLowerCase();
+  const statusBoost = order.status === "picking" ? 30 : 0;
+  const urgentBoost = priority === "urgent" ? 80 : priority === "high" ? 45 : 0;
+  const sla = slaMinutesLeft(order);
+  const slaBoost = sla <= 0 ? 100 : sla <= 10 ? 70 : sla <= 20 ? 35 : 0;
+  const sizeBoost = Math.min((order.items || []).length * 3, 18);
+  const routeBoost = store.automationSettings.routeAssist ? Math.max(0, 20 - routeKey(order).length) : 0;
+  return statusBoost + urgentBoost + slaBoost + sizeBoost + routeBoost;
+}
+
+function slaMinutesLeft(order) {
+  const candidates = [
+    order.sla_at,
+    order.promised_at,
+    order.expected_dispatch_at,
+    order.expected_delivery_at,
+    order.dispatch_deadline,
+  ].filter(Boolean);
+  const target = candidates.map((value) => new Date(value)).find((date) => !Number.isNaN(date.getTime()));
+  if (target) return Math.round((target.getTime() - Date.now()) / 60000);
+  const created = new Date(order.created_at || order.createdAt || order.order_date || order.updated_at || Date.now());
+  const base = Number.isNaN(created.getTime()) ? Date.now() : created.getTime();
+  const windowMinutes = String(order.priority || "").toLowerCase() === "urgent" ? 15 : 30;
+  return Math.round((base + windowMinutes * 60000 - Date.now()) / 60000);
+}
+
+function routeKey(order) {
+  const firstItem = (order.items || []).find(Boolean) || {};
+  return String(firstItem.location_barcode || firstItem.location_name || firstItem.bin || firstItem.location || order.order_number || "");
+}
+
+function routeScore(orders) {
+  if (!orders.length) return "--";
+  const withBins = orders.filter((order) => routeKey(order)).length;
+  return `${Math.round((withBins / orders.length) * 100)}%`;
+}
+
+function orderShortCode(order) {
+  return String(order.order_number || order.website_order_id || order.id || "--").replace(/^ORDER-/i, "#");
+}
+
+function itemLabel(item) {
+  return String(item.sku || item.product_sku || item.product_name || item.product_id || item.id || "SKU");
 }
 
 function renderReturnQueue() {
@@ -1373,6 +1622,7 @@ async function apiFetch(path, options = {}) {
   try {
     response = await fetch(`${store.apiBase}${path}`, init);
   } catch {
+    if (init.method !== "GET" && options.auth !== false) queueOfflineMutation(path, options);
     throw new Error(`API connection failed. Check API URL: ${store.apiBase}`);
   }
   const data = await response.json().catch(() => ({}));
@@ -1381,6 +1631,18 @@ async function apiFetch(path, options = {}) {
     throw new Error(data.message || `API error ${response.status}`);
   }
   return data;
+}
+
+function queueOfflineMutation(path, options) {
+  store.offlineQueue.push({
+    path,
+    method: options.method || "GET",
+    body: options.body || null,
+    queued_at: new Date().toISOString(),
+  });
+  store.offlineQueue = store.offlineQueue.slice(-25);
+  localStorage.setItem("warehouseOfflineQueue", JSON.stringify(store.offlineQueue));
+  renderOpsAutomation();
 }
 
 function initialApiBase() {

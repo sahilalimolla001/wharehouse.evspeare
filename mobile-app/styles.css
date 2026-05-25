@@ -240,6 +240,114 @@ input[type="file"] {
   font-size: 1.45rem;
 }
 
+.quick-ops-grid,
+.automation-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quick-ops-grid article,
+.automation-grid article,
+.batch-card,
+.exception-card,
+.setting-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.quick-ops-grid article,
+.automation-grid article {
+  min-height: 88px;
+  display: grid;
+  align-content: space-between;
+  padding: 11px;
+}
+
+.quick-ops-grid span,
+.automation-grid span,
+.quick-ops-grid small,
+.automation-grid small,
+.batch-card span,
+.exception-card span,
+.setting-row small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.quick-ops-grid strong,
+.automation-grid strong {
+  font-size: 1.08rem;
+  overflow-wrap: anywhere;
+}
+
+.ops-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.ops-toolbar select,
+.ops-toolbar button {
+  min-height: 42px;
+}
+
+.batch-card,
+.exception-card,
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  text-align: left;
+}
+
+.batch-card > div,
+.exception-card > div,
+.setting-row span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.batch-card b,
+.exception-card b,
+.setting-row b {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-size: 0.78rem;
+}
+
+.automation-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 8px;
+  background: #f3fbf8;
+}
+
+.automation-hero h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.settings-list {
+  display: grid;
+  gap: 10px;
+}
+
+.setting-row {
+  width: 100%;
+  min-height: 66px;
+}
+
 .section-head,
 .button-row,
 .action-bar {
@@ -555,7 +663,7 @@ input[type="file"] {
   right: 8px;
   bottom: max(8px, env(safe-area-inset-bottom, 0px));
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--line);
@@ -615,7 +723,7 @@ input[type="file"] {
 
 @media (max-width: 520px) {
   .mobile-shell {
-    padding: 10px 10px calc(132px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 10px calc(156px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-header {
@@ -641,6 +749,15 @@ input[type="file"] {
     padding: 10px;
   }
 
+  .quick-ops-grid,
+  .automation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .status-strip strong {
     font-size: 1.28rem;
   }
@@ -655,7 +772,7 @@ input[type="file"] {
   }
 
   .toast {
-    bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(142px + env(safe-area-inset-bottom, 0px));
   }
 
   .inventory-item {
