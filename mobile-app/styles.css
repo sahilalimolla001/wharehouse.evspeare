@@ -99,7 +99,16 @@ button:disabled {
 
 .header-actions {
   display: flex;
+  align-items: center;
   gap: 7px;
+}
+
+.warehouse-select {
+  width: 128px;
+  height: 40px;
+  padding: 0 8px;
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .icon-btn {

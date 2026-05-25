@@ -1,7 +1,7 @@
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
-from ..models import Product, User
+from ..models import Product, User, Warehouse
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import test_storage_connection
@@ -22,13 +22,28 @@ def users():
             role=request.form.get("role", "staff"),
         )
         user.set_password(request.form.get("password", "staff123"))
+        warehouse_ids = [int(value) for value in request.form.getlist("warehouse_ids") if value.isdigit()]
+        if warehouse_ids:
+            user.warehouses = Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all()
         db.session.add(user)
         db.session.commit()
         flash("Staff user saved.", "success")
         return redirect(url_for("users.users"))
 
     users_list = User.query.order_by(User.full_name).all()
-    return render_template("users.html", users=users_list)
+    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    return render_template("users.html", users=users_list, warehouses=warehouses)
+
+
+@users_bp.post("/users/<int:user_id>/warehouses")
+@role_required("admin")
+def update_user_warehouses(user_id):
+    user = User.query.get_or_404(user_id)
+    warehouse_ids = [int(value) for value in request.form.getlist("warehouse_ids") if value.isdigit()]
+    user.warehouses = Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all() if warehouse_ids else []
+    db.session.commit()
+    flash("User warehouse mapping updated.", "success")
+    return redirect(url_for("users.users"))
 
 
 @users_bp.route("/settings")

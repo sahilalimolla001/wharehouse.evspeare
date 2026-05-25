@@ -134,11 +134,27 @@ def api_me():
 @api_login_required
 def api_dashboard():
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
+    warehouse = current_api_warehouse()
     products = Product.query.filter_by(is_active=True).all()
-    low_stock = [product for product in products if product.is_low_stock]
+    inventory_query = Inventory.query.join(WarehouseLocation)
+    stock_in_query = db.session.query(func.coalesce(func.sum(StockIn.quantity), 0)).join(WarehouseLocation, StockIn.location_id == WarehouseLocation.id).filter(StockIn.received_at >= today_start)
+    stock_out_query = db.session.query(func.coalesce(func.sum(StockOut.quantity), 0)).join(WarehouseLocation, StockOut.location_id == WarehouseLocation.id).filter(StockOut.dispatched_at >= today_start)
+    if warehouse:
+        inventory_query = inventory_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+        stock_in_query = stock_in_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+        stock_out_query = stock_out_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    inventory_rows = inventory_query.all()
+    product_quantities = {}
+    stock_value = 0
+    for row in inventory_rows:
+        product_quantities[row.product_id] = product_quantities.get(row.product_id, 0) + row.quantity
+        stock_value += float(row.product.purchase_price or 0) * row.quantity
+    low_stock = [product for product in products if product_quantities.get(product.id, 0) <= product.minimum_stock]
     top_selling = (
         db.session.query(Product.id, Product.name, Product.sku, func.sum(StockOut.quantity).label("sold_qty"))
         .join(StockOut, StockOut.product_id == Product.id)
+        .join(WarehouseLocation, StockOut.location_id == WarehouseLocation.id)
+        .filter(WarehouseLocation.warehouse_id == warehouse.id if warehouse else True)
         .group_by(Product.id)
         .order_by(func.sum(StockOut.quantity).desc())
         .limit(5)
@@ -147,11 +163,11 @@ def api_dashboard():
     return jsonify(
         {
             "total_products": len(products),
-            "total_stock_units": sum(product.total_quantity for product in products),
-            "total_stock_value": float(sum(product.stock_value for product in products)),
+            "total_stock_units": sum(product_quantities.values()),
+            "total_stock_value": stock_value,
             "low_stock_items": len(low_stock),
-            "today_stock_in": db.session.query(func.coalesce(func.sum(StockIn.quantity), 0)).filter(StockIn.received_at >= today_start).scalar(),
-            "today_stock_out": db.session.query(func.coalesce(func.sum(StockOut.quantity), 0)).filter(StockOut.dispatched_at >= today_start).scalar(),
+            "today_stock_in": stock_in_query.scalar(),
+            "today_stock_out": stock_out_query.scalar(),
             "pending_orders": Order.query.filter(Order.status.in_(["pending", "picking", "packed"])).count(),
             "completed_orders": Order.query.filter_by(status="completed").count(),
             "top_selling_products": [
@@ -263,14 +279,18 @@ def api_scan(code):
 @api_bp.get("/locations")
 @api_login_required
 def api_locations():
-    locations = WarehouseLocation.query.join(Warehouse).filter(WarehouseLocation.is_active.is_(True)).order_by(Warehouse.code, WarehouseLocation.zone, WarehouseLocation.rack).all()
+    warehouse = current_api_warehouse()
+    query = WarehouseLocation.query.join(Warehouse).filter(WarehouseLocation.is_active.is_(True))
+    if warehouse:
+        query = query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    locations = query.order_by(Warehouse.code, WarehouseLocation.zone, WarehouseLocation.rack).all()
     return jsonify({"locations": [serialize_location(location) for location in locations]})
 
 
 @api_bp.get("/warehouses")
 @api_login_required
 def api_warehouses():
-    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    warehouses = accessible_api_warehouses()
     return jsonify({"warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses]})
 
 
@@ -684,6 +704,37 @@ def current_api_user():
     return None
 
 
+def accessible_api_warehouses(user=None):
+    user = user or current_api_user()
+    if not user:
+        return []
+    assigned = [warehouse for warehouse in user.warehouses if warehouse.is_active]
+    if assigned:
+        return sorted(assigned, key=lambda warehouse: warehouse.code)
+    if user.role == "admin":
+        return Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    return []
+
+
+def current_api_warehouse():
+    warehouses = accessible_api_warehouses()
+    if not warehouses:
+        return None
+    allowed_ids = {warehouse.id for warehouse in warehouses}
+    data = request.get_json(silent=True) if request.method in {"POST", "PUT", "PATCH"} else {}
+    requested_id = request.headers.get("X-Warehouse-Id") or request.args.get("warehouse_id") or (data or {}).get("warehouse_id") or session.get("warehouse_id")
+    try:
+        requested_id = int(requested_id) if requested_id else None
+    except (TypeError, ValueError):
+        requested_id = None
+    if requested_id in allowed_ids:
+        session["warehouse_id"] = requested_id
+        return next(warehouse for warehouse in warehouses if warehouse.id == requested_id)
+    warehouse = warehouses[0]
+    session["warehouse_id"] = warehouse.id
+    return warehouse
+
+
 def current_bearer_user():
     authorization = request.headers.get("Authorization", "")
     if not authorization.lower().startswith("bearer "):
@@ -759,9 +810,11 @@ def issue_order_pick_stock(order, product_id, quantity, location_identifier=None
         return
 
     remaining = quantity
+    warehouse = current_api_warehouse()
     inventory_rows = (
         Inventory.query.join(WarehouseLocation)
         .filter(Inventory.product_id == product_id, WarehouseLocation.is_virtual.is_(False))
+        .filter(WarehouseLocation.warehouse_id == warehouse.id if warehouse else True)
         .filter(Inventory.quantity > Inventory.reserved_quantity)
         .order_by(Inventory.quantity.desc(), Inventory.id)
         .all()
@@ -1131,13 +1184,21 @@ def find_location(identifier=None, required=False):
     identifier = str(identifier).strip()
     if identifier.isdigit():
         location = WarehouseLocation.query.get(int(identifier))
-        if location:
+        warehouse = current_api_warehouse()
+        if location and (not warehouse or location.warehouse_id == warehouse.id):
             return location
-    location = WarehouseLocation.query.filter_by(barcode=identifier).first()
+    warehouse = current_api_warehouse()
+    barcode_query = WarehouseLocation.query.filter_by(barcode=identifier)
+    if warehouse:
+        barcode_query = barcode_query.filter_by(warehouse_id=warehouse.id)
+    location = barcode_query.first()
     if location:
         return location
     if identifier.startswith("LOC:"):
-        location = WarehouseLocation.query.filter_by(barcode=identifier).first()
+        barcode_query = WarehouseLocation.query.filter_by(barcode=identifier)
+        if warehouse:
+            barcode_query = barcode_query.filter_by(warehouse_id=warehouse.id)
+        location = barcode_query.first()
         if location:
             return location
     cleaned_identifier = identifier.removeprefix("LOC:").strip()
@@ -1161,6 +1222,8 @@ def find_location(identifier=None, required=False):
         ]
         if warehouse:
             filters.append(WarehouseLocation.warehouse_id == warehouse.id)
+        elif current_api_warehouse():
+            filters.append(WarehouseLocation.warehouse_id == current_api_warehouse().id)
         location = WarehouseLocation.query.filter(
             *filters
         ).first()
@@ -1182,7 +1245,7 @@ def find_or_create_stock_in_location(identifier):
 
     cleaned_code = location_code.removeprefix("LOC:").strip()
     parts = [part.strip() for part in cleaned_code.replace("/", "-").split("-") if part.strip()]
-    warehouse = default_warehouse()
+    warehouse = current_api_warehouse() or default_warehouse()
     if len(parts) >= 5:
         possible_code = "-".join(parts[:4]).lower()
         matched_warehouse = Warehouse.query.filter(func.lower(Warehouse.code) == possible_code).first()
@@ -1239,7 +1302,16 @@ def parse_gs_url(image_url):
 
 
 def serialize_user(user):
-    return {"id": user.id, "name": user.full_name, "email": user.email, "role": user.role}
+    warehouses = accessible_api_warehouses(user)
+    current = current_api_warehouse() if user == current_api_user() else (warehouses[0] if warehouses else None)
+    return {
+        "id": user.id,
+        "name": user.full_name,
+        "email": user.email,
+        "role": user.role,
+        "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
+        "warehouse": serialize_warehouse(current) if current else None,
+    }
 
 
 def serialize_warehouse(warehouse):
@@ -1269,6 +1341,14 @@ def serialize_location(location):
 
 
 def serialize_product(product):
+    warehouse = current_api_warehouse()
+    inventory_items = [
+        item
+        for item in product.inventory_items
+        if not item.location.is_virtual and (not warehouse or item.location.warehouse_id == warehouse.id)
+    ]
+    total_quantity = sum(item.quantity for item in inventory_items)
+    available_quantity = sum(item.available_quantity for item in inventory_items)
     return {
         "id": product.id,
         "name": product.name,
@@ -1278,9 +1358,9 @@ def serialize_product(product):
         "minimum_stock": product.minimum_stock,
         "purchase_price": float(product.purchase_price or 0),
         "selling_price": float(product.selling_price or 0),
-        "total_quantity": product.total_quantity,
-        "available_quantity": product.available_quantity,
-        "is_low_stock": product.is_low_stock,
+        "total_quantity": total_quantity,
+        "available_quantity": available_quantity,
+        "is_low_stock": total_quantity <= product.minimum_stock,
         "image_url": product.image_url,
         "image_display_url": url_for("api.api_product_image", product_id=product.id) if product.image_url else None,
         "barcodes": [barcode.code for barcode in product.barcodes if barcode.is_active],
@@ -1292,8 +1372,7 @@ def serialize_product(product):
                 "reserved_quantity": item.reserved_quantity,
                 "available_quantity": item.available_quantity,
             }
-            for item in product.inventory_items
-            if not item.location.is_virtual
+            for item in inventory_items
         ],
     }
 

@@ -19,6 +19,17 @@
             <option value="packer">Packer</option>
             <option value="delivery">Delivery Staff</option>
           </select>
+          <div>
+            <label class="form-label">Mapped Warehouses</label>
+            <div class="d-grid gap-2">
+              {% for warehouse in warehouses %}
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" name="warehouse_ids" value="{{ warehouse.id }}" checked>
+                  <span class="form-check-label">{{ warehouse.code }} / {{ warehouse.pincode }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
           <input class="form-control" name="password" type="password" placeholder="Password" value="staff123">
           <button class="btn btn-primary" type="submit">Save User</button>
         </form>
@@ -29,7 +40,7 @@
         <h2>Team</h2>
         <div class="table-responsive">
           <table class="table align-middle">
-            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Warehouses</th><th>Status</th><th>Save</th></tr></thead>
             <tbody>
               {% for user in users %}
                 <tr>
@@ -37,7 +48,19 @@
                   <td>{{ user.email }}</td>
                   <td>{{ user.phone or "-" }}</td>
                   <td>{{ role_label(user.role) }}</td>
+                  <td>
+                    <form id="warehouse-map-{{ user.id }}" method="post" action="{{ url_for('users.update_user_warehouses', user_id=user.id) }}" class="d-grid gap-1">
+                      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                      {% for warehouse in warehouses %}
+                        <label class="form-check">
+                          <input class="form-check-input" type="checkbox" name="warehouse_ids" value="{{ warehouse.id }}" {% if warehouse in user.warehouses %}checked{% endif %}>
+                          <span class="form-check-label"><code>{{ warehouse.code }}</code></span>
+                        </label>
+                      {% endfor %}
+                    </form>
+                  </td>
                   <td>{{ "Active" if user.is_active else "Inactive" }}</td>
+                  <td><button class="btn btn-sm btn-outline-primary" type="submit" form="warehouse-map-{{ user.id }}">Save</button></td>
                 </tr>
               {% endfor %}
             </tbody>

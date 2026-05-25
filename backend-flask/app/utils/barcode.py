@@ -8,8 +8,7 @@ def build_product_barcode(product):
 
 
 def build_location_barcode(location):
-    warehouse_code = location.warehouse.code if getattr(location, "warehouse", None) else ""
-    parts = [warehouse_code, location.zone, location.rack, location.shelf, location.bin_code]
+    parts = [location.zone, location.rack, location.shelf, location.bin_code]
     return "LOC:" + "-".join(str(part).strip() for part in parts if str(part or "").strip())
 
 

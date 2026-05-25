@@ -6,6 +6,14 @@
     <form method="post" class="row g-3" enctype="multipart/form-data">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="col-md-4">
+        <label class="form-label">Warehouse</label>
+        <select class="form-select" name="warehouse_id" onchange="this.form.method='get'; this.form.enctype='application/x-www-form-urlencoded'; this.form.submit()">
+          {% for item in warehouses %}
+            <option value="{{ item.id }}" {% if warehouse and warehouse.id == item.id %}selected{% endif %}>{{ item.code }} / {{ item.pincode }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
         <label class="form-label">Product</label>
         <select class="form-select" name="product_id" required>
           {% for product in products %}

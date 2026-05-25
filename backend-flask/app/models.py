@@ -6,6 +6,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .extensions import db
 
 
+user_warehouses = db.Table(
+    "user_warehouses",
+    db.Column("user_id", db.Integer, db.ForeignKey("users.id"), primary_key=True),
+    db.Column("warehouse_id", db.Integer, db.ForeignKey("warehouses.id"), primary_key=True),
+    db.Column("created_at", db.DateTime, default=datetime.utcnow, nullable=False),
+)
+
+
 class TimestampMixin:
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -25,6 +33,7 @@ class User(TimestampMixin, db.Model):
     stock_ins = db.relationship("StockIn", back_populates="received_by", foreign_keys="StockIn.received_by_id")
     stock_outs = db.relationship("StockOut", back_populates="dispatched_by", foreign_keys="StockOut.dispatched_by_id")
     activity_logs = db.relationship("ActivityLog", back_populates="user")
+    warehouses = db.relationship("Warehouse", secondary=user_warehouses, back_populates="users")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -79,6 +88,7 @@ class Warehouse(TimestampMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
 
     locations = db.relationship("WarehouseLocation", back_populates="warehouse")
+    users = db.relationship("User", secondary=user_warehouses, back_populates="warehouses")
 
     def __repr__(self):
         return f"<Warehouse {self.code}>"
@@ -93,7 +103,7 @@ class WarehouseLocation(TimestampMixin, db.Model):
     rack = db.Column(db.String(30), nullable=False)
     shelf = db.Column(db.String(30), nullable=False)
     bin_code = db.Column(db.String(30), nullable=False)
-    barcode = db.Column(db.String(80), unique=True)
+    barcode = db.Column(db.String(80))
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     is_virtual = db.Column(db.Boolean, default=False, nullable=False)
 

@@ -6,6 +6,8 @@ const store = {
   apiBase: initialApiBase(),
   user: JSON.parse(localStorage.getItem("warehouseMobileUser") || "null"),
   token: localStorage.getItem("warehouseMobileToken") || "",
+  warehouses: JSON.parse(localStorage.getItem("warehouseMobileWarehouses") || "[]"),
+  warehouseId: Number(localStorage.getItem("warehouseMobileWarehouseId") || 0),
   orders: [],
   returns: [],
   activeOrderId: Number(localStorage.getItem("warehouseActiveOrderId") || 0),
@@ -52,6 +54,7 @@ function bindActions() {
   $("#login-form").addEventListener("submit", login);
   $("#test-api").addEventListener("click", testApiConnection);
   $("#logout-btn").addEventListener("click", logout);
+  $("#warehouse-select").addEventListener("change", changeWarehouse);
   $("#sync-btn").addEventListener("click", refreshAll);
   $("#refresh-orders").addEventListener("click", refreshAll);
   $("#refresh-returns").addEventListener("click", refreshAll);
@@ -189,6 +192,7 @@ async function initializeSession() {
   try {
     const data = await apiFetch("/me");
     store.user = data.user;
+    applyUserWarehouses(data.user);
     localStorage.setItem("warehouseMobileUser", JSON.stringify(store.user));
     await refreshAll();
   } catch {
@@ -211,6 +215,7 @@ async function login(event) {
     });
     store.user = data.user;
     store.token = data.token || "";
+    applyUserWarehouses(store.user);
     localStorage.setItem("warehouseMobileUser", JSON.stringify(store.user));
     if (store.token) localStorage.setItem("warehouseMobileToken", store.token);
     unlockApp();
@@ -241,11 +246,15 @@ async function logout(callApi = true) {
   if (callApi) await apiFetch("/logout", { method: "POST", auth: false }).catch(() => {});
   store.user = null;
   store.token = "";
+  store.warehouses = [];
+  store.warehouseId = 0;
   store.activeOrderId = 0;
   store.activePickLocation = null;
   store.activePickInventory = [];
   localStorage.removeItem("warehouseMobileUser");
   localStorage.removeItem("warehouseMobileToken");
+  localStorage.removeItem("warehouseMobileWarehouses");
+  localStorage.removeItem("warehouseMobileWarehouseId");
   localStorage.removeItem("warehouseActiveOrderId");
   localStorage.removeItem("warehouseActivePickLocation");
   stopScanner();
@@ -262,7 +271,38 @@ function lockApp() {
 function unlockApp() {
   $("#auth-gate").classList.remove("active");
   $(".mobile-shell").removeAttribute("aria-hidden");
+  applyUserWarehouses(store.user);
   startAutoRefresh();
+}
+
+function applyUserWarehouses(user) {
+  store.warehouses = Array.isArray(user?.warehouses) ? user.warehouses : store.warehouses;
+  const selected = user?.warehouse || store.warehouses.find((warehouse) => warehouse.id === store.warehouseId) || store.warehouses[0] || null;
+  store.warehouseId = selected?.id || store.warehouseId || 0;
+  localStorage.setItem("warehouseMobileWarehouses", JSON.stringify(store.warehouses));
+  if (store.warehouseId) localStorage.setItem("warehouseMobileWarehouseId", String(store.warehouseId));
+  renderWarehouseSelect();
+}
+
+function renderWarehouseSelect() {
+  const select = $("#warehouse-select");
+  if (!select) return;
+  select.innerHTML = store.warehouses
+    .map((warehouse) => `<option value="${warehouse.id}" ${warehouse.id === store.warehouseId ? "selected" : ""}>${escapeHtml(warehouse.code)}</option>`)
+    .join("");
+  select.disabled = store.warehouses.length <= 1;
+}
+
+async function changeWarehouse(event) {
+  store.warehouseId = Number(event.target.value || 0);
+  localStorage.setItem("warehouseMobileWarehouseId", String(store.warehouseId));
+  store.activePickLocation = null;
+  store.activePickInventory = [];
+  store.inventoryView = null;
+  store.moveInventory = [];
+  $("#manual-code").value = "";
+  toast("Warehouse changed.");
+  await refreshAll();
 }
 
 async function refreshAll() {
@@ -1326,6 +1366,7 @@ async function apiFetch(path, options = {}) {
   };
   if (!isFormData) init.headers["Content-Type"] = "application/json";
   if (store.token && options.auth !== false) init.headers.Authorization = `Bearer ${store.token}`;
+  if (store.warehouseId && options.auth !== false) init.headers["X-Warehouse-Id"] = String(store.warehouseId);
   if (options.body) init.body = isFormData ? options.body : JSON.stringify(options.body);
 
   let response;

@@ -2,7 +2,7 @@ from functools import wraps
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
-from ..models import User
+from ..models import User, Warehouse
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -36,6 +36,36 @@ def current_user_can(*roles):
     return user_has_role(get_current_user(), *roles)
 
 
+def accessible_warehouses(user=None):
+    user = user or get_current_user()
+    if not user:
+        return []
+    assigned = [warehouse for warehouse in user.warehouses if warehouse.is_active]
+    if assigned:
+        return sorted(assigned, key=lambda warehouse: warehouse.code)
+    if user.role == "admin":
+        return Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    return []
+
+
+def selected_warehouse(user=None):
+    warehouses = accessible_warehouses(user)
+    if not warehouses:
+        return None
+    allowed_ids = {warehouse.id for warehouse in warehouses}
+    requested_id = request.values.get("warehouse_id") or request.headers.get("X-Warehouse-Id") or session.get("warehouse_id")
+    try:
+        requested_id = int(requested_id) if requested_id else None
+    except (TypeError, ValueError):
+        requested_id = None
+    if requested_id in allowed_ids:
+        session["warehouse_id"] = requested_id
+        return next(warehouse for warehouse in warehouses if warehouse.id == requested_id)
+    warehouse = warehouses[0]
+    session["warehouse_id"] = warehouse.id
+    return warehouse
+
+
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
@@ -65,11 +95,13 @@ def role_required(*roles):
 
 @auth_bp.app_context_processor
 def inject_current_user():
-    return {
-        "current_user": get_current_user(),
-        "current_user_can": current_user_can,
-        "role_label": lambda role: ROLE_LABELS.get(role, str(role or "").title()),
-    }
+        return {
+            "current_user": get_current_user(),
+            "current_user_can": current_user_can,
+            "accessible_warehouses": accessible_warehouses,
+            "selected_warehouse": selected_warehouse,
+            "role_label": lambda role: ROLE_LABELS.get(role, str(role or "").title()),
+        }
 
 
 @auth_bp.route("/")

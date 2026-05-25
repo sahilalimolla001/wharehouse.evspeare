@@ -8,7 +8,7 @@ from ..utils.google_storage import upload_product_image
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.sku import normalize_sku
 from ..utils.stock import issue_stock, receive_stock
-from .auth import get_current_user, login_required, role_required
+from .auth import accessible_warehouses, get_current_user, login_required, role_required, selected_warehouse
 
 stock_bp = Blueprint("stock", __name__)
 
@@ -17,9 +17,10 @@ stock_bp = Blueprint("stock", __name__)
 @login_required
 def inventory():
     q = request.args.get("q", "").strip()
-    warehouse_id = int_or_none(request.args.get("warehouse_id"))
+    warehouse = selected_warehouse()
+    warehouse_id = warehouse.id if warehouse else None
     query = Inventory.query.join(Product).join(WarehouseLocation)
-    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    warehouses = accessible_warehouses()
     if warehouse_id:
         query = query.filter(WarehouseLocation.warehouse_id == warehouse_id)
     if q:
@@ -45,7 +46,12 @@ def inventory():
 def stock_in():
     products = Product.query.filter_by(is_active=True).order_by(Product.name).all()
     suppliers = Supplier.query.filter_by(is_active=True).order_by(Supplier.name).all()
-    locations = WarehouseLocation.query.join(Warehouse).filter(WarehouseLocation.is_active.is_(True)).order_by(Warehouse.code, WarehouseLocation.zone).all()
+    warehouse = selected_warehouse()
+    warehouses = accessible_warehouses()
+    locations_query = WarehouseLocation.query.join(Warehouse).filter(WarehouseLocation.is_active.is_(True))
+    if warehouse:
+        locations_query = locations_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    locations = locations_query.order_by(Warehouse.code, WarehouseLocation.zone).all()
 
     if request.method == "POST":
         try:
@@ -76,13 +82,18 @@ def stock_in():
             db.session.rollback()
             flash(str(error), "danger")
 
-    return render_template("stock_in.html", products=products, suppliers=suppliers, locations=locations)
+    return render_template("stock_in.html", products=products, suppliers=suppliers, locations=locations, warehouses=warehouses, warehouse=warehouse)
 
 
 @stock_bp.route("/stock-out", methods=["GET", "POST"])
 @role_required("manager", "staff")
 def stock_out():
-    inventory_rows = Inventory.query.join(Product).join(WarehouseLocation).join(Warehouse).filter(Inventory.quantity > 0).order_by(Warehouse.code, Product.name).all()
+    warehouse = selected_warehouse()
+    warehouses = accessible_warehouses()
+    inventory_query = Inventory.query.join(Product).join(WarehouseLocation).join(Warehouse).filter(Inventory.quantity > 0)
+    if warehouse:
+        inventory_query = inventory_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    inventory_rows = inventory_query.order_by(Warehouse.code, Product.name).all()
 
     if request.method == "POST":
         try:
@@ -108,14 +119,15 @@ def stock_out():
             db.session.rollback()
             flash(str(error), "danger")
 
-    return render_template("stock_out.html", inventory_rows=inventory_rows)
+    return render_template("stock_out.html", inventory_rows=inventory_rows, warehouses=warehouses, warehouse=warehouse)
 
 
 @stock_bp.route("/warehouse-locations")
 @login_required
 def warehouse_locations():
-    warehouse_id = int_or_none(request.args.get("warehouse_id"))
-    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    warehouse = selected_warehouse()
+    warehouse_id = warehouse.id if warehouse else None
+    warehouses = accessible_warehouses()
     query = WarehouseLocation.query.join(Warehouse)
     if warehouse_id:
         query = query.filter(WarehouseLocation.warehouse_id == warehouse_id)
@@ -150,7 +162,7 @@ def add_warehouse():
 @stock_bp.route("/add-location", methods=["GET", "POST"])
 @role_required("manager")
 def add_location():
-    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    warehouses = accessible_warehouses()
     if request.method == "POST":
         warehouse = Warehouse.query.get_or_404(int(request.form["warehouse_id"]))
         location = WarehouseLocation(
