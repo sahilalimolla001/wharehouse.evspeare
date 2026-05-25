@@ -130,6 +130,41 @@ def api_me():
     return jsonify({"ok": True, "user": serialize_user(current_api_user())})
 
 
+@api_bp.route("/central-panel/users", methods=["GET", "POST", "OPTIONS"])
+@integration_key_required
+def api_central_panel_users():
+    if request.method == "OPTIONS":
+        return "", 204
+    if request.method == "GET":
+        users = User.query.order_by(User.full_name).all()
+        return jsonify({"ok": True, "users": [serialize_central_panel_user(user) for user in users]})
+
+    data = request.get_json(silent=True) or {}
+    email = (data.get("userId") or data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    warehouse_id = data.get("warehouseId") or data.get("warehouse_id")
+    if not email or not password or not warehouse_id:
+        return jsonify({"ok": False, "message": "userId, password and warehouseId are required"}), 400
+
+    warehouse = resolve_warehouse(warehouse_id)
+    if not warehouse:
+        return jsonify({"ok": False, "message": "Warehouse not found"}), 404
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        user = User(email=email)
+        db.session.add(user)
+
+    user.full_name = (data.get("name") or data.get("full_name") or email).strip()
+    user.phone = (data.get("phone") or "").strip()
+    user.role = (data.get("role") or "picker").strip()
+    user.is_active = data.get("status", "active") != "blocked"
+    user.set_password(password)
+    user.warehouses = [warehouse]
+    db.session.commit()
+    return jsonify({"ok": True, "user": serialize_central_panel_user(user)})
+
+
 @api_bp.get("/dashboard")
 @api_login_required
 def api_dashboard():
@@ -1354,6 +1389,46 @@ def serialize_user(user):
         "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
         "warehouse": serialize_warehouse(current) if current else None,
     }
+
+
+def serialize_central_panel_user(user):
+    return {
+        "id": user.id,
+        "userId": user.email,
+        "name": user.full_name,
+        "phone": user.phone,
+        "role": user.role,
+        "status": "active" if user.is_active else "blocked",
+        "warehouseId": user.warehouses[0].id if user.warehouses else None,
+        "warehouses": [serialize_warehouse(warehouse) for warehouse in user.warehouses],
+        "permissions": role_permissions(user.role),
+        "createdAt": user.created_at.isoformat() if user.created_at else None,
+        "updatedAt": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+def resolve_warehouse(identifier):
+    value = str(identifier or "").strip()
+    if not value:
+        return None
+    query = Warehouse.query.filter_by(is_active=True)
+    if value.isdigit():
+        warehouse = query.filter_by(id=int(value)).first()
+        if warehouse:
+            return warehouse
+    return query.filter(Warehouse.code.ilike(value)).first()
+
+
+def role_permissions(role):
+    permissions = {
+        "admin": ["orders", "picking", "dispatch", "returns", "inventory", "settings"],
+        "manager": ["orders", "picking", "dispatch", "returns", "inventory"],
+        "staff": ["orders", "picking", "dispatch", "inventory"],
+        "picker": ["orders", "picking"],
+        "packer": ["orders", "dispatch"],
+        "delivery": ["orders", "dispatch"],
+    }
+    return permissions.get(role, ["orders"])
 
 
 def serialize_warehouse(warehouse):

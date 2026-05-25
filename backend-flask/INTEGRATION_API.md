@@ -24,6 +24,35 @@ You can also send the key as:
 X-Integration-Key: YOUR_INTEGRATION_API_KEY
 ```
 
+## Central Panel User Creation
+
+Use this endpoint when the EV Speare central panel creates admin, manager, staff, or picker users.
+
+```text
+GET /api/central-panel/users
+Authorization: Bearer YOUR_INTEGRATION_API_KEY
+```
+
+```text
+POST /api/central-panel/users
+Authorization: Bearer YOUR_INTEGRATION_API_KEY
+Content-Type: application/json
+```
+
+```json
+{
+  "userId": "picker01@evspeare.com",
+  "password": "strong-password",
+  "name": "Picker 01",
+  "phone": "9999999999",
+  "role": "picker",
+  "warehouseId": "1",
+  "status": "active"
+}
+```
+
+`warehouseId` accepts either a numeric warehouse ID or an active warehouse code.
+
 ## Payload
 
 ```json
