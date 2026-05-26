@@ -525,12 +525,21 @@ def source_address(source, kind, order=None, fallback=None):
 
     raw_first, raw_last = source_name_parts(raw)
     location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
+    coordinates = raw.get("coordinates") if isinstance(raw.get("coordinates"), dict) else location.get("coordinates") if isinstance(location.get("coordinates"), dict) else {}
+    latitude = coordinates.get("latitude") or coordinates.get("lat")
+    longitude = coordinates.get("longitude") or coordinates.get("lng") or coordinates.get("lon")
+    map_location = source_text(raw.get("mapLocation") or raw.get("map_location") or location.get("mapLocation") or location.get("map_location"))
+    if not map_location and latitude and longitude:
+        map_location = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
+    address_2 = source_text(raw.get("address_2") or raw.get("line2") or raw.get("address2") or raw.get("street2") or location.get("address2"))
+    if map_location and map_location not in address_2:
+        address_2 = " | ".join(part for part in [address_2, f"Map: {map_location}"] if part)
     address.update(
         {
             "first_name": raw_first or first_name,
             "last_name": raw_last or last_name,
             "address": source_text(raw.get("address") or raw.get("line1") or raw.get("address1") or raw.get("street") or raw.get("street1") or location.get("address")) or address["address"],
-            "address_2": source_text(raw.get("address_2") or raw.get("line2") or raw.get("address2") or raw.get("street2") or location.get("address2")),
+            "address_2": address_2,
             "city": source_text(raw.get("city") or raw.get("town") or location.get("city")),
             "pincode": source_text(raw.get("pincode") or raw.get("postal_code") or raw.get("postcode") or raw.get("zip") or location.get("pincode")),
             "state": source_text(raw.get("state") or raw.get("province") or raw.get("region") or location.get("state")),
