@@ -10,11 +10,12 @@ from sqlalchemy import func, or_
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Order, OrderItem, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
+from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.order_payload import order_automation_summary
+from ..utils.payu import PayURefundError, initiate_payu_refund
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
@@ -377,6 +378,67 @@ def api_import_return():
     except (TypeError, ValueError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
+
+
+@api_bp.post("/integrations/order-cancel")
+@integration_key_required
+def api_import_order_cancel():
+    data = request.get_json(silent=True) or {}
+    try:
+        order = find_order_for_action(data)
+        if order:
+            order.status = "cancel_requested"
+        refund, created = create_refund_from_cancel(data, order)
+        log_activity(
+            "order_cancel_request",
+            f"Imported cancel request for {data.get('orderId') or data.get('order_id') or (order.order_number if order else 'order')}",
+            entity_type="Order",
+            entity_id=order.id if order else None,
+            meta={"refund_id": refund.id if refund else None, "refund_created": created},
+        )
+        db.session.commit()
+        return jsonify(
+            {
+                "ok": True,
+                "order": serialize_order(order) if order else None,
+                "refund": serialize_payment_refund(refund) if refund else None,
+                "refund_created": created,
+            }
+        )
+    except (TypeError, ValueError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
+@api_bp.post("/integrations/refunds/<int:refund_id>/approve")
+@api_role_required("manager", "staff")
+def api_approve_payment_refund(refund_id):
+    refund = PaymentRefund.query.get_or_404(refund_id)
+    if refund.status in {"approved", "refunded"}:
+        return jsonify({"ok": True, "refund": serialize_payment_refund(refund)})
+    try:
+        approve_payment_refund(refund)
+        db.session.commit()
+        return jsonify({"ok": True, "refund": serialize_payment_refund(refund)})
+    except (PayURefundError, ValueError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
+@api_bp.post("/integrations/payu/refund-callback")
+def api_payu_refund_callback():
+    payload = request.form.to_dict() if request.form else (request.get_json(silent=True) or {})
+    token = trim_text(payload.get("var2") or payload.get("token") or payload.get("refund_token") or payload.get("request_id"), 23)
+    refund = PaymentRefund.query.filter_by(refund_token=token).first() if token else None
+    if refund:
+        refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
+        status = str(payload.get("status") or payload.get("refund_status") or payload.get("request_status") or "").lower()
+        if status in {"success", "refunded", "1"}:
+            refund.status = "refunded"
+        elif status in {"failed", "failure", "0"}:
+            refund.status = "failed"
+        db.session.commit()
+    return jsonify({"ok": True})
 
 
 @api_bp.post("/stock-in")
@@ -1080,6 +1142,105 @@ def find_order_for_return(data, website_order_id):
     return Order.query.filter(or_(Order.order_number == order_lookup, Order.external_order_id == order_lookup)).first()
 
 
+def find_order_for_action(data):
+    if not isinstance(data, dict):
+        return None
+    lookup = trim_text(data.get("orderId") or data.get("order_id") or data.get("order_number") or data.get("external_order_id"), 120)
+    if not lookup:
+        return None
+    return Order.query.filter(or_(Order.order_number == lookup, Order.external_order_id == lookup)).first()
+
+
+def create_refund_from_cancel(data, order=None):
+    refund_data = data.get("refund") if isinstance(data.get("refund"), dict) else {}
+    payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+    amounts = data.get("amounts") if isinstance(data.get("amounts"), dict) else {}
+    customer = data.get("customer") if isinstance(data.get("customer"), dict) else {}
+    snapshot = data.get("orderSnapshot") if isinstance(data.get("orderSnapshot"), dict) else {}
+    snapshot_payment = snapshot.get("payment") if isinstance(snapshot.get("payment"), dict) else {}
+
+    gateway = trim_text(refund_data.get("gateway") or payment.get("gateway") or snapshot_payment.get("gateway"), 40).lower()
+    payment_method = trim_text(payment.get("method") or snapshot_payment.get("method"), 40).lower()
+    payment_status = trim_text(payment.get("status") or snapshot_payment.get("status"), 40).lower()
+    mihpayid = trim_text(
+        refund_data.get("mihpayid")
+        or refund_data.get("gatewayPaymentId")
+        or payment.get("mihpayid")
+        or payment.get("paymentId")
+        or snapshot_payment.get("mihpayid")
+        or snapshot_payment.get("paymentId"),
+        120,
+    )
+    eligible = bool(refund_data.get("eligible")) or (gateway == "payu" and payment_method == "online" and payment_status in {"paid", "captured", "success"})
+    if not eligible:
+        return None, False
+    if not mihpayid:
+        raise ValueError("PayU refund request needs mihpayid from the paid order")
+
+    request_id = trim_text(data.get("requestId") or refund_data.get("requestId"), 120)
+    existing = None
+    if request_id:
+        existing = PaymentRefund.query.filter_by(request_id=request_id).first()
+    if not existing:
+        existing = PaymentRefund.query.filter_by(gateway_payment_id=mihpayid, status="requested").first()
+    if existing:
+        return existing, False
+
+    order_lookup = trim_text(data.get("orderId") or data.get("order_id") or (order.order_number if order else ""), 120)
+    amount = numeric_or_default(refund_data.get("amount") or amounts.get("total") or snapshot.get("amountTotal"), 0)
+    if amount <= 0:
+        raise ValueError("Refund amount must be greater than zero")
+    refund = PaymentRefund(
+        refund_number=next_refund_number(),
+        order_id=order.id if order else None,
+        website_order_id=order.external_order_id if order else order_lookup,
+        request_id=request_id or None,
+        customer_name=trim_text(customer.get("name") or (order.customer_name if order else ""), 160) or "Customer",
+        customer_phone=trim_text(customer.get("phone") or (order.customer_phone if order else ""), 30),
+        gateway="payu",
+        gateway_payment_id=mihpayid,
+        gateway_transaction_id=trim_text(refund_data.get("txnid") or payment.get("txnid") or snapshot_payment.get("txnid"), 120),
+        amount=amount,
+        currency=trim_text(refund_data.get("currency") or amounts.get("currency") or "INR", 8) or "INR",
+        reason=trim_text(data.get("reason") or refund_data.get("reason") or "Customer cancelled order", 160),
+        status="requested",
+        source_payload=json.dumps(data, default=str, separators=(",", ":"))[:20000],
+    )
+    db.session.add(refund)
+    db.session.flush()
+    return refund, True
+
+
+def next_refund_number():
+    return f"RF-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+
+
+def refund_token(refund):
+    if refund.refund_token:
+        return refund.refund_token
+    token = f"RF{refund.id}{datetime.utcnow().strftime('%H%M%S%f')}"[:23]
+    refund.refund_token = token
+    return token
+
+
+def approve_payment_refund(refund):
+    if refund.gateway != "payu":
+        raise ValueError("Only PayU refunds can be approved from this panel")
+    payload = initiate_payu_refund(mihpayid=refund.gateway_payment_id, token=refund_token(refund), amount=refund.amount)
+    refund.status = "approved"
+    refund.approved_at = datetime.utcnow()
+    refund.approved_by_id = current_api_user_id()
+    refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
+    log_activity(
+        "payment_refund_approved",
+        f"Approved PayU refund {refund.refund_number}",
+        user_id=current_api_user_id(),
+        entity_type="PaymentRefund",
+        entity_id=refund.id,
+        meta={"amount": float(refund.amount or 0), "mihpayid": refund.gateway_payment_id},
+    )
+
+
 def ensure_virtual_return_bins():
     return {
         "customer_return": ensure_virtual_location("RC-DA-01", "RC", "DA", "Virtual", "01"),
@@ -1607,4 +1768,29 @@ def serialize_return_order(return_order):
             }
             for item in return_order.items
         ],
+    }
+
+
+def serialize_payment_refund(refund):
+    if not refund:
+        return None
+    return {
+        "id": refund.id,
+        "refund_number": refund.refund_number,
+        "order_id": refund.order_id,
+        "website_order_id": refund.website_order_id,
+        "request_id": refund.request_id,
+        "customer_name": refund.customer_name,
+        "customer_phone": refund.customer_phone,
+        "gateway": refund.gateway,
+        "gateway_payment_id": refund.gateway_payment_id,
+        "gateway_transaction_id": refund.gateway_transaction_id,
+        "refund_token": refund.refund_token,
+        "amount": float(refund.amount or 0),
+        "currency": refund.currency,
+        "reason": refund.reason,
+        "status": refund.status,
+        "requested_at": refund.requested_at.isoformat() + "Z" if refund.requested_at else None,
+        "approved_at": refund.approved_at.isoformat() + "Z" if refund.approved_at else None,
+        "approved_by": refund.approved_by.full_name if refund.approved_by else "",
     }

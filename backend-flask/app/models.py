@@ -363,6 +363,38 @@ class CustomerReturnItem(TimestampMixin, db.Model):
         return f"<CustomerReturnItem return={self.return_order_id} product={self.product_id}>"
 
 
+class PaymentRefund(TimestampMixin, db.Model):
+    __tablename__ = "payment_refunds"
+
+    id = db.Column(db.Integer, primary_key=True)
+    refund_number = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
+    website_order_id = db.Column(db.String(120), index=True)
+    request_id = db.Column(db.String(120), unique=True, index=True)
+    customer_name = db.Column(db.String(160), nullable=False)
+    customer_phone = db.Column(db.String(30))
+    gateway = db.Column(db.String(40), default="payu", nullable=False)
+    gateway_payment_id = db.Column(db.String(120), index=True)
+    gateway_transaction_id = db.Column(db.String(120), index=True)
+    refund_token = db.Column(db.String(23), unique=True, index=True)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    currency = db.Column(db.String(8), default="INR", nullable=False)
+    reason = db.Column(db.String(160))
+    status = db.Column(db.String(40), default="requested", nullable=False, index=True)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    approved_at = db.Column(db.DateTime)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    gateway_response = db.Column(db.Text)
+    source_payload = db.Column(db.Text)
+    notes = db.Column(db.Text)
+
+    order = db.relationship("Order")
+    approved_by = db.relationship("User")
+
+    def __repr__(self):
+        return f"<PaymentRefund {self.refund_number}>"
+
+
 class OrderItem(TimestampMixin, db.Model):
     __tablename__ = "order_items"
 

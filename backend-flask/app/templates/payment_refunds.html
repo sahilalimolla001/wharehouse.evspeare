@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Refunds - {{ app_name }}{% endblock %}
+{% block page_title %}Payment Refunds{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="text-muted mb-0">Approve PayU refunds created from customer cancellations.</p>
+    <span class="badge {{ 'text-bg-success' if payu_ready else 'text-bg-warning' }}">
+      PayU {{ 'ready' if payu_ready else 'env missing' }}
+    </span>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Refund</th>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>PayU</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for refund in refunds %}
+            <tr>
+              <td>
+                <strong>{{ refund.refund_number }}</strong>
+                <div class="text-muted small">{{ refund.requested_at.strftime('%d %b %Y %I:%M %p') if refund.requested_at else '' }}</div>
+              </td>
+              <td>
+                {% if refund.order %}
+                  <a href="{{ url_for('orders.order_detail', order_id=refund.order.id) }}">{{ refund.order.order_number }}</a>
+                {% else %}
+                  {{ refund.website_order_id or 'External order' }}
+                {% endif %}
+                <div class="text-muted small">{{ refund.reason or 'Customer cancellation' }}</div>
+              </td>
+              <td>
+                {{ refund.customer_name }}
+                <div class="text-muted small">{{ refund.customer_phone or '' }}</div>
+              </td>
+              <td>
+                <span class="text-uppercase">{{ refund.gateway }}</span>
+                <div class="text-muted small">mihpayid: {{ refund.gateway_payment_id or 'missing' }}</div>
+                {% if refund.refund_token %}
+                  <div class="text-muted small">token: {{ refund.refund_token }}</div>
+                {% endif %}
+              </td>
+              <td><strong>{{ refund.currency }} {{ '%.2f'|format(refund.amount or 0) }}</strong></td>
+              <td>
+                <span class="badge {% if refund.status in ['approved', 'refunded'] %}text-bg-success{% elif refund.status in ['failed', 'rejected'] %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                  {{ refund.status }}
+                </span>
+                {% if refund.approved_by %}
+                  <div class="text-muted small">by {{ refund.approved_by.full_name }}</div>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if refund.status in ['requested', 'failed'] %}
+                  <form method="post" action="{{ url_for('refunds.approve_payment_refund', refund_id=refund.id) }}" class="d-inline">
+                    <button class="btn btn-sm btn-success" type="submit" {% if not payu_ready or not refund.gateway_payment_id %}disabled{% endif %}>Approve Refund</button>
+                  </form>
+                  <form method="post" action="{{ url_for('refunds.reject_payment_refund', refund_id=refund.id) }}" class="d-inline">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
+                  </form>
+                {% else %}
+                  <span class="text-muted small">No action</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">No refund requests yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
