@@ -15,66 +15,26 @@
           <strong>Evsphere</strong>
         </a>
         <nav class="nav flex-column gap-1">
-          {% if user_can_page(current_user, 'dashboard.dashboard') %}
-            <a class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}" href="{{ url_for('dashboard.dashboard') }}">Dashboard</a>
-          {% endif %}
-          {% if user_can_page(current_user, 'products.products') %}
-            <a class="nav-link {% if request.endpoint in ['products.products', 'products.product_form'] %}active{% endif %}" href="{{ url_for('products.products') }}">Products</a>
-          {% endif %}
-          {% if current_user_can("manager") and user_can_page(current_user, 'suppliers.suppliers') %}
-            <a class="nav-link {% if request.endpoint in ['suppliers.suppliers', 'suppliers.add_supplier'] %}active{% endif %}" href="{{ url_for('suppliers.suppliers') }}">Suppliers</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'stock.stock_in') %}
-            <a class="nav-link {% if request.endpoint == 'stock.stock_in' %}active{% endif %}" href="{{ url_for('stock.stock_in') }}">Stock In</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'stock.stock_out') %}
-            <a class="nav-link {% if request.endpoint == 'stock.stock_out' %}active{% endif %}" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
-          {% endif %}
-          {% if user_can_page(current_user, 'stock.inventory') %}
-            <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
-          {% endif %}
-          {% if user_can_page(current_user, 'stock.warehouse_locations') %}
-            <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
-          {% endif %}
-          {% if user_can_page(current_user, 'orders.orders') %}
-            <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'users.picker_ops') %}
-            <a class="nav-link {% if request.endpoint == 'users.picker_ops' %}active{% endif %}" href="{{ url_for('users.picker_ops') }}">Picker Ops</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'users.pick_transfer') %}
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('users.pick_transfer') %}active{% endif %}" href="{{ url_for('users.pick_transfer') }}">Pick Transfer</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'shiprocket.create_order') %}
-            <a class="nav-link {% if request.endpoint == 'shiprocket.create_order' %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'shiprocket.shipping_status') %}
-            <a class="nav-link {% if request.endpoint in ['shiprocket.shipping_status', 'shiprocket.webhook_updates'] %}active{% endif %}" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'returns.customer_returns') %}
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('returns.') %}active{% endif %}" href="{{ url_for('returns.customer_returns') }}">Customer Returns</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'refunds.payment_refunds') %}
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('refunds.') %}active{% endif %}" href="{{ url_for('refunds.payment_refunds') }}">Payment Refunds</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'finance.money_tracking') %}
-            <a class="nav-link {% if request.endpoint == 'finance.money_tracking' %}active{% endif %}" href="{{ url_for('finance.money_tracking') }}">Money Tracking</a>
-          {% endif %}
-          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'finance.invoices') %}
-            <a class="nav-link {% if request.endpoint == 'finance.invoices' %}active{% endif %}" href="{{ url_for('finance.invoices') }}">Invoices</a>
-          {% endif %}
-          {% if current_user_can("manager") and user_can_page(current_user, 'reports.reports') %}
-            <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}">Reports</a>
-          {% endif %}
-          {% if current_user_can("admin") and user_can_page(current_user, 'users.users') %}
-            <a class="nav-link {% if request.endpoint == 'users.users' %}active{% endif %}" href="{{ url_for('users.users') }}">Users</a>
-          {% endif %}
-          {% if current_user_can("admin") and user_can_page(current_user, 'users.ops_config') %}
-            <a class="nav-link {% if request.endpoint == 'users.ops_config' %}active{% endif %}" href="{{ url_for('users.ops_config') }}">Ops Config</a>
-          {% endif %}
-          {% if current_user_can("admin") and user_can_page(current_user, 'users.settings') %}
-            <a class="nav-link {% if request.endpoint == 'users.settings' %}active{% endif %}" href="{{ url_for('users.settings') }}">Settings</a>
-          {% endif %}
+          <a class="nav-link {% if request.endpoint == 'dashboard.dashboard' %}active{% endif %}" href="{{ url_for('dashboard.dashboard') }}">Dashboard</a>
+          <a class="nav-link {% if request.endpoint in ['products.products', 'products.product_form'] %}active{% endif %}" href="{{ url_for('products.products') }}">Products</a>
+          <a class="nav-link {% if request.endpoint in ['suppliers.suppliers', 'suppliers.add_supplier'] %}active{% endif %}" href="{{ url_for('suppliers.suppliers') }}">Suppliers</a>
+          <a class="nav-link {% if request.endpoint == 'stock.stock_in' %}active{% endif %}" href="{{ url_for('stock.stock_in') }}">Stock In</a>
+          <a class="nav-link {% if request.endpoint == 'stock.stock_out' %}active{% endif %}" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
+          <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
+          <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
+          <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
+          <a class="nav-link {% if request.endpoint == 'users.picker_ops' %}active{% endif %}" href="{{ url_for('users.picker_ops') }}">Picker Ops</a>
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('users.pick_transfer') %}active{% endif %}" href="{{ url_for('users.pick_transfer') }}">Pick Transfer</a>
+          <a class="nav-link {% if request.endpoint == 'shiprocket.create_order' %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
+          <a class="nav-link {% if request.endpoint in ['shiprocket.shipping_status', 'shiprocket.webhook_updates'] %}active{% endif %}" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('returns.') %}active{% endif %}" href="{{ url_for('returns.customer_returns') }}">Customer Returns</a>
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('refunds.') %}active{% endif %}" href="{{ url_for('refunds.payment_refunds') }}">Payment Refunds</a>
+          <a class="nav-link {% if request.endpoint == 'finance.money_tracking' %}active{% endif %}" href="{{ url_for('finance.money_tracking') }}">Money Tracking</a>
+          <a class="nav-link {% if request.endpoint == 'finance.invoices' %}active{% endif %}" href="{{ url_for('finance.invoices') }}">Invoices</a>
+          <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}">Reports</a>
+          <a class="nav-link {% if request.endpoint == 'users.users' %}active{% endif %}" href="{{ url_for('users.users') }}">Users</a>
+          <a class="nav-link {% if request.endpoint == 'users.ops_config' %}active{% endif %}" href="{{ url_for('users.ops_config') }}">Ops Config</a>
+          <a class="nav-link {% if request.endpoint == 'users.settings' %}active{% endif %}" href="{{ url_for('users.settings') }}">Settings</a>
         </nav>
       </aside>
 

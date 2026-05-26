@@ -105,8 +105,8 @@ def endpoint_permission(endpoint):
 
 
 def user_can_page(user, endpoint):
-    if not user or user.role == "admin":
-        return bool(user)
+    if not user:
+        return False
     permission = endpoint_permission(endpoint)
     if not permission:
         return True
@@ -153,8 +153,11 @@ def selected_warehouse(user=None):
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
-        if not get_current_user():
+        user = get_current_user()
+        if not user:
             return redirect(url_for("auth.login", next=request.path))
+        if not user_can_page(user, request.endpoint):
+            abort(403)
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -168,10 +171,8 @@ def role_required(*roles):
             if not user:
                 return redirect(url_for("auth.login", next=request.path))
             if not user_has_role(user, *roles):
-                flash("You do not have permission to open that page.", "warning")
-                return redirect(url_for("dashboard.dashboard"))
+                abort(403)
             if not user_can_page(user, request.endpoint):
-                flash("Page permission approval required.", "warning")
                 abort(403)
             return view(*args, **kwargs)
 

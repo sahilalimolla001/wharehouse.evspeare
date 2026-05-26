@@ -1,6 +1,6 @@
 import secrets
 
-from flask import Flask, abort, request, session
+from flask import Flask, abort, render_template, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
@@ -33,6 +33,10 @@ def create_app(config_class=Config):
     @app.template_filter("money")
     def money(value):
         return f"Rs. {float(value or 0):,.2f}"
+
+    @app.errorhandler(403)
+    def access_denied(error):
+        return render_template("403.html"), 403
 
     return app
 
