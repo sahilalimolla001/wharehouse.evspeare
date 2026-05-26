@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, Response, current_app, jsonify, redirect, request, session, url_for
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
@@ -142,7 +143,7 @@ def api_me():
     return jsonify({"ok": True, "user": serialize_user(user)})
 
 
-@api_bp.route("/central-panel/users", methods=["GET", "POST", "OPTIONS"])
+@api_bp.route("/central-panel/users", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 @integration_key_required
 def api_central_panel_users():
     if request.method == "OPTIONS":
@@ -156,32 +157,57 @@ def api_central_panel_users():
 
     data = request.get_json(silent=True) or {}
     email = (data.get("userId") or data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
-    warehouse_id = data.get("warehouseId") or data.get("warehouse_id")
-    if not email or not password or not warehouse_id:
-        return jsonify({"ok": False, "message": "userId, password and warehouseId are required"}), 400
+    user_id = data.get("id")
+    if request.method in {"PUT", "PATCH", "DELETE"}:
+        user = User.query.filter_by(id=user_id).first() if str(user_id or "").isdigit() else None
+        if not user and email:
+            user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"ok": False, "message": "User not found"}), 404
+        if request.method == "DELETE":
+            db.session.delete(user)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                return jsonify({"ok": False, "message": "User has linked operations. Set status to blocked instead."}), 409
+            return jsonify({"ok": True})
+    else:
+        password = data.get("password") or ""
+        warehouse_id = data.get("warehouseId") or data.get("warehouse_id")
+        if not email or not password or not warehouse_id:
+            return jsonify({"ok": False, "message": "userId, password and warehouseId are required"}), 400
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            user = User(email=email)
+            db.session.add(user)
 
+    warehouse_id = data.get("warehouseId") or data.get("warehouse_id")
     warehouse = resolve_warehouse(warehouse_id)
-    if not warehouse:
+    if warehouse_id and not warehouse:
+        return jsonify({"ok": False, "message": "Warehouse not found"}), 404
+    if request.method == "POST" and not warehouse:
         return jsonify({"ok": False, "message": "Warehouse not found"}), 404
 
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        user = User(email=email)
-        db.session.add(user)
-
-    user.full_name = (data.get("name") or data.get("full_name") or email).strip()
-    user.phone = (data.get("phone") or "").strip()
-    user.role = (data.get("role") or "picker").strip()
-    user.is_active = data.get("status", "active") != "blocked"
-    user.set_password(password)
-    user.warehouses = [warehouse]
+    if email:
+        user.email = email
+    user.full_name = (data.get("name") or data.get("full_name") or user.full_name or user.email).strip()
+    user.phone = (data.get("phone") if "phone" in data else user.phone or "").strip()
+    user.role = (data.get("role") or user.role or "picker").strip()
+    user.is_active = data.get("status", "active" if user.is_active else "blocked") != "blocked"
+    if data.get("password"):
+        user.set_password(data["password"])
+    if warehouse:
+        user.warehouses = [warehouse]
     requested_permissions = data.get("page_permissions") or data.get("permissions") or []
-    if not isinstance(requested_permissions, list):
-        requested_permissions = []
-    user.page_permissions = json.dumps([value for value in requested_permissions if value in PAGE_PERMISSIONS])
+    if isinstance(requested_permissions, list):
+        user.page_permissions = json.dumps([value for value in requested_permissions if value in PAGE_PERMISSIONS])
     ensure_picker_code(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": "User ID / email already exists"}), 409
     return jsonify({"ok": True, "user": serialize_central_panel_user(user)})
 
 
