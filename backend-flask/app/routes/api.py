@@ -1649,6 +1649,23 @@ def find_location(identifier=None, required=False):
         location = WarehouseLocation.query.filter(*filters).first()
         if location:
             return location
+        compact_candidates = []
+        if len(zone) > 1:
+            compact_candidates.append((zone[0], zone[1:], rack, bin_code))
+        if len(bin_code) > 1:
+            compact_candidates.append((zone, rack, bin_code[:-1], bin_code[-1]))
+        for compact_zone, compact_rack, compact_shelf, compact_bin in compact_candidates:
+            compact_filters = [
+                func.lower(WarehouseLocation.zone) == compact_zone.lower(),
+                func.lower(WarehouseLocation.rack) == compact_rack.lower(),
+                func.lower(WarehouseLocation.shelf) == compact_shelf.lower(),
+                func.lower(WarehouseLocation.bin_code) == compact_bin.lower(),
+            ]
+            if current_api_warehouse():
+                compact_filters.append(WarehouseLocation.warehouse_id == current_api_warehouse().id)
+            location = WarehouseLocation.query.filter(*compact_filters).first()
+            if location:
+                return location
     if len(parts) >= 4:
         warehouse = None
         if len(parts) >= 5:
