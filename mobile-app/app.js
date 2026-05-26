@@ -40,6 +40,19 @@ let activeReturnConfirmed = false;
 let lastSlaAlertAt = 0;
 let autoPilotRunning = false;
 const defaultScreenId = "hub-screen";
+const pickerScreenPermissions = {
+  "hub-screen": "picker_home",
+  "orders-screen": "picker_pick",
+  "pick-screen": "picker_pick",
+  "dispatch-screen": "picker_ship",
+  "return-screen": "picker_returns",
+  "pv-screen": "picker_returns",
+  "stock-screen": "picker_stock_in",
+  "stock-take-screen": "picker_stock_take",
+  "move-screen": "picker_move_stock",
+  "inventory-screen": "picker_bins",
+  "tools-screen": "picker_tools",
+};
 const standaloneApp = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 
 const $ = (selector) => document.querySelector(selector);
@@ -288,6 +301,10 @@ function restoreFromHistory(event) {
 }
 
 function showScreen(screenId, options = {}) {
+  if (!options.skipPermissionCheck && !canOpenPickerScreen(screenId)) {
+    toast("You are not allowed to access this page.");
+    return;
+  }
   const previousScreenId = activeScreenId();
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === screenId));
   $$(".drawer-nav [data-screen]").forEach((button) => button.classList.toggle("active", button.dataset.screen === screenId));
@@ -406,7 +423,48 @@ function unlockApp() {
   $("#auth-gate").classList.remove("active");
   $(".mobile-shell").removeAttribute("aria-hidden");
   applyUserWarehouses(store.user);
+  applyPickerScreenPermissions();
   startAutoRefresh();
+}
+
+function applyPickerScreenPermissions() {
+  const firstAllowedScreen = Object.keys(pickerScreenPermissions).find((screenId) => canOpenPickerScreen(screenId));
+  $$(".drawer-nav [data-screen], [data-screen-jump]").forEach((button) => {
+    const screenId = button.dataset.screen || button.dataset.screenJump;
+    button.hidden = !canOpenPickerScreen(screenId);
+  });
+  const currentScreen = activeScreenId();
+  if (currentScreen && !canOpenPickerScreen(currentScreen) && firstAllowedScreen) {
+    showScreen(firstAllowedScreen, { history: false, skipPermissionCheck: true });
+  }
+}
+
+function canOpenPickerScreen(screenId) {
+  if (store.user?.role !== "picker") return true;
+  const permission = pickerScreenPermissions[screenId];
+  if (!permission) return true;
+  const allowed = pickerGrantedPermissions();
+  return allowed.has(permission);
+}
+
+function pickerGrantedPermissions() {
+  const values = Array.isArray(store.user?.permissions) ? store.user.permissions : [];
+  if (!values.length) return new Set(Object.values(pickerScreenPermissions));
+  const allowed = new Set(values);
+  const legacy = {
+    dashboard: ["picker_home"],
+    orders: ["picker_pick"],
+    picker_ops: ["picker_tools"],
+    pick_transfer: ["picker_pick"],
+    shiprocket: ["picker_ship"],
+    shipping_status: ["picker_ship"],
+    returns: ["picker_returns"],
+    stock_in: ["picker_stock_in"],
+    inventory: ["picker_stock_take", "picker_bins"],
+    locations: ["picker_move_stock"],
+  };
+  values.forEach((value) => (legacy[value] || []).forEach((mapped) => allowed.add(mapped)));
+  return allowed;
 }
 
 function applyUserWarehouses(user) {
@@ -468,12 +526,16 @@ async function refreshAll() {
     toast("Offline mode: cached queue shown.");
     return;
   }
-  await Promise.all([loadDashboard(), loadOrders(), loadReturns()]);
+  const loaders = [];
+  if (canOpenPickerScreen("hub-screen")) loaders.push(loadDashboard());
+  if (canOpenPickerScreen("orders-screen") || canOpenPickerScreen("dispatch-screen")) loaders.push(loadOrders());
+  if (canOpenPickerScreen("return-screen")) loaders.push(loadReturns());
+  await Promise.all(loaders);
   renderHub();
   renderOpsAutomation();
   renderTools();
   renderStockTakes();
-  await runAutoPilot();
+  if (canOpenPickerScreen("orders-screen")) await runAutoPilot();
 }
 
 function startAutoRefresh() {

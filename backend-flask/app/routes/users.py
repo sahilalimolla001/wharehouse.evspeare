@@ -10,7 +10,7 @@ from ..utils.google_storage import test_storage_connection
 from ..utils.picker_identity import PICKER_ROLES, ensure_picker_code
 from ..utils.picker_ops import picker_ops_summary
 from ..utils.shiprocket import ShiprocketError, is_shiprocket_configured, test_shiprocket_connection
-from .auth import role_required, selected_warehouse
+from .auth import ADMIN_PANEL_PERMISSIONS, PICKER_APP_PERMISSIONS, role_required, selected_warehouse
 
 users_bp = Blueprint("users", __name__)
 
@@ -52,7 +52,7 @@ def users():
             user_permissions[user.id] = set(json.loads(user.page_permissions or "[]"))
         except (TypeError, json.JSONDecodeError):
             user_permissions[user.id] = set()
-    return render_template("users.html", users=users_list, warehouses=warehouses, user_permissions=user_permissions)
+    return render_template("users.html", users=users_list, warehouses=warehouses, user_permissions=user_permissions, admin_panel_permissions=ADMIN_PANEL_PERMISSIONS, picker_app_permissions=PICKER_APP_PERMISSIONS)
 
 
 @users_bp.post("/users/<int:user_id>/warehouses")

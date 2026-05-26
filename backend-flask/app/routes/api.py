@@ -22,7 +22,7 @@ from ..utils.picker_identity import ensure_picker_code
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
-from .auth import PAGE_PERMISSIONS, user_has_role, user_page_permissions
+from .auth import ADMIN_PANEL_PERMISSIONS, PAGE_PERMISSIONS, PICKER_APP_PERMISSIONS, user_has_role, user_page_permissions
 from .shiprocket import ShiprocketError, create_shiprocket_return_for_customer_return, ensure_shiprocket_label, ensure_shiprocket_order, dispatch_order_with_shiprocket
 from ..utils.shiprocket import cancel_shiprocket_order
 
@@ -84,6 +84,22 @@ def api_role_required(*roles):
                 return jsonify({"ok": False, "message": "Login required"}), 401
             if not user_has_role(user, *roles):
                 return jsonify({"ok": False, "message": "Permission denied"}), 403
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+def picker_permission_required(*permissions):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if request.method == "OPTIONS":
+                return "", 204
+            user = current_api_user()
+            if user and user.role == "picker" and not picker_has_permission(user, *permissions):
+                return jsonify({"ok": False, "message": "You are not allowed to access this page."}), 403
             return view(*args, **kwargs)
 
         return wrapped
@@ -201,7 +217,8 @@ def api_central_panel_users():
         user.warehouses = [warehouse]
     requested_permissions = data.get("page_permissions") or data.get("permissions") or []
     if isinstance(requested_permissions, list):
-        user.page_permissions = json.dumps([value for value in requested_permissions if value in PAGE_PERMISSIONS])
+        valid_permissions = set(ADMIN_PANEL_PERMISSIONS) | set(PAGE_PERMISSIONS) | set(PICKER_APP_PERMISSIONS)
+        user.page_permissions = json.dumps([value for value in requested_permissions if value in valid_permissions])
     ensure_picker_code(user)
     try:
         db.session.commit()
@@ -222,6 +239,7 @@ def api_central_panel_warehouses():
 
 @api_bp.get("/dashboard")
 @api_login_required
+@picker_permission_required("picker_home")
 def api_dashboard():
     today_start = datetime.combine(datetime.utcnow().date(), time.min)
     warehouse = current_api_warehouse()
@@ -354,6 +372,7 @@ def serve_product_image(product):
 
 @api_bp.get("/scan/<path:code>")
 @api_login_required
+@picker_permission_required("picker_pick", "picker_stock_in", "picker_stock_take", "picker_move_stock", "picker_bins", "picker_returns")
 def api_scan(code):
     product = find_product(identifier=code)
     if product:
@@ -386,6 +405,7 @@ def api_warehouses():
 
 @api_bp.get("/location-inventory/<path:identifier>")
 @api_role_required("manager", "staff", "picker", "packer")
+@picker_permission_required("picker_pick", "picker_stock_in", "picker_stock_take", "picker_move_stock", "picker_bins")
 def api_location_inventory(identifier):
     try:
         location = find_location(identifier=identifier, required=True)
@@ -525,7 +545,8 @@ def api_razorpay_webhook():
 
 
 @api_bp.post("/stock-in")
-@api_role_required("manager", "staff")
+@api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_stock_in")
 def api_stock_in():
     data = request.form if request.form else (request.get_json(silent=True) or {})
     try:
@@ -580,6 +601,7 @@ def api_stock_out():
 
 @api_bp.post("/location-update")
 @api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_move_stock")
 def api_location_update():
     data = request.get_json(silent=True) or {}
     try:
@@ -616,6 +638,7 @@ def api_location_update():
 
 @api_bp.get("/pick-list")
 @api_role_required("manager", "staff", "picker", "packer", "delivery")
+@picker_permission_required("picker_pick", "picker_ship")
 def api_pick_list():
     user = current_api_user()
     warehouse = current_api_warehouse()
@@ -641,6 +664,7 @@ def api_pick_list():
 
 @api_bp.get("/returns/pick-list")
 @api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_returns")
 def api_return_pick_list():
     ensure_virtual_return_bins()
     db.session.commit()
@@ -651,6 +675,7 @@ def api_return_pick_list():
 
 @api_bp.post("/returns/<int:return_id>/items/<int:item_id>/pick")
 @api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_returns")
 def api_return_item_pick(return_id, item_id):
     data = request.get_json(silent=True) or {}
     return_order = CustomerReturnOrder.query.get_or_404(return_id)
@@ -674,6 +699,7 @@ def api_return_item_pick(return_id, item_id):
 
 @api_bp.post("/returns/<int:return_id>/initiate-pv")
 @api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_returns")
 def api_return_initiate_pv(return_id):
     return_order = CustomerReturnOrder.query.get_or_404(return_id)
     if not return_order.items or not all(item.picked_quantity >= item.expected_quantity for item in return_order.items):
@@ -686,6 +712,7 @@ def api_return_initiate_pv(return_id):
 
 @api_bp.post("/returns/<int:return_id>/items/<int:item_id>/stock-in")
 @api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_returns")
 def api_return_item_stock_in(return_id, item_id):
     data = request.get_json(silent=True) or {}
     return_order = CustomerReturnOrder.query.get_or_404(return_id)
@@ -738,6 +765,7 @@ def api_return_item_stock_in(return_id, item_id):
 
 @api_bp.post("/orders/<int:order_id>/status")
 @api_role_required("manager", "staff", "picker", "packer", "delivery")
+@picker_permission_required("picker_pick")
 def api_order_status(order_id):
     data = request.get_json(silent=True) or {}
     order = Order.query.get_or_404(order_id)
@@ -761,6 +789,7 @@ def api_order_status(order_id):
 
 @api_bp.post("/orders/<int:order_id>/dispatch")
 @api_role_required("manager", "staff", "picker", "packer", "delivery")
+@picker_permission_required("picker_ship")
 def api_dispatch_order(order_id):
     data = request.get_json(silent=True) or {}
     order = Order.query.get_or_404(order_id)
@@ -771,6 +800,7 @@ def api_dispatch_order(order_id):
 
 @api_bp.post("/orders/<int:order_id>/label")
 @api_role_required("manager", "staff", "picker", "packer", "delivery")
+@picker_permission_required("picker_ship")
 def api_order_label(order_id):
     order = Order.query.get_or_404(order_id)
     if not can_access_order(current_api_user(), order):
@@ -807,6 +837,7 @@ def dispatch_order_api_response(order, data):
 
 @api_bp.post("/orders/<int:order_id>/items/<int:item_id>/pick")
 @api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_pick")
 def api_order_item_pick(order_id, item_id):
     data = request.get_json(silent=True) or {}
     order = Order.query.get_or_404(order_id)
@@ -853,6 +884,7 @@ def api_order_item_pick(order_id, item_id):
 
 @api_bp.post("/orders/<int:order_id>/items/<int:item_id>/pack")
 @api_role_required("manager", "staff", "picker", "packer")
+@picker_permission_required("picker_pick")
 def api_order_item_pack(order_id, item_id):
     data = request.get_json(silent=True) or {}
     order = Order.query.get_or_404(order_id)
@@ -885,6 +917,24 @@ def api_order_item_pack(order_id, item_id):
 def current_api_user_id():
     user = current_api_user()
     return user.id if user else None
+
+
+def picker_has_permission(user, *requested):
+    if not user or user.role != "picker":
+        return True
+    allowed = user_page_permissions(user) if user.page_permissions else set(role_permissions("picker"))
+    legacy = {
+        "picker_home": {"dashboard"},
+        "picker_pick": {"orders", "picker_ops", "pick_transfer"},
+        "picker_ship": {"shiprocket", "shipping_status"},
+        "picker_returns": {"returns"},
+        "picker_stock_in": {"stock_in"},
+        "picker_stock_take": {"inventory"},
+        "picker_move_stock": {"locations"},
+        "picker_bins": {"inventory"},
+        "picker_tools": {"picker_ops"},
+    }
+    return any(permission in allowed or bool(legacy.get(permission, set()) & allowed) for permission in requested)
 
 
 def order_count_query(statuses, warehouse=None):
@@ -1697,6 +1747,7 @@ def parse_gs_url(image_url):
 def serialize_user(user):
     warehouses = accessible_api_warehouses(user)
     current = current_api_warehouse() if user == current_api_user() else (warehouses[0] if warehouses else None)
+    permissions = sorted(user_page_permissions(user)) if user.page_permissions else role_permissions(user.role)
     return {
         "id": user.id,
         "name": user.full_name,
@@ -1706,6 +1757,8 @@ def serialize_user(user):
         "pickerCode": user.picker_code,
         "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
         "warehouse": serialize_warehouse(current) if current else None,
+        "permissions": permissions,
+        "page_permissions": permissions,
     }
 
 
@@ -1742,10 +1795,10 @@ def resolve_warehouse(identifier):
 
 def role_permissions(role):
     permissions = {
-        "admin": list(PAGE_PERMISSIONS.keys()),
+        "admin": list(ADMIN_PANEL_PERMISSIONS.keys()),
         "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "invoices", "reports"],
         "staff": ["dashboard", "products", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns"],
-        "picker": ["dashboard", "orders", "picker_ops", "pick_transfer"],
+        "picker": list(PICKER_APP_PERMISSIONS.keys()),
         "packer": ["dashboard", "orders", "stock_out", "shiprocket", "shipping_status"],
         "delivery": ["dashboard", "orders", "shipping_status"],
     }

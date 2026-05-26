@@ -56,6 +56,34 @@ PAGE_PERMISSIONS = {
     "settings": "Settings",
 }
 
+ADMIN_PANEL_PERMISSIONS = {
+    "panel_dashboard": "Dashboard",
+    "panel_orders": "Orders",
+    "panel_customers": "Customers",
+    "panel_pickers": "Pickers",
+    "panel_returns": "Returns",
+    "panel_inventory": "Inventory",
+    "panel_user_create": "User Creating",
+    "panel_shiprocket": "Shiprocket",
+    "panel_catalog": "Catalog",
+    "panel_tracking": "Order Tracking",
+    "panel_content": "Website / App Edit",
+    "panel_ops_config": "Warehouse Ops Config",
+    "panel_automation": "Automation",
+}
+
+PICKER_APP_PERMISSIONS = {
+    "picker_home": "Home",
+    "picker_pick": "Pick",
+    "picker_ship": "Ship",
+    "picker_returns": "Return",
+    "picker_stock_in": "Stock In",
+    "picker_stock_take": "Stock Take",
+    "picker_move_stock": "Move Stock",
+    "picker_bins": "Bins",
+    "picker_tools": "Tools",
+}
+
 LEGACY_PAGE_PERMISSIONS = {
     "stock": {"stock_in", "stock_out", "inventory", "locations"},
     "picking": {"picker_ops", "pick_transfer"},
@@ -70,7 +98,7 @@ def user_page_permissions(user):
         values = []
     allowed = set()
     for value in values:
-        if value in PAGE_PERMISSIONS:
+        if value in PAGE_PERMISSIONS or value in ADMIN_PANEL_PERMISSIONS or value in PICKER_APP_PERMISSIONS:
             allowed.add(value)
         allowed.update(LEGACY_PAGE_PERMISSIONS.get(value, set()))
     return allowed
