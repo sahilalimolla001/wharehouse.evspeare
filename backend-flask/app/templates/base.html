@@ -28,6 +28,7 @@
           <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
           <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
           {% if current_user_can("manager", "staff") %}
+            <a class="nav-link {% if request.endpoint == 'users.picker_ops' %}active{% endif %}" href="{{ url_for('users.picker_ops') }}">Picker Ops</a>
             <a class="nav-link {% if request.endpoint == 'shiprocket.create_order' %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
             <a class="nav-link {% if request.endpoint in ['shiprocket.shipping_status', 'shiprocket.webhook_updates'] %}active{% endif %}" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
             <a class="nav-link {% if request.endpoint and request.endpoint.startswith('returns.') %}active{% endif %}" href="{{ url_for('returns.customer_returns') }}">Customer Returns</a>

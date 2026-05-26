@@ -85,11 +85,11 @@ function bindActions() {
   $("#priority-filter").addEventListener("change", changePriorityFilter);
   $("#optimize-route").addEventListener("click", optimizeRoute);
   $("#batch-mode-toggle").addEventListener("click", toggleBatchMode);
-  $("#run-automation").addEventListener("click", runAutomationCheck);
-  $("#auto-start-next").addEventListener("click", startBestOrder);
-  $("#retry-offline").addEventListener("click", retryOfflineQueue);
-  $("#copy-shift-summary").addEventListener("click", copyShiftSummary);
-  $("#copy-route-plan").addEventListener("click", copyRoutePlan);
+  $("#run-automation")?.addEventListener("click", runAutomationCheck);
+  $("#auto-start-next")?.addEventListener("click", startBestOrder);
+  $("#retry-offline")?.addEventListener("click", retryOfflineQueue);
+  $("#copy-shift-summary")?.addEventListener("click", copyShiftSummary);
+  $("#copy-route-plan")?.addEventListener("click", copyRoutePlan);
   $("#tools-refresh").addEventListener("click", renderTools);
   $("#toggle-break-mode").addEventListener("click", toggleBreakMode);
   $("#tote-form").addEventListener("submit", assignTote);
@@ -260,7 +260,6 @@ function showScreen(screenId, options = {}) {
     "hub-screen": "Command",
     "orders-screen": "Orders",
     "pick-screen": "Order Picking",
-    "automation-screen": "Ops Automation",
     "dispatch-screen": "Dispatch",
     "return-screen": "Returns",
     "pv-screen": "Return PV",
@@ -661,8 +660,9 @@ function currentWarehouseName() {
 function renderOrderQueue() {
   const orders = filteredPickOrders();
   const target = $("#order-queue");
+  $("#orders-screen")?.classList.toggle("no-picks", !orders.length);
   if (!orders.length) {
-    target.innerHTML = `<div class="empty-state">No pick orders right now.</div>`;
+    target.innerHTML = `<div class="empty-state">No picks assigned. Online raho, next order auto assign hoga.</div>`;
     return;
   }
 
@@ -783,6 +783,7 @@ function renderBatchGroups() {
 }
 
 function renderOpsAutomation() {
+  if (!$("#auto-next-order")) return;
   const best = filteredPickOrders()[0];
   const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
   const totalQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
@@ -1187,7 +1188,17 @@ function slaMinutesLeft(order) {
 
 function routeKey(order) {
   const firstItem = (order.items || []).find(Boolean) || {};
-  return String(firstItem.location_barcode || firstItem.location_name || firstItem.bin || firstItem.location || order.order_number || "");
+  const recommended = firstItem.recommended_bin?.location;
+  return String(
+    recommended?.barcode ||
+      recommended?.full_code ||
+      firstItem.location_barcode ||
+      firstItem.location_name ||
+      firstItem.bin ||
+      firstItem.location ||
+      order.order_number ||
+      ""
+  );
 }
 
 function routeScore(orders) {
@@ -2277,6 +2288,7 @@ async function apiFetch(path, options = {}) {
   if (!isFormData) init.headers["Content-Type"] = "application/json";
   if (store.token && options.auth !== false) init.headers.Authorization = `Bearer ${store.token}`;
   if (store.warehouseId && options.auth !== false) init.headers["X-Warehouse-Id"] = String(store.warehouseId);
+  if (options.auth !== false) init.headers["X-Picker-Online"] = isOnlineMode() ? "true" : "false";
   if (options.body) init.body = isFormData ? options.body : JSON.stringify(options.body);
 
   let response;

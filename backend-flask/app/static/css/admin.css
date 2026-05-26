@@ -501,6 +501,22 @@ body {
   margin-bottom: 16px;
 }
 
+.picker-analysis-list {
+  display: grid;
+  gap: 12px;
+}
+
+.picker-analysis-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.admin-bin-hints {
+  margin-top: 8px;
+}
+
 @media (max-width: 1050px) {
   .admin-shell {
     grid-template-columns: 1fr;

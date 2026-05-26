@@ -86,9 +86,9 @@
 
           <div class="mission-rail">
             <button data-screen-jump="orders-screen" type="button"><b>Pick</b><span>Express queue</span></button>
-            <button data-screen-jump="automation-screen" type="button"><b>Ops</b><span>Route + SLA</span></button>
             <button data-screen-jump="dispatch-screen" type="button"><b>Handoff</b><span>Packed orders</span></button>
             <button data-screen-jump="stock-screen" type="button"><b>Stock</b><span>Inward + bin</span></button>
+            <button data-screen-jump="inventory-screen" type="button"><b>Bins</b><span>Lookup stock</span></button>
           </div>
 
           <div class="section-head">
@@ -156,68 +156,6 @@
             <button id="back-to-orders" type="button">Back</button>
             <button class="primary" id="mark-packed" type="button">Mark Packed</button>
           </div>
-        </section>
-
-        <section class="screen" id="automation-screen">
-          <div class="automation-hero">
-            <div>
-              <p class="section-kicker">Quick Commerce Ops</p>
-              <h2>Live Picker Automation</h2>
-            </div>
-            <button class="primary" id="run-automation" type="button">Run Check</button>
-          </div>
-
-          <div class="automation-grid">
-            <article><span>Auto Assign</span><strong id="auto-next-order">--</strong><small>Best order</small></article>
-            <article><span>ETA Breach</span><strong id="auto-sla-count">0</strong><small>Orders under pressure</small></article>
-            <article><span>Offline Queue</span><strong id="auto-offline-count">0</strong><small>Pending sync</small></article>
-            <article><span>Productivity</span><strong id="auto-productivity">--</strong><small>Picked progress</small></article>
-            <article><span>Route Stops</span><strong id="auto-route-stops">0</strong><small>Bins in sequence</small></article>
-            <article><span>Batchable</span><strong id="auto-batchable">0</strong><small>SKU groups</small></article>
-            <article><span>Quality Gate</span><strong id="auto-quality">--</strong><small>Pack readiness</small></article>
-            <article><span>Workload</span><strong id="auto-workload">--</strong><small>Queue pressure</small></article>
-          </div>
-
-          <div class="ops-toolbar">
-            <button id="auto-start-next" class="primary" type="button">Start Best Order</button>
-            <button id="retry-offline" type="button">Retry Offline Sync</button>
-            <button id="copy-shift-summary" type="button">Copy Shift Summary</button>
-          </div>
-
-          <div class="settings-list">
-            <button class="setting-row" data-automation-toggle="autoAssign" type="button">
-              <span><strong>Smart auto assignment</strong><small>Next order SLA, urgency aur bin route se choose hoga.</small></span>
-              <b id="toggle-autoAssign">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="shortageAlert" type="button">
-              <span><strong>Shortage & substitution alert</strong><small>Missing SKU ko exception queue me turant dikhayega.</small></span>
-              <b id="toggle-shortageAlert">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="routeAssist" type="button">
-              <span><strong>Route assist</strong><small>Picker queue bin aisle order me sort hogi.</small></span>
-              <b id="toggle-routeAssist">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="slaAlerts" type="button">
-              <span><strong>SLA push alerts</strong><small>High-risk orders ke liye local device alert ready rakhega.</small></span>
-              <b id="toggle-slaAlerts">Off</b>
-            </button>
-            <button class="setting-row" data-automation-toggle="autoPack" type="button">
-              <span><strong>Auto pack after pick</strong><small>Last item pick hote hi order packed queue me chala jayega.</small></span>
-              <b id="toggle-autoPack">Off</b>
-            </button>
-          </div>
-
-          <div class="section-head">
-            <h2>Exception Queue</h2>
-            <button data-refresh-orders type="button">Refresh</button>
-          </div>
-          <div class="card-list" id="exception-list"></div>
-
-          <div class="section-head">
-            <h2>Route Timeline</h2>
-            <button id="copy-route-plan" type="button">Copy Route</button>
-          </div>
-          <div class="card-list" id="route-timeline"></div>
         </section>
 
         <section class="screen" id="dispatch-screen">
@@ -333,7 +271,7 @@
             <button data-screen-jump="stock-screen" type="button"><b>Stock In</b><span>Receive inventory</span></button>
             <button data-screen-jump="move-screen" type="button"><b>Move</b><span>Bin to bin</span></button>
             <button data-screen-jump="inventory-screen" type="button"><b>Bins</b><span>Lookup stock</span></button>
-            <button data-screen-jump="automation-screen" type="button"><b>Ops</b><span>Automation</span></button>
+            <button data-screen-jump="orders-screen" type="button"><b>Pick</b><span>Assigned queue</span></button>
           </div>
 
           <div class="tool-grid">
@@ -386,7 +324,6 @@
       <nav class="bottom-nav" aria-label="Picker navigation">
         <button class="active" data-screen="hub-screen" type="button">Home</button>
         <button data-screen="orders-screen" type="button">Pick</button>
-        <button data-screen="automation-screen" type="button">Ops</button>
         <button data-screen="dispatch-screen" type="button">Ship</button>
         <button data-screen="return-screen" type="button">Return</button>
         <button data-screen="tools-screen" type="button">Tools</button>

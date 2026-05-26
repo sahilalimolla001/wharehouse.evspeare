@@ -5,8 +5,9 @@ from ..models import CustomerReturnOrder, Inventory, Order, Product, User, Wareh
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import test_storage_connection
+from ..utils.picker_ops import picker_ops_summary
 from ..utils.shiprocket import ShiprocketError, is_shiprocket_configured, test_shiprocket_connection
-from .auth import role_required
+from .auth import role_required, selected_warehouse
 
 users_bp = Blueprint("users", __name__)
 
@@ -90,6 +91,14 @@ def ops_config():
         "Storage": "Connected" if current_app.config.get("GOOGLE_CLOUD_STORAGE_BUCKET") else "Not configured",
     }
     return render_template("ops_config.html", rules=rules, readiness=readiness, integrations=integrations)
+
+
+@users_bp.route("/picker-ops")
+@role_required("manager", "staff")
+def picker_ops():
+    warehouse = selected_warehouse()
+    summary = picker_ops_summary(warehouse)
+    return render_template("picker_ops.html", warehouse=warehouse, **summary)
 
 
 @users_bp.post("/settings/test-google-storage")

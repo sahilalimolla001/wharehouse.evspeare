@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block page_title %}Picker Ops{% endblock %}
+
+{% block content %}
+  <section class="metric-grid mb-3">
+    <article class="metric-card">
+      <span>Floor Orders</span>
+      <strong>{{ orders|length }}</strong>
+    </article>
+    <article class="metric-card success">
+      <span>Bin Ready</span>
+      <strong>{{ ready_count }}</strong>
+    </article>
+    <article class="metric-card warning">
+      <span>Shortage Risk</span>
+      <strong>{{ shortage_count }}</strong>
+    </article>
+    <article class="metric-card express">
+      <span>Assigned</span>
+      <strong>{{ assigned_count }}</strong>
+    </article>
+  </section>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Order Bin Analysis</h2>
+          <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
+        </div>
+        <div class="picker-analysis-list">
+          {% for order, analysis in analyses %}
+            <article class="picker-analysis-card">
+              <div class="order-head">
+                <div>
+                  <strong>{{ order.order_number }}</strong>
+                  <span>{{ order.customer_name }} / {{ order.status|title }}</span>
+                </div>
+                <b class="{{ 'text-success' if analysis.ready else 'text-warning' }}">{{ "Ready" if analysis.ready else "Check stock" }}</b>
+              </div>
+              <div class="bin-hints admin-bin-hints">
+                {% for bin in analysis.route_bins %}
+                  <code>{{ bin }}</code>
+                {% else %}
+                  <code>No bin found</code>
+                {% endfor %}
+              </div>
+              <div class="table-responsive mt-2">
+                <table class="table table-sm align-middle">
+                  <thead><tr><th>SKU</th><th>Qty</th><th>Available</th><th>Recommended Bin</th><th>Short</th></tr></thead>
+                  <tbody>
+                    {% for item in analysis.items %}
+                      <tr>
+                        <td>{{ item.sku }}<br><small class="text-secondary">{{ item.product }}</small></td>
+                        <td>{{ item.remaining_quantity }}</td>
+                        <td>{{ item.available_quantity }}</td>
+                        <td>{{ item.recommended_bin.location.full_code if item.recommended_bin else "-" }}</td>
+                        <td>{{ item.shortage_quantity }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          {% else %}
+            <div class="empty-state">No floor orders right now.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-4">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Pickers</h2>
+        </div>
+        <div class="picker-analysis-list">
+          {% for picker in pickers %}
+            <article class="tool-row">
+              <div>
+                <strong>{{ picker.full_name }}</strong>
+                <span>{{ picker.role|title }} / {{ picker.email }}</span>
+              </div>
+              <span class="badge text-bg-success">App online assigns automatically</span>
+            </article>
+          {% else %}
+            <div class="empty-state">No picker users mapped.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

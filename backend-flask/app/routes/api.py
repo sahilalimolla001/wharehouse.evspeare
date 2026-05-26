@@ -15,6 +15,7 @@ from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.order_payload import order_automation_summary
+from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import user_has_role
@@ -473,11 +474,22 @@ def api_location_update():
 def api_pick_list():
     user = current_api_user()
     warehouse = current_api_warehouse()
+    if picker_online_from_request(request):
+        assigned = auto_assign_order_to_picker(user, warehouse)
+        if assigned:
+            log_activity(
+                "picker_auto_assign",
+                f"Auto assigned {assigned.order_number} to {user.full_name}",
+                user_id=user.id,
+                entity_type="Order",
+                entity_id=assigned.id,
+            )
+            db.session.commit()
     query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
     if warehouse:
         query = query.filter(Order.warehouse_id == warehouse.id)
     if user and not can_manage_all_orders(user):
-        query = query.filter(or_(Order.assigned_to_id == user.id, Order.assigned_to_id.is_(None)))
+        query = query.filter(Order.assigned_to_id == user.id)
     orders = query.order_by(Order.priority.desc(), Order.created_at).all()
     return jsonify({"orders": [serialize_order(order) for order in orders]})
 
@@ -1558,9 +1570,11 @@ def serialize_order(order):
                 "quantity": item.quantity,
                 "picked_quantity": item.picked_quantity,
                 "packed_quantity": item.packed_quantity,
+                "recommended_bin": product_pick_location(item.product, order.warehouse_id),
             }
             for item in order.items
         ],
+        "bin_analysis": order_bin_analysis(order),
     }
 
 
