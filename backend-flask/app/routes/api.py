@@ -1515,14 +1515,15 @@ def find_location(identifier=None, required=False):
         if location and (not warehouse or location.warehouse_id == warehouse.id):
             return location
     warehouse = current_api_warehouse()
-    barcode_query = WarehouseLocation.query.filter_by(barcode=identifier)
+    barcode_query = WarehouseLocation.query.filter(func.lower(WarehouseLocation.barcode) == identifier.lower())
     if warehouse:
         barcode_query = barcode_query.filter_by(warehouse_id=warehouse.id)
     location = barcode_query.first()
     if location:
         return location
     if identifier.startswith("LOC:"):
-        barcode_query = WarehouseLocation.query.filter_by(barcode=identifier)
+        loc_identifier = identifier.removeprefix("LOC:").strip()
+        barcode_query = WarehouseLocation.query.filter(func.lower(WarehouseLocation.barcode) == loc_identifier.lower())
         if warehouse:
             barcode_query = barcode_query.filter_by(warehouse_id=warehouse.id)
         location = barcode_query.first()
@@ -1530,6 +1531,18 @@ def find_location(identifier=None, required=False):
             return location
     cleaned_identifier = identifier.removeprefix("LOC:").strip()
     parts = [part.strip() for part in cleaned_identifier.replace("/", "-").split("-") if part.strip()]
+    if len(parts) == 3:
+        zone, rack, bin_code = parts
+        filters = [
+            func.lower(WarehouseLocation.zone) == zone.lower(),
+            func.lower(WarehouseLocation.rack) == rack.lower(),
+            func.lower(WarehouseLocation.bin_code) == bin_code.lower(),
+        ]
+        if current_api_warehouse():
+            filters.append(WarehouseLocation.warehouse_id == current_api_warehouse().id)
+        location = WarehouseLocation.query.filter(*filters).first()
+        if location:
+            return location
     if len(parts) >= 4:
         warehouse = None
         if len(parts) >= 5:
