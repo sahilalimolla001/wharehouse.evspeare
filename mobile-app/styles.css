@@ -205,12 +205,89 @@ h2 {
   gap: 12px;
 }
 
+#orders-screen .status-strip,
+#orders-screen .quick-ops-grid,
+#orders-screen .ops-toolbar,
+#orders-screen #batch-groups,
 #orders-screen.no-picks > :not(#order-queue) {
   display: none;
 }
 
 .hidden {
   display: none !important;
+}
+
+#pick-screen {
+  min-height: calc(100dvh - 96px);
+  align-content: start;
+}
+
+.pick-order-title {
+  min-height: 54px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.pick-order-title strong {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.pick-order-title span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+#pick-screen .scan-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+#pick-screen #pick-bin-card {
+  grid-column: 1 / -1;
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+#pick-screen #pick-bin-card strong {
+  font-size: 1.25rem;
+}
+
+#pick-screen #pick-bin-card span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 950;
+}
+
+#pick-screen .scan-box.compact {
+  width: min(42vw, 136px);
+  aspect-ratio: 1;
+  min-height: 0;
+}
+
+#pick-screen .button-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+#pick-screen #start-scan {
+  min-width: 86px;
+  height: 52px;
+}
+
+#pick-screen #scan-result {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  text-align: center;
 }
 
 .login-panel,

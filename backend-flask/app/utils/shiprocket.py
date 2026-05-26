@@ -31,6 +31,33 @@ def create_shiprocket_order(payload, config):
     return shiprocket_request(config, "orders/create/adhoc", payload=payload, token=token)
 
 
+def create_shiprocket_return_order(payload, config):
+    token = get_shiprocket_token(config)
+    return shiprocket_request(config, "orders/create/return", payload=payload, token=token)
+
+
+def cancel_shiprocket_order(order_ids, config):
+    ids = [int(value) for value in normalize_list(order_ids) if str(value).strip().isdigit()]
+    if not ids:
+        raise ShiprocketError("Shiprocket order id is required for cancellation.")
+    token = get_shiprocket_token(config)
+    return shiprocket_request(config, "orders/cancel", payload={"ids": ids}, token=token)
+
+
+def generate_shiprocket_label(shipment_ids, config):
+    ids = [int(value) for value in normalize_list(shipment_ids) if str(value).strip().isdigit()]
+    if not ids:
+        raise ShiprocketError("Shiprocket shipment id is required to generate label.")
+    token = get_shiprocket_token(config)
+    return shiprocket_request(config, "courier/generate/label", payload={"shipment_id": ids}, token=token)
+
+
+def normalize_list(value):
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return [value]
+
+
 def get_shiprocket_token(config):
     static_token = str(config.get("SHIPROCKET_TOKEN") or "").strip()
     if static_token:

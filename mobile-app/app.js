@@ -1681,7 +1681,7 @@ function renderActiveOrder() {
   const order = activeOrder();
   if (!order) {
     $("#active-order-card").innerHTML = `<div class="empty-state">Select an order from the queue.</div>`;
-    $("#picker-flow-card").innerHTML = pickerFlowEmptyHtml();
+    if ($("#picker-flow-card")) $("#picker-flow-card").innerHTML = pickerFlowEmptyHtml();
     $("#pick-bin-card").innerHTML = `Scan bin barcode first.`;
     $("#pick-items").innerHTML = "";
     $("#scan-result").textContent = "Select an order first.";
@@ -1694,19 +1694,9 @@ function renderActiveOrder() {
   localStorage.setItem("warehouseActiveOrderId", String(order.id));
   const totalQty = order.items.reduce((sum, item) => sum + item.quantity, 0);
   const pickedQty = order.items.reduce((sum, item) => sum + item.picked_quantity, 0);
-  $("#active-order-card").innerHTML = `
-    <article class="order-card active">
-      <div class="order-top">
-        <div>
-          <strong>${escapeHtml(order.order_number)}</strong>
-          <span>${escapeHtml(order.customer_name)}</span>
-        </div>
-        <span class="badge">${pickedQty}/${totalQty}</span>
-      </div>
-    </article>
-  `;
+  $("#active-order-card").innerHTML = `<article class="pick-order-title"><strong>${escapeHtml(order.order_number)}</strong><span>${pickedQty}/${totalQty}</span></article>`;
 
-  renderPickerFlow(order);
+  if ($("#picker-flow-card")) renderPickerFlow(order);
   renderPickBinCard(order);
   const itemsForBin = pickItemsForActiveBin(order);
   if (!store.activePickLocation) {
@@ -1735,32 +1725,37 @@ function renderActiveOrder() {
 
 function renderPickBinCard(order) {
   if (!store.activePickLocation) {
-    const binHints = order.items
-      .flatMap((item) => item.product.locations || [])
-      .filter((row) => Number(row.available_quantity || 0) > 0)
-      .slice(0, 4);
+    const next = nextPickItem(order);
+    const hint = next?.recommended_bin?.location?.barcode || next?.recommended_bin?.location?.full_code || next?.product?.locations?.find((row) => Number(row.available_quantity || 0) > 0)?.location?.barcode || "A3-02-4C";
     $("#pick-bin-card").innerHTML = `
-      <strong>Step 1: Scan bin</strong><br>
-      <span>Order item pick karne se pehle bin barcode scan karein.</span>
-      ${
-        binHints.length
-          ? `<div class="bin-hints">${binHints.map((row) => `<code>${escapeHtml(row.location.barcode || row.location.id)}</code>`).join("")}</div>`
-          : ""
-      }
+      <strong>${escapeHtml(formatBinCode(hint))}</strong>
+      <span>Scan bin</span>
     `;
     return;
   }
 
-  const matchingItems = pickItemsForActiveBin(order);
+  const next = pickItemsForActiveBin(order).find((item) => item.picked_quantity < item.quantity) || nextPickItem(order);
   $("#pick-bin-card").innerHTML = `
     <div class="bin-card-top">
       <div>
-        <strong>${escapeHtml(store.activePickLocation.full_code)}</strong>
-        <span><code>${escapeHtml(store.activePickLocation.barcode || store.activePickLocation.id)}</code> / ${matchingItems.length} order item(s)</span>
+        <strong>${escapeHtml(next ? numericSku(next.product.sku) : "DONE")}</strong>
+        <span>${next ? "Scan product SKU" : "All items picked"}</span>
       </div>
       <button type="button" data-change-bin>Change Bin</button>
     </div>
   `;
+}
+
+function formatBinCode(value) {
+  const raw = String(value || "").replace(/^LOC:/i, "").replace(/\s+/g, "").toUpperCase();
+  const parts = raw.split(/[-/]/).filter(Boolean);
+  if (parts.length >= 3) return parts.slice(-3).join("-");
+  return raw || "A3-02-4C";
+}
+
+function numericSku(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits || String(value || "");
 }
 
 function pickItemsForActiveBin(order) {
@@ -1875,6 +1870,7 @@ function renderDispatchQueue() {
           <span>${handoffReady ? "Checklist ok" : "Checklist pending"}</span>
         </div>
         <div class="order-actions">
+          <button type="button" data-download-label="${order.id}">Label Download</button>
           <button class="primary" type="button" data-manual-dispatch="${order.id}" ${handoffReady ? "" : "disabled"}>Dispatch</button>
         </div>
       </article>
@@ -1883,6 +1879,9 @@ function renderDispatchQueue() {
 
   target.querySelectorAll("[data-manual-dispatch]").forEach((button) => {
     button.addEventListener("click", () => dispatchOrderManually(button.dataset.manualDispatch));
+  });
+  target.querySelectorAll("[data-download-label]").forEach((button) => {
+    button.addEventListener("click", () => downloadOrderLabel(button.dataset.downloadLabel));
   });
 }
 
@@ -1897,10 +1896,27 @@ function numberInput(value) {
 
 async function dispatchOrderManually(orderId) {
   try {
-    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body: { manual_dispatch: true } });
+    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body: {} });
     replaceOrder(data.order);
-    toast("Order dispatched. Pickup location dashboard se add karein.");
+    toast("Order dispatched.");
     await loadOrders();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+async function downloadOrderLabel(orderId) {
+  try {
+    const order = store.orders.find((item) => Number(item.id) === Number(orderId));
+    let labelUrl = order?.label_url || order?.courier?.label_url || "";
+    if (!labelUrl) {
+      const data = await apiFetch(`/orders/${orderId}/label`, { method: "POST", body: {} });
+      replaceOrder(data.order);
+      labelUrl = data.label_url || data.order?.label_url || data.order?.courier?.label_url || "";
+    }
+    if (!labelUrl) throw new Error("Shiprocket label is not available yet.");
+    window.open(labelUrl, "_blank", "noopener");
+    toast("Label download opened.");
   } catch (error) {
     toast(error.message);
   }

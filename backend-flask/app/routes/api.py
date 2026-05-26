@@ -20,7 +20,8 @@ from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, 
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import user_has_role
-from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
+from .shiprocket import ShiprocketError, create_shiprocket_return_for_customer_return, ensure_shiprocket_label, ensure_shiprocket_order, dispatch_order_with_shiprocket
+from ..utils.shiprocket import cancel_shiprocket_order
 
 api_bp = Blueprint("api", __name__)
 
@@ -360,9 +361,10 @@ def api_import_order():
     data = request.get_json(silent=True) or {}
     try:
         order, created = create_order_from_integration(data)
+        shiprocket = ensure_shiprocket_order(order, user_id=current_api_user_id())
         db.session.commit()
-        return jsonify({"ok": True, "created": created, "order": serialize_order(order)}), 201 if created else 200
-    except (TypeError, ValueError) as error:
+        return jsonify({"ok": True, "created": created, "order": serialize_order(order), "shiprocket": shiprocket}), 201 if created else 200
+    except (TypeError, ValueError, ShiprocketError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
 
@@ -373,9 +375,10 @@ def api_import_return():
     data = request.get_json(silent=True) or {}
     try:
         return_order, created = create_return_from_integration(data)
+        shiprocket = create_shiprocket_return_for_customer_return(return_order, user_id=current_api_user_id())
         db.session.commit()
-        return jsonify({"ok": True, "created": created, "return_order": serialize_return_order(return_order)}), 201 if created else 200
-    except (TypeError, ValueError) as error:
+        return jsonify({"ok": True, "created": created, "return_order": serialize_return_order(return_order), "shiprocket": shiprocket}), 201 if created else 200
+    except (TypeError, ValueError, ShiprocketError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
 
@@ -386,15 +389,25 @@ def api_import_order_cancel():
     data = request.get_json(silent=True) or {}
     try:
         order = find_order_for_action(data)
+        cancel_stock_order = None
+        shiprocket_cancel = None
         if order:
-            order.status = "cancel_requested"
+            if order.courier_order_id and not order_is_shipped(order):
+                shiprocket_cancel = cancel_shiprocket_order([order.courier_order_id], current_app.config)
+            cancel_stock_order = create_cancel_stock_in_order(order, data)
+            order.status = "cancelled" if not cancel_stock_order else "cancel_requested"
         refund, created = create_refund_from_cancel(data, order)
         log_activity(
             "order_cancel_request",
             f"Imported cancel request for {data.get('orderId') or data.get('order_id') or (order.order_number if order else 'order')}",
             entity_type="Order",
             entity_id=order.id if order else None,
-            meta={"refund_id": refund.id if refund else None, "refund_created": created},
+            meta={
+                "refund_id": refund.id if refund else None,
+                "refund_created": created,
+                "cancel_stock_order_id": cancel_stock_order.id if cancel_stock_order else None,
+                "shiprocket_cancel": shiprocket_cancel,
+            },
         )
         db.session.commit()
         return jsonify(
@@ -403,9 +416,11 @@ def api_import_order_cancel():
                 "order": serialize_order(order) if order else None,
                 "refund": serialize_payment_refund(refund) if refund else None,
                 "refund_created": created,
+                "cancel_stock_order": serialize_return_order(cancel_stock_order) if cancel_stock_order else None,
+                "shiprocket_cancel": shiprocket_cancel,
             }
         )
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, ShiprocketError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
 
@@ -686,23 +701,26 @@ def api_dispatch_order(order_id):
     return dispatch_order_api_response(order, data)
 
 
+@api_bp.post("/orders/<int:order_id>/label")
+@api_role_required("manager", "staff", "picker", "packer", "delivery")
+def api_order_label(order_id):
+    order = Order.query.get_or_404(order_id)
+    if not can_access_order(current_api_user(), order):
+        return jsonify({"ok": False, "message": "Permission denied for this order"}), 403
+    try:
+        result = ensure_shiprocket_label(order, user_id=current_api_user_id())
+        db.session.commit()
+        return jsonify({"ok": True, "label_url": result.get("label_url"), "order": serialize_order(order), "shiprocket": result.get("summary")})
+    except (ShiprocketError, ValueError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
 def dispatch_order_api_response(order, data):
     if order.status not in {"packed", "dispatched"}:
         return jsonify({"ok": False, "message": "Order must be packed before dispatch"}), 400
     if not all(item.packed_quantity >= item.quantity for item in order.items):
         return jsonify({"ok": False, "message": "Pack all order items before dispatch"}), 400
-    if data.get("manual_dispatch"):
-        order.status = "dispatched"
-        log_activity(
-            "order_dispatch",
-            f"Order {order.order_number} marked dispatched from picker app",
-            user_id=current_api_user_id(),
-            entity_type="Order",
-            entity_id=order.id,
-            meta={"manual_dispatch": True},
-        )
-        db.session.commit()
-        return jsonify({"ok": True, "order": serialize_order(order), "created_courier_order": False})
     try:
         result = dispatch_order_with_shiprocket(order, data, user_id=current_api_user_id())
         db.session.commit()
@@ -1211,6 +1229,47 @@ def create_refund_from_cancel(data, order=None):
     return refund, True
 
 
+def order_is_shipped(order):
+    status_text = " ".join(
+        str(value or "")
+        for value in [order.status, order.courier_status]
+    ).lower()
+    return any(token in status_text for token in ["shipped", "pickup", "transit", "delivered", "out for delivery", "rto"])
+
+
+def create_cancel_stock_in_order(order, data):
+    picked_items = [item for item in order.items if int(item.picked_quantity or 0) > 0]
+    if not picked_items:
+        return None
+    return_number = f"CNL-{order.order_number}"[:80]
+    existing = CustomerReturnOrder.query.filter_by(return_number=return_number).first()
+    if existing:
+        return existing
+    cancel_order = CustomerReturnOrder(
+        return_number=return_number,
+        order_id=order.id,
+        website_order_id=order.external_order_id or order.order_number,
+        customer_name=order.customer_name,
+        customer_phone=order.customer_phone,
+        reason="cancelled_before_shipping",
+        status="inspection",
+        refund_status="pending",
+        notes=trim_text(data.get("reason") or "Customer cancelled before shipping. Stock-in picked items back to bin.", 2000),
+    )
+    for item in picked_items:
+        cancel_order.items.append(
+            CustomerReturnItem(
+                product_id=item.product_id,
+                expected_quantity=int(item.picked_quantity or 0),
+                picked_quantity=int(item.picked_quantity or 0),
+                notes=f"Cancelled order stock-in for {order.order_number}",
+            )
+        )
+    db.session.add(cancel_order)
+    db.session.flush()
+    return cancel_order
+
+
 def next_refund_number():
     return f"RF-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
 
@@ -1699,6 +1758,8 @@ def serialize_public_product(product):
 
 
 def serialize_order(order):
+    courier_payload = order_courier_payload(order)
+    label_url = nested_payload_value(courier_payload, "label_url", "label", "label_url_s3", "url", "download_url")
     return {
         "id": order.id,
         "order_number": order.order_number,
@@ -1712,12 +1773,15 @@ def serialize_order(order):
         "priority": order.priority,
         "assigned_to_id": order.assigned_to_id,
         "total_items": order.total_items,
+        "awb": order.courier_awb or "",
+        "label_url": label_url,
         "courier": {
             "provider": order.courier_provider,
             "order_id": order.courier_order_id,
             "shipment_id": order.courier_shipment_id,
             "awb": order.courier_awb,
             "status": order.courier_status,
+            "label_url": label_url,
         },
         "automation": order_automation_summary(order),
         "package": {
@@ -1739,6 +1803,30 @@ def serialize_order(order):
         ],
         "bin_analysis": order_bin_analysis(order),
     }
+
+
+def order_courier_payload(order):
+    try:
+        payload = json.loads(order.courier_response or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def nested_payload_value(payload, *keys):
+    if not isinstance(payload, dict):
+        return ""
+    containers = [payload]
+    for key in ("data", "shipment", "order", "label"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+    for container in containers:
+        for key in keys:
+            value = container.get(key)
+            if value not in (None, ""):
+                return str(value)
+    return ""
 
 
 def serialize_return_order(return_order):

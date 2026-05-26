@@ -8,7 +8,7 @@ from flask import Blueprint, abort, current_app, flash, jsonify, render_template
 from ..extensions import db
 from ..models import Order, ShiprocketWebhookEvent
 from ..utils.customer_website import notify_shipping_status_change
-from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, is_shiprocket_configured
+from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, create_shiprocket_return_order, generate_shiprocket_label, is_shiprocket_configured
 from ..utils.stock import log_activity
 from .auth import get_current_user, role_required, selected_warehouse
 
@@ -282,7 +282,9 @@ def default_form_data(order=None):
 
 
 def dispatch_order_with_shiprocket(order, package_input, user_id=None):
-    package = package_dimensions_from_data(package_input, required=True)
+    package = package_dimensions_from_data(package_input, required=False)
+    defaults = order_package_defaults(order)
+    package = {key: package[key] if package[key] else defaults[key] for key in package}
     save_package_dimensions(order, package)
 
     result = None
@@ -305,6 +307,99 @@ def dispatch_order_with_shiprocket(order, package_input, user_id=None):
         meta={"shiprocket": result_summary, "package": serialize_package(package), "created_courier_order": created},
     )
     return {"created": created, "result": result, "summary": result_summary, "package": package}
+
+
+def ensure_shiprocket_order(order, user_id=None):
+    if not is_shiprocket_configured(current_app.config):
+        return {"created": False, "skipped": True, "summary": current_shiprocket_summary(order), "message": "Shiprocket is not configured"}
+    if order.courier_order_id or order.courier_shipment_id:
+        return {"created": False, "skipped": False, "summary": current_shiprocket_summary(order)}
+    package = order_package_defaults(order)
+    payload = build_shiprocket_payload_for_order(order, package)
+    result = create_shiprocket_order(payload, current_app.config)
+    summary = summarize_shiprocket_response(result)
+    save_package_dimensions(order, package)
+    save_shiprocket_response(order, result, summary)
+    log_activity(
+        "shiprocket_order_auto_create",
+        f"Auto-created Shiprocket order for {order.order_number}",
+        user_id=user_id,
+        entity_type="Order",
+        entity_id=order.id,
+        meta={"shiprocket": summary},
+    )
+    return {"created": True, "skipped": False, "result": result, "summary": summary}
+
+
+def ensure_shiprocket_label(order, user_id=None):
+    label_url = shiprocket_label_url(order)
+    if label_url:
+        return {"created": False, "label_url": label_url, "summary": current_shiprocket_summary(order)}
+    if not order.courier_shipment_id:
+        ensure_shiprocket_order(order, user_id=user_id)
+    if not order.courier_shipment_id:
+        raise ShiprocketError("Shiprocket shipment id is missing. Label can be generated after shipment/AWB creation.")
+    result = generate_shiprocket_label([order.courier_shipment_id], current_app.config)
+    label_url = response_value(result, "label_url", "label", "label_url_s3", "url", "download_url")
+    if not label_url:
+        label_url = response_value(result, "label_url", "label", "url")
+    merge_courier_response(order, {"label": result, "label_url": label_url})
+    log_activity(
+        "shiprocket_label_generate",
+        f"Generated Shiprocket label for {order.order_number}",
+        user_id=user_id,
+        entity_type="Order",
+        entity_id=order.id,
+        meta={"label_url": label_url},
+    )
+    return {"created": True, "label_url": label_url, "summary": current_shiprocket_summary(order), "result": result}
+
+
+def create_shiprocket_return_for_customer_return(return_order, user_id=None):
+    if not is_shiprocket_configured(current_app.config):
+        return {"created": False, "skipped": True, "message": "Shiprocket is not configured"}
+    source_order = return_order.order
+    if not source_order:
+        return {"created": False, "skipped": True, "message": "Original order is not linked"}
+    package = order_package_defaults(source_order)
+    payload = build_shiprocket_payload_for_order(source_order, package)
+    payload["order_id"] = return_order.return_number
+    payload["comment"] = f"Return for {source_order.order_number}"
+    payload.update(return_payload_fields(payload))
+    payload["length"] = decimal_payload(package["length"])
+    payload["breadth"] = decimal_payload(package["breadth"])
+    payload["height"] = decimal_payload(package["height"])
+    payload["weight"] = decimal_payload(package["weight"])
+    result = create_shiprocket_return_order(payload, current_app.config)
+    return_order.notes = append_note(return_order.notes, f"Shiprocket return created: {json.dumps(summarize_shiprocket_response(result), default=str)}")
+    log_activity(
+        "shiprocket_return_auto_create",
+        f"Auto-created Shiprocket return {return_order.return_number}",
+        user_id=user_id,
+        entity_type="CustomerReturnOrder",
+        entity_id=return_order.id,
+        meta={"shiprocket": summarize_shiprocket_response(result)},
+    )
+    return {"created": True, "result": result, "summary": summarize_shiprocket_response(result)}
+
+
+def return_payload_fields(forward_payload):
+    fields = {
+        "pickup_customer_name": forward_payload.get("shipping_customer_name") or forward_payload.get("billing_customer_name"),
+        "pickup_last_name": forward_payload.get("shipping_last_name") or forward_payload.get("billing_last_name", ""),
+        "pickup_address": forward_payload.get("shipping_address") or forward_payload.get("billing_address"),
+        "pickup_address_2": forward_payload.get("shipping_address_2") or forward_payload.get("billing_address_2", ""),
+        "pickup_city": forward_payload.get("shipping_city") or forward_payload.get("billing_city"),
+        "pickup_state": forward_payload.get("shipping_state") or forward_payload.get("billing_state"),
+        "pickup_country": forward_payload.get("shipping_country") or forward_payload.get("billing_country", "India"),
+        "pickup_pincode": forward_payload.get("shipping_pincode") or forward_payload.get("billing_pincode"),
+        "pickup_email": forward_payload.get("shipping_email") or forward_payload.get("billing_email", ""),
+        "pickup_phone": forward_payload.get("shipping_phone") or forward_payload.get("billing_phone"),
+    }
+    warehouse_id = current_app.config.get("SHIPROCKET_RETURN_WAREHOUSE_ID", "")
+    if str(warehouse_id).strip():
+        fields["return_warehouse_id"] = int(warehouse_id) if str(warehouse_id).isdigit() else warehouse_id
+    return fields
 
 
 def build_shiprocket_payload_for_order(order, package_input):
@@ -429,15 +524,16 @@ def source_address(source, kind, order=None, fallback=None):
         return address
 
     raw_first, raw_last = source_name_parts(raw)
+    location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
     address.update(
         {
             "first_name": raw_first or first_name,
             "last_name": raw_last or last_name,
-            "address": source_text(raw.get("address") or raw.get("line1") or raw.get("address1") or raw.get("street") or raw.get("street1")) or address["address"],
-            "address_2": source_text(raw.get("address_2") or raw.get("line2") or raw.get("address2") or raw.get("street2")),
-            "city": source_text(raw.get("city") or raw.get("town")),
-            "pincode": source_text(raw.get("pincode") or raw.get("postal_code") or raw.get("postcode") or raw.get("zip")),
-            "state": source_text(raw.get("state") or raw.get("province") or raw.get("region")),
+            "address": source_text(raw.get("address") or raw.get("line1") or raw.get("address1") or raw.get("street") or raw.get("street1") or location.get("address")) or address["address"],
+            "address_2": source_text(raw.get("address_2") or raw.get("line2") or raw.get("address2") or raw.get("street2") or location.get("address2")),
+            "city": source_text(raw.get("city") or raw.get("town") or location.get("city")),
+            "pincode": source_text(raw.get("pincode") or raw.get("postal_code") or raw.get("postcode") or raw.get("zip") or location.get("pincode")),
+            "state": source_text(raw.get("state") or raw.get("province") or raw.get("region") or location.get("state")),
             "country": source_text(raw.get("country")) or "India",
             "email": source_text(raw.get("email")) or address["email"],
             "phone": source_text(raw.get("phone") or raw.get("mobile")) or address["phone"],
@@ -1215,6 +1311,30 @@ def save_shiprocket_response(order, response, summary):
     order.courier_awb = trim_value(summary.get("courier_awb"), 120)
     order.courier_status = trim_value(summary.get("courier_status"), 80)
     order.courier_response = json.dumps(response, default=str, separators=(",", ":"))[:20000]
+
+
+def shiprocket_label_url(order):
+    payload = courier_response_payload(order)
+    return response_value(payload, "label_url", "label", "label_url_s3", "url", "download_url")
+
+
+def courier_response_payload(order):
+    try:
+        payload = json.loads(order.courier_response or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def merge_courier_response(order, extra):
+    payload = courier_response_payload(order)
+    payload.update(extra)
+    order.courier_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
+
+
+def append_note(existing, note):
+    rows = [str(existing or "").strip(), str(note or "").strip()]
+    return "\n".join(row for row in rows if row)[:2000]
 
 
 def trim_value(value, limit):
