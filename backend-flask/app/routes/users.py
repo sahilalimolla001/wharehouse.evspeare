@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
@@ -26,6 +28,7 @@ def users():
         warehouse_ids = [int(value) for value in request.form.getlist("warehouse_ids") if value.isdigit()]
         if warehouse_ids:
             user.warehouses = Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all()
+        user.page_permissions = json.dumps(request.form.getlist("page_permissions"))
         db.session.add(user)
         db.session.commit()
         flash("Staff user saved.", "success")
@@ -33,7 +36,13 @@ def users():
 
     users_list = User.query.order_by(User.full_name).all()
     warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
-    return render_template("users.html", users=users_list, warehouses=warehouses)
+    user_permissions = {}
+    for user in users_list:
+        try:
+            user_permissions[user.id] = set(json.loads(user.page_permissions or "[]"))
+        except (TypeError, json.JSONDecodeError):
+            user_permissions[user.id] = set()
+    return render_template("users.html", users=users_list, warehouses=warehouses, user_permissions=user_permissions)
 
 
 @users_bp.post("/users/<int:user_id>/warehouses")
@@ -42,6 +51,7 @@ def update_user_warehouses(user_id):
     user = User.query.get_or_404(user_id)
     warehouse_ids = [int(value) for value in request.form.getlist("warehouse_ids") if value.isdigit()]
     user.warehouses = Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all() if warehouse_ids else []
+    user.page_permissions = json.dumps(request.form.getlist("page_permissions"))
     db.session.commit()
     flash("User warehouse mapping updated.", "success")
     return redirect(url_for("users.users"))

@@ -29,6 +29,7 @@ class User(TimestampMixin, db.Model):
     role = db.Column(db.String(30), default="staff", nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    page_permissions = db.Column(db.Text)
 
     stock_ins = db.relationship("StockIn", back_populates="received_by", foreign_keys="StockIn.received_by_id")
     stock_outs = db.relationship("StockOut", back_populates="dispatched_by", foreign_keys="StockOut.dispatched_by_id")
@@ -393,6 +394,49 @@ class PaymentRefund(TimestampMixin, db.Model):
 
     def __repr__(self):
         return f"<PaymentRefund {self.refund_number}>"
+
+
+class MoneyTransaction(TimestampMixin, db.Model):
+    __tablename__ = "money_transactions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_number = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
+    refund_id = db.Column(db.Integer, db.ForeignKey("payment_refunds.id"), index=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id"), index=True)
+    transaction_type = db.Column(db.String(40), nullable=False, index=True)
+    direction = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(40), default="recorded", nullable=False, index=True)
+    gateway = db.Column(db.String(40))
+    reference = db.Column(db.String(160), index=True)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    currency = db.Column(db.String(8), default="INR", nullable=False)
+    customer_name = db.Column(db.String(160))
+    customer_phone = db.Column(db.String(30))
+    notes = db.Column(db.Text)
+    payload_json = db.Column(db.Text)
+
+    order = db.relationship("Order")
+    refund = db.relationship("PaymentRefund")
+    invoice = db.relationship("Invoice")
+
+
+class Invoice(TimestampMixin, db.Model):
+    __tablename__ = "invoices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_number = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
+    invoice_type = db.Column(db.String(40), nullable=False, index=True)
+    status = db.Column(db.String(40), default="issued", nullable=False, index=True)
+    customer_name = db.Column(db.String(160), nullable=False)
+    customer_phone = db.Column(db.String(30))
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    currency = db.Column(db.String(8), default="INR", nullable=False)
+    issued_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    payload_json = db.Column(db.Text)
+
+    order = db.relationship("Order")
 
 
 class OrderItem(TimestampMixin, db.Model):

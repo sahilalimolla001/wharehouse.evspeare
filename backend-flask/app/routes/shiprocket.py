@@ -365,7 +365,7 @@ def create_shiprocket_return_for_customer_return(return_order, user_id=None):
     payload = build_shiprocket_payload_for_order(source_order, package)
     payload["order_id"] = return_order.return_number
     payload["comment"] = f"Return for {source_order.order_number}"
-    payload.update(return_payload_fields(payload))
+    payload.update(return_payload_fields(payload, source_order))
     payload["length"] = decimal_payload(package["length"])
     payload["breadth"] = decimal_payload(package["breadth"])
     payload["height"] = decimal_payload(package["height"])
@@ -383,7 +383,7 @@ def create_shiprocket_return_for_customer_return(return_order, user_id=None):
     return {"created": True, "result": result, "summary": summarize_shiprocket_response(result)}
 
 
-def return_payload_fields(forward_payload):
+def return_payload_fields(forward_payload, source_order=None):
     fields = {
         "pickup_customer_name": forward_payload.get("shipping_customer_name") or forward_payload.get("billing_customer_name"),
         "pickup_last_name": forward_payload.get("shipping_last_name") or forward_payload.get("billing_last_name", ""),
@@ -396,7 +396,7 @@ def return_payload_fields(forward_payload):
         "pickup_email": forward_payload.get("shipping_email") or forward_payload.get("billing_email", ""),
         "pickup_phone": forward_payload.get("shipping_phone") or forward_payload.get("billing_phone"),
     }
-    warehouse_id = current_app.config.get("SHIPROCKET_RETURN_WAREHOUSE_ID", "")
+    warehouse_id = current_app.config.get("SHIPROCKET_RETURN_WAREHOUSE_ID", "") or (source_order.warehouse_id if source_order else "")
     if str(warehouse_id).strip():
         fields["return_warehouse_id"] = int(warehouse_id) if str(warehouse_id).isdigit() else warehouse_id
     return fields

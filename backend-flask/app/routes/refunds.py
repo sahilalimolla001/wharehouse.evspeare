@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from ..extensions import db
 from ..models import Order, PaymentRefund
 from ..utils.payu import PayURefundError, initiate_payu_refund, payu_refund_enabled
+from ..utils.finance import record_money_transaction
 from ..utils.stock import log_activity
 from .auth import get_current_user, role_required, selected_warehouse
 
@@ -44,6 +45,18 @@ def approve_payment_refund(refund_id):
         user = get_current_user()
         refund.approved_by_id = user.id if user else None
         refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
+        record_money_transaction(
+            order=refund.order,
+            refund=refund,
+            transaction_type="refund",
+            direction="debit",
+            status="approved",
+            amount=refund.amount,
+            gateway="payu",
+            reference=refund.gateway_payment_id,
+            notes=f"PayU refund {refund.refund_number}",
+            payload=payload,
+        )
         log_activity(
             "payment_refund_approved",
             f"Approved PayU refund {refund.refund_number}",

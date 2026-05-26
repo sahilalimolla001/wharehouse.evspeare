@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block page_title %}Invoices{% endblock %}
+{% block content %}
+  <section class="panel">
+    <h2>Stored Invoices</h2>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Invoice</th><th>Type</th><th>Order</th><th>Customer</th><th>Amount</th><th>Status</th><th>Issued</th></tr></thead>
+        <tbody>
+          {% for invoice in invoices %}
+            <tr>
+              <td><code>{{ invoice.invoice_number }}</code></td>
+              <td>{{ invoice.invoice_type }}</td>
+              <td>{{ invoice.order.order_number if invoice.order else "-" }}</td>
+              <td>{{ invoice.customer_name }}<br><small class="text-muted">{{ invoice.customer_phone }}</small></td>
+              <td><strong>{{ invoice.currency }} {{ '%.2f'|format(invoice.amount or 0) }}</strong></td>
+              <td><span class="badge text-bg-secondary">{{ invoice.status }}</span></td>
+              <td>{{ invoice.issued_at.strftime('%d %b %Y %I:%M %p') if invoice.issued_at else '' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">No invoices yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

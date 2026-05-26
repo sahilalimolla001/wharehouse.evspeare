@@ -14,6 +14,7 @@ from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
+from ..utils.finance import ensure_invoice, record_money_transaction
 from ..utils.order_payload import order_automation_summary
 from ..utils.payu import PayURefundError, initiate_payu_refund
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
@@ -117,6 +118,7 @@ def api_login():
     user = User.query.filter_by(email=data.get("email", "").strip().lower(), is_active=True).first()
     if not user or not user.check_password(data.get("password", "")):
         return jsonify({"ok": False, "message": "Invalid email or password"}), 401
+    session.permanent = True
     session["user_id"] = user.id
     session["user_role"] = user.role
     return jsonify({"ok": True, "user": serialize_user(user), "token": create_api_token(user)})
@@ -362,6 +364,7 @@ def api_import_order():
     try:
         order, created = create_order_from_integration(data)
         shiprocket = ensure_shiprocket_order(order, user_id=current_api_user_id())
+        ensure_invoice(order, "sale", "issued", payload=data)
         db.session.commit()
         return jsonify({"ok": True, "created": created, "order": serialize_order(order), "shiprocket": shiprocket}), 201 if created else 200
     except (TypeError, ValueError, ShiprocketError) as error:
@@ -376,6 +379,8 @@ def api_import_return():
     try:
         return_order, created = create_return_from_integration(data)
         shiprocket = create_shiprocket_return_for_customer_return(return_order, user_id=current_api_user_id())
+        if return_order.order:
+            ensure_invoice(return_order.order, "return", "return_requested", payload=data)
         db.session.commit()
         return jsonify({"ok": True, "created": created, "return_order": serialize_return_order(return_order), "shiprocket": shiprocket}), 201 if created else 200
     except (TypeError, ValueError, ShiprocketError) as error:
@@ -396,6 +401,7 @@ def api_import_order_cancel():
                 shiprocket_cancel = cancel_shiprocket_order([order.courier_order_id], current_app.config)
             cancel_stock_order = create_cancel_stock_in_order(order, data)
             order.status = "cancelled" if not cancel_stock_order else "cancel_requested"
+            ensure_invoice(order, "cancel", "cancelled", payload=data)
         refund, created = create_refund_from_cancel(data, order)
         log_activity(
             "order_cancel_request",

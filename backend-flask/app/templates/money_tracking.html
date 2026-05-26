@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block page_title %}Money Tracking{% endblock %}
+{% block content %}
+  <section class="panel">
+    <h2>End To End Transactions</h2>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>ID</th><th>Type</th><th>Order</th><th>Customer</th><th>Gateway</th><th>Amount</th><th>Status</th><th>Time</th></tr></thead>
+        <tbody>
+          {% for row in transactions %}
+            <tr>
+              <td><code>{{ row.transaction_number }}</code></td>
+              <td>{{ row.transaction_type }} / {{ row.direction }}</td>
+              <td>{{ row.order.order_number if row.order else "-" }}</td>
+              <td>{{ row.customer_name }}<br><small class="text-muted">{{ row.customer_phone }}</small></td>
+              <td>{{ row.gateway or "-" }}<br><small class="text-muted">{{ row.reference or "" }}</small></td>
+              <td><strong>{{ row.currency }} {{ '%.2f'|format(row.amount or 0) }}</strong></td>
+              <td><span class="badge text-bg-secondary">{{ row.status }}</span></td>
+              <td>{{ row.created_at.strftime('%d %b %Y %I:%M %p') if row.created_at else '' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">No money transactions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
