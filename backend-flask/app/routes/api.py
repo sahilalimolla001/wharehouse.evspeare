@@ -174,6 +174,7 @@ def api_central_panel_users():
     data = request.get_json(silent=True) or {}
     email = (data.get("userId") or data.get("email") or "").strip().lower()
     user_id = data.get("id")
+    is_new_user = False
     if request.method in {"PUT", "PATCH", "DELETE"}:
         user = User.query.filter_by(id=user_id).first() if str(user_id or "").isdigit() else None
         if not user and email:
@@ -196,7 +197,7 @@ def api_central_panel_users():
         user = User.query.filter_by(email=email).first()
         if not user:
             user = User(email=email)
-            db.session.add(user)
+            is_new_user = True
 
     warehouse_id = data.get("warehouseId") or data.get("warehouse_id")
     warehouse = resolve_warehouse(warehouse_id)
@@ -220,6 +221,8 @@ def api_central_panel_users():
         valid_permissions = set(ADMIN_PANEL_PERMISSIONS) | set(PAGE_PERMISSIONS) | set(PICKER_APP_PERMISSIONS)
         user.page_permissions = json.dumps([value for value in requested_permissions if value in valid_permissions])
     ensure_picker_code(user)
+    if is_new_user:
+        db.session.add(user)
     try:
         db.session.commit()
     except IntegrityError:
