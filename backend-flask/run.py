@@ -296,7 +296,7 @@ def validate_production():
     if shiprocket_configured and not Config.SHIPROCKET_PICKUP_LOCATION:
         warnings.append("SHIPROCKET_PICKUP_LOCATION is empty; Shiprocket order creation will require manual entry.")
     if shiprocket_configured and not Config.SHIPROCKET_WEBHOOK_TOKEN:
-        warnings.append("SHIPROCKET_WEBHOOK_TOKEN is empty; Shiprocket webhook receiver will accept unsigned updates.")
+        issues.append("SHIPROCKET_WEBHOOK_TOKEN must be set before enabling Shiprocket webhooks in production.")
 
     if warnings:
         print("Warnings:")

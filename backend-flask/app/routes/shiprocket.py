@@ -660,7 +660,7 @@ def parse_event_time(value):
 def verify_webhook_token():
     configured = str(current_app.config.get("SHIPROCKET_WEBHOOK_TOKEN") or "").strip()
     if not configured:
-        return True
+        return not current_app.config.get("IS_PRODUCTION", False)
     supplied = (
         request.args.get("token", "").strip()
         or bearer_token()
