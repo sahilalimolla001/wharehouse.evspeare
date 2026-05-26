@@ -37,17 +37,29 @@ PAGE_PERMISSIONS = {
     "dashboard": "Dashboard",
     "products": "Products",
     "suppliers": "Suppliers",
-    "stock": "Stock",
+    "stock_in": "Stock In",
+    "stock_out": "Stock Out",
+    "inventory": "Inventory",
+    "locations": "Locations",
     "orders": "Orders",
     "picker_ops": "Picker Ops",
+    "pick_transfer": "Pick Transfer",
     "shiprocket": "Shiprocket",
+    "shipping_status": "Shipping Status",
     "returns": "Customer Returns",
     "refunds": "Payment Refunds",
     "money_tracking": "Money Tracking",
     "invoices": "Invoices",
     "reports": "Reports",
     "users": "Users",
+    "ops_config": "Ops Config",
     "settings": "Settings",
+}
+
+LEGACY_PAGE_PERMISSIONS = {
+    "stock": {"stock_in", "stock_out", "inventory", "locations"},
+    "picking": {"picker_ops", "pick_transfer"},
+    "dispatch": {"shiprocket", "shipping_status"},
 }
 
 
@@ -56,19 +68,39 @@ def user_page_permissions(user):
         values = json.loads(user.page_permissions or "[]")
     except (TypeError, json.JSONDecodeError):
         values = []
-    return set(value for value in values if value in PAGE_PERMISSIONS)
+    allowed = set()
+    for value in values:
+        if value in PAGE_PERMISSIONS:
+            allowed.add(value)
+        allowed.update(LEGACY_PAGE_PERMISSIONS.get(value, set()))
+    return allowed
 
 
 def endpoint_permission(endpoint):
-    prefix = (endpoint or "").split(".", 1)[0]
+    endpoint = endpoint or ""
     if endpoint in {"users.picker_ops", "users.pick_transfer", "users.transfer_pick"}:
-        return "picker_ops"
-    if endpoint in {"users.settings", "users.ops_config"}:
+        return "pick_transfer" if "pick_transfer" in endpoint or "transfer_pick" in endpoint else "picker_ops"
+    if endpoint == "users.settings":
         return "settings"
+    if endpoint == "users.ops_config":
+        return "ops_config"
+    if endpoint == "stock.stock_in":
+        return "stock_in"
+    if endpoint == "stock.stock_out":
+        return "stock_out"
+    if endpoint == "stock.inventory":
+        return "inventory"
+    if endpoint in {"stock.warehouse_locations", "stock.add_location", "stock.add_warehouse", "stock.warehouses"}:
+        return "locations"
+    if endpoint == "shiprocket.create_order":
+        return "shiprocket"
+    if endpoint in {"shiprocket.shipping_status", "shiprocket.shipping_status_live", "shiprocket.shipping_status_detail", "shiprocket.shipping_status_detail_live", "shiprocket.webhook_updates"}:
+        return "shipping_status"
     if endpoint == "finance.money_tracking":
         return "money_tracking"
     if endpoint == "finance.invoices":
         return "invoices"
+    prefix = endpoint.split(".", 1)[0]
     return prefix if prefix in PAGE_PERMISSIONS else ""
 
 

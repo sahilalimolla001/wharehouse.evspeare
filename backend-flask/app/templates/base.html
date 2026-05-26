@@ -26,10 +26,14 @@
           {% endif %}
           {% if current_user_can("manager", "staff") and user_can_page(current_user, 'stock.stock_in') %}
             <a class="nav-link {% if request.endpoint == 'stock.stock_in' %}active{% endif %}" href="{{ url_for('stock.stock_in') }}">Stock In</a>
+          {% endif %}
+          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'stock.stock_out') %}
             <a class="nav-link {% if request.endpoint == 'stock.stock_out' %}active{% endif %}" href="{{ url_for('stock.stock_out') }}">Stock Out</a>
           {% endif %}
           {% if user_can_page(current_user, 'stock.inventory') %}
             <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
+          {% endif %}
+          {% if user_can_page(current_user, 'stock.warehouse_locations') %}
             <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
           {% endif %}
           {% if user_can_page(current_user, 'orders.orders') %}
@@ -37,10 +41,14 @@
           {% endif %}
           {% if current_user_can("manager", "staff") and user_can_page(current_user, 'users.picker_ops') %}
             <a class="nav-link {% if request.endpoint == 'users.picker_ops' %}active{% endif %}" href="{{ url_for('users.picker_ops') }}">Picker Ops</a>
+          {% endif %}
+          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'users.pick_transfer') %}
             <a class="nav-link {% if request.endpoint and request.endpoint.startswith('users.pick_transfer') %}active{% endif %}" href="{{ url_for('users.pick_transfer') }}">Pick Transfer</a>
           {% endif %}
           {% if current_user_can("manager", "staff") and user_can_page(current_user, 'shiprocket.create_order') %}
             <a class="nav-link {% if request.endpoint == 'shiprocket.create_order' %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
+          {% endif %}
+          {% if current_user_can("manager", "staff") and user_can_page(current_user, 'shiprocket.shipping_status') %}
             <a class="nav-link {% if request.endpoint in ['shiprocket.shipping_status', 'shiprocket.webhook_updates'] %}active{% endif %}" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
           {% endif %}
           {% if current_user_can("manager", "staff") and user_can_page(current_user, 'returns.customer_returns') %}

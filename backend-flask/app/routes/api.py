@@ -21,7 +21,7 @@ from ..utils.picker_identity import ensure_picker_code
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
-from .auth import user_has_role
+from .auth import PAGE_PERMISSIONS, user_has_role, user_page_permissions
 from .shiprocket import ShiprocketError, create_shiprocket_return_for_customer_return, ensure_shiprocket_label, ensure_shiprocket_order, dispatch_order_with_shiprocket
 from ..utils.shiprocket import cancel_shiprocket_order
 
@@ -176,6 +176,10 @@ def api_central_panel_users():
     user.is_active = data.get("status", "active") != "blocked"
     user.set_password(password)
     user.warehouses = [warehouse]
+    requested_permissions = data.get("page_permissions") or data.get("permissions") or []
+    if not isinstance(requested_permissions, list):
+        requested_permissions = []
+    user.page_permissions = json.dumps([value for value in requested_permissions if value in PAGE_PERMISSIONS])
     ensure_picker_code(user)
     db.session.commit()
     return jsonify({"ok": True, "user": serialize_central_panel_user(user)})
@@ -1681,7 +1685,8 @@ def serialize_central_panel_user(user):
         "status": "active" if user.is_active else "blocked",
         "warehouseId": user.warehouses[0].id if user.warehouses else None,
         "warehouses": [serialize_warehouse(warehouse) for warehouse in user.warehouses],
-        "permissions": role_permissions(user.role),
+        "permissions": sorted(user_page_permissions(user)) if user.page_permissions else role_permissions(user.role),
+        "page_permissions": sorted(user_page_permissions(user)) if user.page_permissions else role_permissions(user.role),
         "createdAt": user.created_at.isoformat() if user.created_at else None,
         "updatedAt": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -1701,12 +1706,12 @@ def resolve_warehouse(identifier):
 
 def role_permissions(role):
     permissions = {
-        "admin": ["orders", "picking", "dispatch", "returns", "inventory", "settings"],
-        "manager": ["orders", "picking", "dispatch", "returns", "inventory"],
-        "staff": ["orders", "picking", "dispatch", "inventory"],
-        "picker": ["orders", "picking"],
-        "packer": ["orders", "dispatch"],
-        "delivery": ["orders", "dispatch"],
+        "admin": list(PAGE_PERMISSIONS.keys()),
+        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "invoices", "reports"],
+        "staff": ["dashboard", "products", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns"],
+        "picker": ["dashboard", "orders", "picker_ops", "pick_transfer"],
+        "packer": ["dashboard", "orders", "stock_out", "shiprocket", "shipping_status"],
+        "delivery": ["dashboard", "orders", "shipping_status"],
     }
     return permissions.get(role, ["orders"])
 
