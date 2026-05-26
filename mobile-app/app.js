@@ -388,6 +388,7 @@ async function logout(callApi = true) {
   localStorage.removeItem("warehouseMobileWarehouseId");
   localStorage.removeItem("warehouseActiveOrderId");
   localStorage.removeItem("warehouseActivePickLocation");
+  renderPickerIdentity();
   stopScanner();
   lockApp();
   toast("Logged out.");
@@ -413,6 +414,18 @@ function applyUserWarehouses(user) {
   localStorage.setItem("warehouseMobileWarehouses", JSON.stringify(store.warehouses));
   if (store.warehouseId) localStorage.setItem("warehouseMobileWarehouseId", String(store.warehouseId));
   renderWarehouseSelect();
+  renderPickerIdentity();
+}
+
+function renderPickerIdentity() {
+  const node = $("#picker-id-pill");
+  if (!node) return;
+  if (!store.user?.id) {
+    node.textContent = "Picker --";
+    return;
+  }
+  const label = store.user.role ? `${store.user.role} #${store.user.id}` : `Picker #${store.user.id}`;
+  node.textContent = label;
 }
 
 function renderWarehouseSelect() {
@@ -487,9 +500,10 @@ async function loadOrders() {
     const data = await apiFetch("/pick-list");
     store.orders = data.orders || [];
     localStorage.setItem("warehouseCachedOrders", JSON.stringify(store.orders));
-    const pending = store.orders.filter((order) => order.status === "pending").length;
-    const picking = store.orders.filter((order) => order.status === "picking").length;
-    const packed = store.orders.filter((order) => order.status === "packed").length;
+    const pickerOrders = store.orders.filter(orderBelongsToCurrentPicker);
+    const pending = pickerOrders.filter((order) => order.status === "pending").length;
+    const picking = pickerOrders.filter((order) => order.status === "picking").length;
+    const packed = pickerOrders.filter((order) => order.status === "packed").length;
     $("#m-pending").textContent = pending;
     $("#m-picking").textContent = picking;
     $("#m-packed").textContent = packed;
@@ -520,8 +534,8 @@ async function loadReturns() {
 }
 
 function renderHub() {
-  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
-  const packed = store.orders.filter((order) => order.status === "packed");
+  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status)).filter(orderBelongsToCurrentPicker);
+  const packed = store.orders.filter((order) => order.status === "packed").filter(orderBelongsToCurrentPicker);
   const returnDesk = store.returns.filter((item) => ["approved", "return_picking", "return_picked", "inspection"].includes(item.status));
   const slaRisk = pickOrders.filter((order) => slaMinutesLeft(order) <= 10);
   const pickedQty = pickOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.picked_quantity || 0), 0), 0);
@@ -714,6 +728,7 @@ function filteredPickOrders() {
   const filter = store.priorityFilter;
   return store.orders
     .filter((order) => ["pending", "picking"].includes(order.status))
+    .filter(orderBelongsToCurrentPicker)
     .filter((order) => {
       if (filter === "all") return true;
       if (filter === "sla") return slaMinutesLeft(order) <= 10;
@@ -721,6 +736,12 @@ function filteredPickOrders() {
       return String(order.priority || "").toLowerCase() === filter;
     })
     .sort((a, b) => orderPriorityScore(b) - orderPriorityScore(a) || routeKey(a).localeCompare(routeKey(b)));
+}
+
+function orderBelongsToCurrentPicker(order) {
+  const assignedTo = Number(order.assigned_to_id || 0);
+  const pickerId = Number(store.user?.id || 0);
+  return !assignedTo || !pickerId || assignedTo === pickerId;
 }
 
 function changePriorityFilter(event) {
@@ -882,7 +903,7 @@ function renderExceptionQueue() {
 }
 
 function exceptionOrders() {
-  return store.orders.flatMap((order) => {
+  return store.orders.filter(orderBelongsToCurrentPicker).flatMap((order) => {
     const rows = [];
     if (["pending", "picking"].includes(order.status) && slaMinutesLeft(order) <= 10) {
       rows.push({ order, reason: "SLA risk: pick fast", action: "Priority" });
@@ -997,10 +1018,12 @@ async function retryOfflineQueue() {
 }
 
 function copyShiftSummary() {
-  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
-  const packed = store.orders.filter((order) => order.status === "packed").length;
+  const pickerOrders = store.orders.filter(orderBelongsToCurrentPicker);
+  const pickOrders = pickerOrders.filter((order) => ["pending", "picking"].includes(order.status));
+  const packed = pickerOrders.filter((order) => order.status === "packed").length;
   const summary = [
     `Picker: ${store.user?.name || store.user?.email || "Picker"}`,
+    `Picker ID: ${store.user?.id || "NA"}`,
     `Warehouse: ${currentWarehouseName() || store.warehouseId || "NA"}`,
     `Shift: ${store.shiftStartedAt ? shiftDurationLabel() : "Off"}`,
     `Pick load: ${pickOrders.length}`,
@@ -1828,7 +1851,7 @@ async function markActiveOrderPacked(options = {}) {
 }
 
 function renderDispatchQueue() {
-  const orders = store.orders.filter((order) => order.status === "packed");
+  const orders = store.orders.filter((order) => order.status === "packed").filter(orderBelongsToCurrentPicker);
   const target = $("#dispatch-list");
   const handoffReady = handoffChecklistReady();
   if (!orders.length) {
@@ -2423,6 +2446,7 @@ async function apiFetch(path, options = {}) {
   };
   if (!isFormData) init.headers["Content-Type"] = "application/json";
   if (store.token && options.auth !== false) init.headers.Authorization = `Bearer ${store.token}`;
+  if (store.user?.id && options.auth !== false) init.headers["X-Picker-Id"] = String(store.user.id);
   if (store.warehouseId && options.auth !== false) init.headers["X-Warehouse-Id"] = String(store.warehouseId);
   if (options.auth !== false) init.headers["X-Picker-Online"] = isOnlineMode() ? "true" : "false";
   if (options.body) init.body = isFormData ? options.body : JSON.stringify(options.body);
@@ -2430,9 +2454,9 @@ async function apiFetch(path, options = {}) {
   let response;
   try {
     response = await fetch(`${store.apiBase}${path}`, init);
-  } catch {
+  } catch (error) {
     if (init.method !== "GET" && options.auth !== false) queueOfflineMutation(path, options);
-    throw new Error(`API connection failed. Check API URL: ${store.apiBase}`);
+    throw new Error(`API connection failed: ${apiConnectionHint(error)}`);
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
@@ -2456,18 +2480,21 @@ function queueOfflineMutation(path, options) {
 
 function initialApiBase() {
   const fallback = "http://127.0.0.1:5000/api";
-  const remotePage = location.hostname && !["localhost", "127.0.0.1"].includes(location.hostname);
+  const remotePage = !isLocalHost(location.hostname);
   if (configuredApiBase && (!savedApiBase || (remotePage && isLocalApiBase(savedApiBase)))) {
     localStorage.setItem("warehouseMobileApi", configuredApiBase);
     return configuredApiBase;
   }
-  return savedApiBase || configuredApiBase || fallback;
+  if (savedApiBase && !(remotePage && isLocalApiBase(savedApiBase))) return savedApiBase;
+  if (remotePage && isLocalApiBase(savedApiBase)) localStorage.removeItem("warehouseMobileApi");
+  return configuredApiBase || (remotePage ? "" : fallback);
 }
 
 async function autoConnectApi() {
   const candidates = apiBaseCandidates();
   if (!candidates.length) return;
   setApiStatus("Connecting to warehouse...", false);
+  const failures = [];
   for (const candidate of candidates) {
     try {
       await testApiBase(candidate);
@@ -2476,11 +2503,11 @@ async function autoConnectApi() {
       localStorage.setItem("warehouseMobileApi", candidate);
       setApiStatus("API connected automatically.", true);
       return;
-    } catch {
-      // Try the next candidate.
+    } catch (error) {
+      failures.push(`${candidate}: ${error.message}`);
     }
   }
-  setApiStatus("API not connected. Paste backend /api URL and press Test API.", false);
+  setApiStatus(`API not connected. ${failures[0] || "Set backend /api URL in API Settings."}`, false);
 }
 
 function apiBaseCandidates() {
@@ -2489,21 +2516,25 @@ function apiBaseCandidates() {
     queryApi,
     configuredApiBase,
     ...configuredApiCandidates,
-    savedApiBase,
     ...inferredApiBases(),
-    "http://127.0.0.1:5000/api",
+    savedApiBase,
+    isLocalHost(location.hostname) ? "http://127.0.0.1:5000/api" : "",
   ];
   return Array.from(new Set(candidates.map(normalizeApiBase).filter(Boolean)));
 }
 
 function inferredApiBases() {
-  if (!location.hostname || ["localhost", "127.0.0.1"].includes(location.hostname)) return [];
+  if (!location.hostname || isLocalHost(location.hostname)) return [];
 
   const bases = [`${location.origin}/api`];
   const replacements = [
     ["mobile", "backend"],
     ["picker", "backend"],
     ["staff", "backend"],
+    ["frontend", "backend"],
+    ["app", "backend"],
+    ["warehouse-mobile", "warehouse-backend"],
+    ["warehouse-picker", "warehouse-backend"],
   ];
   for (const [from, to] of replacements) {
     if (location.hostname.includes(from)) {
@@ -2531,6 +2562,15 @@ async function testApiBase(apiBase) {
   }
 }
 
+function apiConnectionHint(error) {
+  const detail = error?.message ? ` (${error.message})` : "";
+  if (!store.apiBase) return "API URL not set. Open API Settings.";
+  if (!isLocalHost(location.hostname) && isLocalApiBase(store.apiBase)) {
+    return `hosted app cannot use localhost. Set hosted backend URL ending with /api${detail}`;
+  }
+  return `check backend URL ${store.apiBase}, CORS origin, and backend health${detail}`;
+}
+
 function normalizeApiBase(value) {
   const cleaned = String(value || "").trim().replace(/\/+$/, "");
   if (!cleaned) return "";
@@ -2552,10 +2592,14 @@ function clearSavedApi() {
 function isLocalApiBase(value) {
   try {
     const url = new URL(value);
-    return ["localhost", "127.0.0.1"].includes(url.hostname);
+    return isLocalHost(url.hostname);
   } catch {
     return false;
   }
+}
+
+function isLocalHost(hostname) {
+  return !hostname || ["localhost", "127.0.0.1", "::1"].includes(hostname);
 }
 
 function setApiStatus(message, ok) {

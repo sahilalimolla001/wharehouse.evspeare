@@ -1,1 +1,2 @@
 window.WAREHOUSE_API_BASE = "";
+window.WAREHOUSE_API_CANDIDATES = [];

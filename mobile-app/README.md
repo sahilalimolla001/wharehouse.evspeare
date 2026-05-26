@@ -26,6 +26,8 @@ For Android camera scan, serve over HTTPS or use localhost during development. S
 ## Production use
 
 1. Host this folder over HTTPS.
-2. Set the API URL to the HTTPS backend `/api` URL.
+2. Set `WAREHOUSE_API_BASE` to the HTTPS backend `/api` URL, for example `https://warehouse-backend.example.com/api`.
 3. Add this app origin to backend `API_ALLOWED_ORIGINS`.
 4. If the mobile app is on a different domain than the backend, set backend `SESSION_COOKIE_SAMESITE=None` and keep `SESSION_COOKIE_SECURE=true`.
+
+If `WAREHOUSE_API_BASE` is missing, the app tries same-origin `/api` and common hosted backend hostnames, but an explicit env value is recommended.
