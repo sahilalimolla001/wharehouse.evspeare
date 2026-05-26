@@ -268,8 +268,9 @@ h2 {
 }
 
 #pick-screen .scan-box.compact {
-  width: min(42vw, 136px);
-  aspect-ratio: 1;
+  width: min(76vw, 280px);
+  aspect-ratio: 4 / 3;
+  height: auto;
   min-height: 0;
 }
 

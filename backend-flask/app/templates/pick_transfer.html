@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block page_title %}Pick Transfer{% endblock %}
+
+{% block content %}
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <section class="panel">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 class="mb-1">Live Picking</h2>
+            <p class="text-muted mb-0">{{ warehouse.code if warehouse else "All warehouses" }} / pending aur picking orders</p>
+          </div>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('users.pick_transfer') }}">Refresh</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>Order ID</th><th>Status</th><th>Current Picker</th><th>Items</th><th>Transfer</th></tr></thead>
+            <tbody>
+              {% for order in orders %}
+                <tr id="order-{{ order.id }}">
+                  <td><a href="{{ url_for('orders.order_detail', order_id=order.id) }}">{{ order.order_number }}</a></td>
+                  <td><span class="badge text-bg-light">{{ order.status }}</span></td>
+                  <td>
+                    {% if order.assigned_to %}
+                      {{ order.assigned_to.full_name }}<br><code>{{ order.assigned_to.picker_code or order.assigned_to.id }}</code>
+                    {% else %}
+                      <span class="text-muted">Unassigned</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ order.total_items }}</td>
+                  <td>
+                    <form method="post" action="{{ url_for('users.transfer_pick', order_id=order.id) }}" class="d-flex gap-2">
+                      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                      <input class="form-control form-control-sm" name="picker_code" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="Picker ID" required>
+                      <button class="btn btn-primary btn-sm" type="submit">Transfer</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5" class="text-muted">Live picking me koi order nahi hai.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-4">
+      <section class="panel">
+        <h2>Picker IDs</h2>
+        <div class="d-grid gap-2">
+          {% for picker in pickers %}
+            <div class="d-flex justify-content-between align-items-center border rounded p-2">
+              <div>
+                <strong>{{ picker.full_name }}</strong>
+                <div class="text-muted small">{{ role_label(picker.role) }}</div>
+              </div>
+              <code>{{ picker.picker_code }}</code>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No active picker users.</p>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

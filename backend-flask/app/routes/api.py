@@ -17,6 +17,7 @@ from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.finance import ensure_invoice, record_money_transaction
 from ..utils.order_payload import order_automation_summary
 from ..utils.payu import PayURefundError, initiate_payu_refund
+from ..utils.picker_identity import ensure_picker_code
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
@@ -121,6 +122,8 @@ def api_login():
     session.permanent = True
     session["user_id"] = user.id
     session["user_role"] = user.role
+    ensure_picker_code(user)
+    db.session.commit()
     return jsonify({"ok": True, "user": serialize_user(user), "token": create_api_token(user)})
 
 
@@ -133,7 +136,10 @@ def api_logout():
 @api_bp.get("/me")
 @api_login_required
 def api_me():
-    return jsonify({"ok": True, "user": serialize_user(current_api_user())})
+    user = current_api_user()
+    ensure_picker_code(user)
+    db.session.commit()
+    return jsonify({"ok": True, "user": serialize_user(user)})
 
 
 @api_bp.route("/central-panel/users", methods=["GET", "POST", "OPTIONS"])
@@ -143,6 +149,9 @@ def api_central_panel_users():
         return "", 204
     if request.method == "GET":
         users = User.query.order_by(User.full_name).all()
+        for user in users:
+            ensure_picker_code(user)
+        db.session.commit()
         return jsonify({"ok": True, "users": [serialize_central_panel_user(user) for user in users]})
 
     data = request.get_json(silent=True) or {}
@@ -167,6 +176,7 @@ def api_central_panel_users():
     user.is_active = data.get("status", "active") != "blocked"
     user.set_password(password)
     user.warehouses = [warehouse]
+    ensure_picker_code(user)
     db.session.commit()
     return jsonify({"ok": True, "user": serialize_central_panel_user(user)})
 
@@ -1626,6 +1636,8 @@ def serialize_user(user):
         "name": user.full_name,
         "email": user.email,
         "role": user.role,
+        "picker_code": user.picker_code,
+        "pickerCode": user.picker_code,
         "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses],
         "warehouse": serialize_warehouse(current) if current else None,
     }
@@ -1638,6 +1650,7 @@ def serialize_central_panel_user(user):
         "name": user.full_name,
         "phone": user.phone,
         "role": user.role,
+        "pickerCode": user.picker_code,
         "status": "active" if user.is_active else "blocked",
         "warehouseId": user.warehouses[0].id if user.warehouses else None,
         "warehouses": [serialize_warehouse(warehouse) for warehouse in user.warehouses],

@@ -179,7 +179,6 @@ function automationDefaults(saved = {}) {
 
 function bindConnectivity() {
   window.addEventListener("online", () => {
-    if (store.connectionMode === "offline") return;
     renderConnectionState();
     retryOfflineQueue().catch(() => {});
   });
@@ -187,23 +186,26 @@ function bindConnectivity() {
 }
 
 function isOnlineMode() {
-  return store.connectionMode !== "offline" && navigator.onLine !== false;
+  return navigator.onLine !== false;
+}
+
+function isPickerOnline() {
+  return store.connectionMode !== "offline";
 }
 
 function toggleConnectionMode() {
-  store.connectionMode = isOnlineMode() ? "offline" : "online";
+  store.connectionMode = isPickerOnline() ? "offline" : "online";
   localStorage.setItem("warehouseConnectionMode", store.connectionMode);
   renderConnectionState();
-  if (isOnlineMode()) {
-    toast("Online mode on. Pending sync retry ho raha hai.");
-    retryOfflineQueue().catch(() => {});
+  if (isPickerOnline()) {
+    toast("Picker online. Auto assign active hai.");
   } else {
-    toast("Offline mode on. Actions local queue me save honge.");
+    toast("Picker off. Auto assign ruk gaya, baki kaam chalta rahega.");
   }
 }
 
 function renderConnectionState() {
-  const online = isOnlineMode();
+  const online = isPickerOnline();
   const button = $("#online-toggle");
   if (!button) return;
   button.textContent = online ? "Online" : "Offline";
@@ -424,7 +426,8 @@ function renderPickerIdentity() {
     node.textContent = "Picker --";
     return;
   }
-  const label = store.user.role ? `${store.user.role} #${store.user.id}` : `Picker #${store.user.id}`;
+  const pickerCode = store.user.picker_code || store.user.pickerCode || store.user.id;
+  const label = store.user.role ? `${store.user.role} #${pickerCode}` : `Picker #${pickerCode}`;
   node.textContent = label;
 }
 
@@ -962,6 +965,10 @@ function routeStops() {
 }
 
 function startBestOrder() {
+  if (!isPickerOnline()) {
+    toast("Picker online karo, phir auto assign chalega.");
+    return;
+  }
   const best = filteredPickOrders()[0];
   if (!best) {
     toast("No best order available.");
@@ -986,7 +993,7 @@ async function runAutoPilot() {
     }
     const active = activeOrder();
     const activeIncomplete = active && ["pending", "picking"].includes(active.status) && !orderFullyPicked(active);
-    if (store.automationSettings.autoAssign && !activeIncomplete && activeScreenId() !== "pick-screen") {
+    if (isPickerOnline() && store.automationSettings.autoAssign && !activeIncomplete && activeScreenId() !== "pick-screen") {
       const best = filteredPickOrders()[0];
       if (best) await startOrder(best.id, { auto: true, silent: true });
     }
@@ -2464,7 +2471,7 @@ async function apiFetch(path, options = {}) {
   if (store.token && options.auth !== false) init.headers.Authorization = `Bearer ${store.token}`;
   if (store.user?.id && options.auth !== false) init.headers["X-Picker-Id"] = String(store.user.id);
   if (store.warehouseId && options.auth !== false) init.headers["X-Warehouse-Id"] = String(store.warehouseId);
-  if (options.auth !== false) init.headers["X-Picker-Online"] = isOnlineMode() ? "true" : "false";
+  if (options.auth !== false) init.headers["X-Picker-Online"] = isPickerOnline() ? "true" : "false";
   if (options.body) init.body = isFormData ? options.body : JSON.stringify(options.body);
 
   let response;

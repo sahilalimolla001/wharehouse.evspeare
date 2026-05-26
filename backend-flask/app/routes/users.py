@@ -7,6 +7,7 @@ from ..models import CustomerReturnOrder, Inventory, Order, Product, User, Wareh
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import test_storage_connection
+from ..utils.picker_identity import PICKER_ROLES, ensure_picker_code
 from ..utils.picker_ops import picker_ops_summary
 from ..utils.shiprocket import ShiprocketError, is_shiprocket_configured, test_shiprocket_connection
 from .auth import role_required, selected_warehouse
@@ -29,12 +30,21 @@ def users():
         if warehouse_ids:
             user.warehouses = Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all()
         user.page_permissions = json.dumps(request.form.getlist("page_permissions"))
+        ensure_picker_code(user)
         db.session.add(user)
         db.session.commit()
         flash("Staff user saved.", "success")
         return redirect(url_for("users.users"))
 
     users_list = User.query.order_by(User.full_name).all()
+    changed = False
+    for user in users_list:
+        if not user.picker_code:
+            before = user.picker_code
+            ensure_picker_code(user)
+            changed = changed or before != user.picker_code
+    if changed:
+        db.session.commit()
     warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
     user_permissions = {}
     for user in users_list:
@@ -52,6 +62,7 @@ def update_user_warehouses(user_id):
     warehouse_ids = [int(value) for value in request.form.getlist("warehouse_ids") if value.isdigit()]
     user.warehouses = Warehouse.query.filter(Warehouse.id.in_(warehouse_ids)).all() if warehouse_ids else []
     user.page_permissions = json.dumps(request.form.getlist("page_permissions"))
+    ensure_picker_code(user)
     db.session.commit()
     flash("User warehouse mapping updated.", "success")
     return redirect(url_for("users.users"))
@@ -109,6 +120,49 @@ def picker_ops():
     warehouse = selected_warehouse()
     summary = picker_ops_summary(warehouse)
     return render_template("picker_ops.html", warehouse=warehouse, **summary)
+
+
+@users_bp.route("/pick-transfer")
+@role_required("manager", "staff")
+def pick_transfer():
+    warehouse = selected_warehouse()
+    query = Order.query.filter(Order.status.in_(["pending", "picking"]))
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
+    live_orders = query.order_by(Order.updated_at.desc(), Order.created_at.desc()).all()
+    pickers = User.query.filter(User.role.in_(list(PICKER_ROLES)), User.is_active.is_(True)).order_by(User.full_name).all()
+    changed = False
+    for picker in pickers:
+        if not picker.picker_code:
+            ensure_picker_code(picker)
+            changed = True
+    if changed:
+        db.session.commit()
+    return render_template("pick_transfer.html", orders=live_orders, pickers=pickers, warehouse=warehouse)
+
+
+@users_bp.post("/pick-transfer/<int:order_id>")
+@role_required("manager", "staff")
+def transfer_pick(order_id):
+    order = Order.query.get_or_404(order_id)
+    warehouse = selected_warehouse()
+    if warehouse and order.warehouse_id != warehouse.id:
+        flash("Order selected warehouse ka nahi hai.", "warning")
+        return redirect(url_for("users.pick_transfer"))
+    picker_code = request.form.get("picker_code", "").strip()
+    picker = User.query.filter_by(picker_code=picker_code, is_active=True).first()
+    if not picker or picker.role not in PICKER_ROLES:
+        flash("Valid 5 digit picker id do.", "danger")
+        return redirect(url_for("users.pick_transfer"))
+    if warehouse and picker.warehouses and warehouse not in picker.warehouses:
+        flash("Picker is warehouse ke liye mapped nahi hai.", "danger")
+        return redirect(url_for("users.pick_transfer"))
+    order.assigned_to_id = picker.id
+    if order.status == "pending":
+        order.status = "picking"
+    db.session.commit()
+    flash(f"{order.order_number} transferred to {picker.full_name} / {picker.picker_code}.", "success")
+    return redirect(url_for("users.pick_transfer"))
 
 
 @users_bp.post("/settings/test-google-storage")

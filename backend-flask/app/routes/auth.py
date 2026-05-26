@@ -61,7 +61,7 @@ def user_page_permissions(user):
 
 def endpoint_permission(endpoint):
     prefix = (endpoint or "").split(".", 1)[0]
-    if endpoint == "users.picker_ops":
+    if endpoint in {"users.picker_ops", "users.pick_transfer", "users.transfer_pick"}:
         return "picker_ops"
     if endpoint in {"users.settings", "users.ops_config"}:
         return "settings"

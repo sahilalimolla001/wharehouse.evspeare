@@ -27,6 +27,7 @@ class User(TimestampMixin, db.Model):
     email = db.Column(db.String(180), unique=True, nullable=False, index=True)
     phone = db.Column(db.String(30))
     role = db.Column(db.String(30), default="staff", nullable=False)
+    picker_code = db.Column(db.String(5), unique=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     page_permissions = db.Column(db.Text)

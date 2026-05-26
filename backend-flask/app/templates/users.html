@@ -51,7 +51,7 @@
         <h2>Team</h2>
         <div class="table-responsive">
           <table class="table align-middle">
-            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Access</th><th>Status</th><th>Save</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Picker ID</th><th>Access</th><th>Status</th><th>Save</th></tr></thead>
             <tbody>
               {% for user in users %}
                 <tr>
@@ -59,6 +59,7 @@
                   <td>{{ user.email }}</td>
                   <td>{{ user.phone or "-" }}</td>
                   <td>{{ role_label(user.role) }}</td>
+                  <td>{{ user.picker_code or "-" }}</td>
                   <td>
                     <form id="warehouse-map-{{ user.id }}" method="post" action="{{ url_for('users.update_user_warehouses', user_id=user.id) }}" class="d-grid gap-1">
                       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">

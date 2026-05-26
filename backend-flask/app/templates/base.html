@@ -37,6 +37,7 @@
           {% endif %}
           {% if current_user_can("manager", "staff") and user_can_page(current_user, 'users.picker_ops') %}
             <a class="nav-link {% if request.endpoint == 'users.picker_ops' %}active{% endif %}" href="{{ url_for('users.picker_ops') }}">Picker Ops</a>
+            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('users.pick_transfer') %}active{% endif %}" href="{{ url_for('users.pick_transfer') }}">Pick Transfer</a>
           {% endif %}
           {% if current_user_can("manager", "staff") and user_can_page(current_user, 'shiprocket.create_order') %}
             <a class="nav-link {% if request.endpoint == 'shiprocket.create_order' %}active{% endif %}" href="{{ url_for('shiprocket.create_order') }}">Shiprocket</a>
