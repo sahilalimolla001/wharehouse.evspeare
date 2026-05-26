@@ -1,4 +1,5 @@
 import json
+import re
 import secrets
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -512,22 +513,24 @@ def source_address(source, kind, order=None, fallback=None):
     customer = source.get("customer") if isinstance(source.get("customer"), dict) else {}
     customer_name = source_customer_name(source, order)
     first_name, last_name = split_name(customer_name)
+    stored_address = parse_customer_address_text(order.customer_address if order else "")
     address = {
         "first_name": first_name,
         "last_name": last_name,
-        "address": order.customer_address if order else "",
+        "address": stored_address["address"],
         "address_2": "",
-        "city": "",
-        "pincode": "",
-        "state": "",
-        "country": "India",
+        "city": stored_address["city"],
+        "pincode": stored_address["pincode"],
+        "state": stored_address["state"],
+        "country": stored_address["country"],
         "email": source_text(source.get("customer_email") or source.get("email") or customer.get("email")),
         "phone": source_text(source.get("customer_phone") or source.get("phone") or customer.get("phone") or (order.customer_phone if order else "")),
         "alternate_phone": source_text(source.get("alternate_phone") or source.get("customer_alternate_phone")),
     }
 
     if isinstance(raw, str):
-        address["address"] = source_text(raw)
+        parsed_raw = parse_customer_address_text(raw)
+        address.update({key: value or address[key] for key, value in parsed_raw.items()})
         return address
     if not isinstance(raw, dict):
         return address
@@ -541,24 +544,44 @@ def source_address(source, kind, order=None, fallback=None):
     if not map_location and latitude and longitude:
         map_location = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
     address_2 = source_text(raw.get("address_2") or raw.get("line2") or raw.get("address2") or raw.get("street2") or location.get("address2"))
+    parsed_raw = parse_customer_address_text(raw.get("address") or raw.get("full_address"))
     if map_location and map_location not in address_2:
         address_2 = " | ".join(part for part in [address_2, f"Map: {map_location}"] if part)
     address.update(
         {
             "first_name": raw_first or first_name,
             "last_name": raw_last or last_name,
-            "address": source_text(raw.get("address") or raw.get("line1") or raw.get("address1") or raw.get("street") or raw.get("street1") or location.get("address")) or address["address"],
+            "address": source_text(raw.get("line1") or raw.get("address1") or raw.get("street") or raw.get("street1") or location.get("address")) or parsed_raw["address"] or address["address"],
             "address_2": address_2,
-            "city": source_text(raw.get("city") or raw.get("town") or location.get("city")),
-            "pincode": source_text(raw.get("pincode") or raw.get("postal_code") or raw.get("postcode") or raw.get("zip") or location.get("pincode")),
-            "state": source_text(raw.get("state") or raw.get("province") or raw.get("region") or location.get("state")),
-            "country": source_text(raw.get("country")) or "India",
+            "city": source_text(raw.get("city") or raw.get("town") or location.get("city")) or parsed_raw["city"] or address["city"],
+            "pincode": source_text(raw.get("pincode") or raw.get("postal_code") or raw.get("postcode") or raw.get("zip") or location.get("pincode")) or parsed_raw["pincode"] or address["pincode"],
+            "state": source_text(raw.get("state") or raw.get("province") or raw.get("region") or location.get("state")) or parsed_raw["state"] or address["state"],
+            "country": source_text(raw.get("country")) or parsed_raw["country"] or address["country"],
             "email": source_text(raw.get("email")) or address["email"],
             "phone": source_text(raw.get("phone") or raw.get("mobile")) or address["phone"],
             "alternate_phone": source_text(raw.get("alternate_phone")) or address["alternate_phone"],
         }
     )
     return address
+
+
+def parse_customer_address_text(value):
+    text = source_text(value)
+    parsed = {"address": text, "city": "", "pincode": "", "state": "", "country": "India"}
+    parts = [part.strip() for part in text.replace("\n", ",").split(",") if part.strip()]
+    pin_index = next((index for index in range(len(parts) - 1, -1, -1) if re.fullmatch(r"\d{6}", parts[index])), None)
+    if pin_index is None or pin_index < 2:
+        return parsed
+    parsed.update(
+        {
+            "address": ", ".join(parts[: pin_index - 2]) or text,
+            "city": parts[pin_index - 2],
+            "state": parts[pin_index - 1],
+            "pincode": parts[pin_index],
+            "country": parts[pin_index + 1] if pin_index + 1 < len(parts) else "India",
+        }
+    )
+    return parsed
 
 
 def first_source_entry(source, aliases):
