@@ -1615,6 +1615,7 @@ def find_location(identifier=None, required=False):
             raise ValueError("Location is required")
         return None
     identifier = str(identifier).strip()
+    cleaned_identifier = identifier[4:].strip() if identifier[:4].lower() == "loc:" else identifier
     if identifier.isdigit():
         location = WarehouseLocation.query.get(int(identifier))
         warehouse = current_api_warehouse()
@@ -1627,15 +1628,26 @@ def find_location(identifier=None, required=False):
     location = barcode_query.first()
     if location:
         return location
-    if identifier.startswith("LOC:"):
-        loc_identifier = identifier.removeprefix("LOC:").strip()
+    if identifier[:4].lower() == "loc:":
+        loc_identifier = cleaned_identifier
         barcode_query = WarehouseLocation.query.filter(func.lower(WarehouseLocation.barcode) == loc_identifier.lower())
         if warehouse:
             barcode_query = barcode_query.filter_by(warehouse_id=warehouse.id)
         location = barcode_query.first()
         if location:
             return location
-    cleaned_identifier = identifier.removeprefix("LOC:").strip()
+    short_code_query = WarehouseLocation.query.filter(
+        or_(
+            func.lower(WarehouseLocation.bin_code) == cleaned_identifier.lower(),
+            func.lower(WarehouseLocation.barcode).like(f"%-{cleaned_identifier.lower()}"),
+            func.lower(WarehouseLocation.barcode).like(f"%:{cleaned_identifier.lower()}"),
+        )
+    )
+    if warehouse:
+        short_code_query = short_code_query.filter_by(warehouse_id=warehouse.id)
+    location = short_code_query.first()
+    if location:
+        return location
     parts = [part.strip() for part in cleaned_identifier.replace("/", "-").split("-") if part.strip()]
     if len(parts) == 3:
         zone, rack, bin_code = parts
