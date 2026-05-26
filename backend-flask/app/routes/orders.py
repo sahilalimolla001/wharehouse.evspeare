@@ -4,6 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
 from ..models import Order, OrderItem, Product, User
+from ..utils.order_payload import order_automation_summary
 from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
 from .auth import accessible_warehouses, get_current_user, login_required, role_required, selected_warehouse, user_has_role
 
@@ -21,7 +22,8 @@ def orders():
     if not can_manage_all_orders(user):
         query = query.filter(Order.assigned_to_id == user.id)
     orders_list = query.order_by(Order.created_at.desc()).all()
-    return render_template("orders.html", orders=orders_list)
+    automation_by_order = {order.id: order_automation_summary(order) for order in orders_list}
+    return render_template("orders.html", orders=orders_list, automation_by_order=automation_by_order)
 
 
 @orders_bp.route("/add-order", methods=["GET", "POST"])
@@ -74,7 +76,7 @@ def order_detail(order_id):
     if not can_access_order(get_current_user(), order):
         flash("You do not have permission to open that order.", "warning")
         return redirect(url_for("orders.orders"))
-    return render_template("order_detail.html", order=order)
+    return render_template("order_detail.html", order=order, automation=order_automation_summary(order))
 
 
 @orders_bp.post("/order/<int:order_id>/status")

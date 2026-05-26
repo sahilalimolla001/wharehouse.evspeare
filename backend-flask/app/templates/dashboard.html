@@ -35,6 +35,18 @@
       <span>Total Stock Units</span>
       <strong>{{ total_stock_units }}</strong>
     </article>
+    <article class="metric-card express">
+      <span>Express Orders</span>
+      <strong>{{ express_orders }}</strong>
+    </article>
+    <article class="metric-card success">
+      <span>Auto Discount Orders</span>
+      <strong>{{ auto_discount_orders }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Auto Savings Given</span>
+      <strong>{{ auto_discount_total|money }}</strong>
+    </article>
   </section>
 
   <div class="row g-3 mt-1">

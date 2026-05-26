@@ -14,6 +14,7 @@ from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
+from ..utils.order_payload import order_automation_summary
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import user_has_role
@@ -920,7 +921,7 @@ def create_order_from_integration(data):
         raise ValueError("JSON body must be an object")
 
     source = trim_text(data.get("source") or "external", 80).lower()
-    external_order_id = trim_text(data.get("external_order_id") or data.get("order_id") or data.get("id"), 120)
+    external_order_id = trim_text(data.get("external_order_id") or data.get("order_id") or data.get("orderId") or data.get("id"), 120)
     if not external_order_id:
         raise ValueError("external_order_id is required")
 
@@ -929,7 +930,7 @@ def create_order_from_integration(data):
         return existing, False
 
     order_number = trim_text(
-        data.get("order_number") or data.get("external_order_number") or f"{source.upper()}-{external_order_id}",
+        data.get("order_number") or data.get("external_order_number") or data.get("orderId") or f"{source.upper()}-{external_order_id}",
         80,
     )
     if not order_number:
@@ -946,7 +947,8 @@ def create_order_from_integration(data):
     if not customer_name:
         raise ValueError("customer_name is required")
 
-    priority = trim_text(data.get("priority") or "normal", 20).lower()
+    automation = order_automation_summary(data)
+    priority = trim_text(data.get("priority") or ("urgent" if automation["is_express"] else "normal"), 20).lower()
     if priority not in {"normal", "high", "urgent"}:
         raise ValueError("priority must be normal, high, or urgent")
     warehouse = resolve_order_warehouse(data)
@@ -963,7 +965,7 @@ def create_order_from_integration(data):
         customer_address=trim_text(data.get("customer_address") or customer.get("address") or format_address(data.get("shipping_address") or customer.get("shipping_address")), 2000),
         priority=priority,
         assigned_to_id=assignee_id,
-        expected_dispatch_date=parse_expected_dispatch_date(data.get("expected_dispatch_date")),
+        expected_dispatch_date=parse_expected_dispatch_date(data.get("expected_dispatch_date") or data.get("expectedDispatchDate")),
     )
 
     items = data.get("items")
@@ -975,7 +977,7 @@ def create_order_from_integration(data):
             raise ValueError("Each item must be an object")
         product = find_product_from_payload(item, required=True)
         quantity = positive_int(item.get("quantity"), "quantity")
-        unit_price = numeric_or_default(item.get("unit_price"), product.selling_price)
+        unit_price = numeric_or_default(item.get("unit_price") or item.get("price") or item.get("amount"), product.selling_price)
         order.items.append(OrderItem(product_id=product.id, quantity=quantity, unit_price=unit_price))
 
     db.session.add(order)
@@ -1214,7 +1216,7 @@ def int_or_default(value, default):
 def find_product_from_payload(data, required=False):
     if isinstance(data, dict):
         try:
-            product_id = int_or_none(data.get("product_id"))
+            product_id = int_or_none(data.get("product_id") or data.get("productId") or data.get("sourceId"))
         except (TypeError, ValueError):
             product_id = None
         if product_id:
@@ -1542,6 +1544,7 @@ def serialize_order(order):
             "awb": order.courier_awb,
             "status": order.courier_status,
         },
+        "automation": order_automation_summary(order),
         "package": {
             "length": float(order.package_length_cm or 0),
             "breadth": float(order.package_breadth_cm or 0),

@@ -33,6 +33,24 @@
         <p class="text-secondary mb-1">{{ order.customer_name }}</p>
         <p class="text-secondary">{{ order.customer_phone or "-" }}</p>
         <p class="text-secondary">Warehouse: <code>{{ order.warehouse.code if order.warehouse else "-" }}</code></p>
+        <div class="automation-box mb-3">
+          <div>
+            <span>Delivery</span>
+            <strong>{{ automation.delivery_label }}</strong>
+          </div>
+          <div>
+            <span>ETA</span>
+            <strong>{{ automation.delivery_eta or "Standard" }}</strong>
+          </div>
+          <div>
+            <span>Auto Saving</span>
+            <strong>{{ automation.auto_discount|money }}</strong>
+          </div>
+          <div>
+            <span>Payment</span>
+            <strong>{{ (automation.payment_method or "-")|title }}{% if automation.payment_status %} / {{ automation.payment_status|title }}{% endif %}</strong>
+          </div>
+        </div>
         {% if order.courier_provider %}
           <div class="integration-box mb-3">
             <strong>{{ order.courier_provider|title }}</strong>

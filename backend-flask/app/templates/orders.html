@@ -14,12 +14,21 @@
         <thead><tr><th>Order</th><th>Warehouse</th><th>Customer</th><th>Items</th><th>Priority</th><th>Status</th><th>Courier</th><th></th></tr></thead>
         <tbody>
           {% for order in orders %}
+            {% set automation = automation_by_order.get(order.id, {}) %}
             <tr>
               <td>{{ order.order_number }}</td>
               <td><code>{{ order.warehouse.code if order.warehouse else "-" }}</code></td>
               <td>{{ order.customer_name }}</td>
               <td>{{ order.total_items }}</td>
-              <td>{{ order.priority|title }}</td>
+              <td>
+                <span>{{ order.priority|title }}</span>
+                {% if automation.is_express %}
+                  <span class="badge text-bg-warning ms-1">Express</span>
+                {% endif %}
+                {% if automation.auto_discount %}
+                  <span class="badge text-bg-success ms-1">Auto Save</span>
+                {% endif %}
+              </td>
               <td><span class="badge text-bg-secondary">{{ order.status|title }}</span></td>
               <td>
                 {% if order.courier_provider %}

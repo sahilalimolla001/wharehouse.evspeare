@@ -5,6 +5,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Inventory, Order, Product, StockIn, StockOut, WarehouseLocation
+from ..utils.order_payload import order_automation_summary
 from .auth import accessible_warehouses, get_current_user, login_required, selected_warehouse
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -43,6 +44,13 @@ def dashboard():
         completed_query = completed_query.filter(Order.warehouse_id == warehouse.id)
     pending_orders = pending_query.count()
     completed_orders = completed_query.count()
+    active_orders_query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
+    if warehouse:
+        active_orders_query = active_orders_query.filter(Order.warehouse_id == warehouse.id)
+    active_order_summaries = [order_automation_summary(order) for order in active_orders_query.all()]
+    express_orders = sum(1 for item in active_order_summaries if item["is_express"])
+    auto_discount_orders = sum(1 for item in active_order_summaries if item["auto_discount"] > 0)
+    auto_discount_total = sum(item["auto_discount"] for item in active_order_summaries)
 
     top_selling_rows = (
         db.session.query(Product.name, Product.sku, func.coalesce(func.sum(StockOut.quantity), 0).label("sold_qty"))
@@ -70,6 +78,9 @@ def dashboard():
         today_stock_out=today_stock_out,
         pending_orders=pending_orders,
         completed_orders=completed_orders,
+        express_orders=express_orders,
+        auto_discount_orders=auto_discount_orders,
+        auto_discount_total=auto_discount_total,
         top_selling_rows=top_selling_rows,
         recent_inventory=recent_inventory,
         warehouses=warehouses,
