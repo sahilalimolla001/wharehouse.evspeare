@@ -176,7 +176,7 @@ python -m flask --app run.py test-google-storage
 
 ## Shiprocket Courier Orders
 
-Set `SHIPROCKET_EMAIL` and `SHIPROCKET_PASSWORD` to the API user created in Shiprocket, then set `SHIPROCKET_PICKUP_LOCATION` to the pickup location name from your Shiprocket account. `SHIPROCKET_TOKEN` is optional and only useful when you want to provide a temporary token yourself.
+Set `SHIPROCKET_EMAIL` and `SHIPROCKET_PASSWORD` to the API user created in Shiprocket. Set `SHIPROCKET_PICKUP_LOCATION` to the pickup location name from your Shiprocket account; when it is empty, order dispatch uses the order warehouse code as the pickup location name. `SHIPROCKET_TOKEN` is optional and only useful when you want to provide a temporary token yourself.
 
 After running migrations, open the admin page:
 

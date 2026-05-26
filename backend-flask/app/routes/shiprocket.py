@@ -242,7 +242,7 @@ def default_form_data(order=None):
         "local_order_id": str(order.id) if order else "",
         "order_id": order.order_number if order else f"EW-{now.strftime('%Y%m%d%H%M%S')}",
         "order_date": datetime_input(order_date),
-        "pickup_location": current_app.config.get("SHIPROCKET_PICKUP_LOCATION", ""),
+        "pickup_location": shiprocket_pickup_location(order),
         "channel_id": current_app.config.get("SHIPROCKET_CHANNEL_ID", ""),
         "comment": f"Warehouse order {order.order_number}" if order else "",
         "billing_customer_name": billing_first_name,
@@ -279,6 +279,15 @@ def default_form_data(order=None):
         "weight": decimal_to_input(package["weight"]),
         "line_items": default_line_items(order, source),
     }
+
+
+def shiprocket_pickup_location(order=None):
+    configured_location = str(current_app.config.get("SHIPROCKET_PICKUP_LOCATION", "") or "").strip()
+    if configured_location:
+        return configured_location
+    if order and order.warehouse:
+        return str(order.warehouse.code or "").strip()
+    return ""
 
 
 def dispatch_order_with_shiprocket(order, package_input, user_id=None):
