@@ -46,6 +46,7 @@
           </div>
         </div>
         <div class="header-actions">
+          <button class="status-toggle online" id="online-toggle" type="button" aria-pressed="true">Online</button>
           <select class="warehouse-select" id="warehouse-select" aria-label="Warehouse"></select>
           <button class="icon-btn" id="sync-btn" type="button">Sync</button>
           <button class="icon-btn ghost" id="logout-btn" type="button">Logout</button>
@@ -134,6 +135,7 @@
 
         <section class="screen" id="pick-screen">
           <div class="active-order" id="active-order-card"></div>
+          <div class="picker-flow-card" id="picker-flow-card"></div>
           <div class="scan-stage">
             <div class="result-card bin-card" id="pick-bin-card">Scan bin barcode first.</div>
             <div class="scan-box compact">
@@ -198,6 +200,10 @@
             <button class="setting-row" data-automation-toggle="slaAlerts" type="button">
               <span><strong>SLA push alerts</strong><small>High-risk orders ke liye local device alert ready rakhega.</small></span>
               <b id="toggle-slaAlerts">Off</b>
+            </button>
+            <button class="setting-row" data-automation-toggle="autoPack" type="button">
+              <span><strong>Auto pack after pick</strong><small>Last item pick hote hi order packed queue me chala jayega.</small></span>
+              <b id="toggle-autoPack">Off</b>
             </button>
           </div>
 

@@ -8,8 +8,8 @@ const store = {
   token: localStorage.getItem("warehouseMobileToken") || "",
   warehouses: JSON.parse(localStorage.getItem("warehouseMobileWarehouses") || "[]"),
   warehouseId: Number(localStorage.getItem("warehouseMobileWarehouseId") || 0),
-  orders: [],
-  returns: [],
+  orders: JSON.parse(localStorage.getItem("warehouseCachedOrders") || "[]"),
+  returns: JSON.parse(localStorage.getItem("warehouseCachedReturns") || "[]"),
   activeOrderId: Number(localStorage.getItem("warehouseActiveOrderId") || 0),
   activeReturnId: Number(localStorage.getItem("warehouseActiveReturnId") || 0),
   activePickLocation: null,
@@ -18,8 +18,9 @@ const store = {
   moveInventory: [],
   priorityFilter: localStorage.getItem("warehousePriorityFilter") || "all",
   batchMode: localStorage.getItem("warehouseBatchMode") === "true",
-  automationSettings: JSON.parse(localStorage.getItem("warehouseAutomationSettings") || "{}"),
+  automationSettings: automationDefaults(JSON.parse(localStorage.getItem("warehouseAutomationSettings") || "{}")),
   offlineQueue: JSON.parse(localStorage.getItem("warehouseOfflineQueue") || "[]"),
+  connectionMode: localStorage.getItem("warehouseConnectionMode") || "online",
   shiftStartedAt: localStorage.getItem("warehouseShiftStartedAt") || "",
   incidents: JSON.parse(localStorage.getItem("warehouseIncidents") || "[]"),
   totes: JSON.parse(localStorage.getItem("warehouseTotes") || "[]"),
@@ -36,6 +37,7 @@ let refreshTimer = null;
 let stockPreviewTimer = null;
 let activeReturnConfirmed = false;
 let lastSlaAlertAt = 0;
+let autoPilotRunning = false;
 const defaultScreenId = "hub-screen";
 const standaloneApp = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
 
@@ -46,6 +48,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#api-base").value = store.apiBase;
   bindNavigation();
   bindActions();
+  bindConnectivity();
+  renderConnectionState();
   initializeBackNavigation();
   await autoConnectApi();
   initializeSession();
@@ -65,6 +69,7 @@ function bindActions() {
   $("#login-form").addEventListener("submit", login);
   $("#test-api").addEventListener("click", testApiConnection);
   $("#logout-btn").addEventListener("click", logout);
+  $("#online-toggle").addEventListener("click", toggleConnectionMode);
   $("#warehouse-select").addEventListener("change", changeWarehouse);
   $("#sync-btn").addEventListener("click", refreshAll);
   $("#hub-refresh").addEventListener("click", refreshAll);
@@ -127,6 +132,52 @@ function bindActions() {
   $$("[data-scan-fill]").forEach((button) => {
     button.addEventListener("click", () => beginScanFill(button.dataset.scanFill));
   });
+}
+
+function automationDefaults(saved = {}) {
+  return {
+    autoAssign: saved.autoAssign !== false,
+    shortageAlert: saved.shortageAlert !== false,
+    routeAssist: saved.routeAssist !== false,
+    slaAlerts: saved.slaAlerts === true,
+    autoPack: saved.autoPack !== false,
+  };
+}
+
+function bindConnectivity() {
+  window.addEventListener("online", () => {
+    if (store.connectionMode === "offline") return;
+    renderConnectionState();
+    retryOfflineQueue().catch(() => {});
+  });
+  window.addEventListener("offline", renderConnectionState);
+}
+
+function isOnlineMode() {
+  return store.connectionMode !== "offline" && navigator.onLine !== false;
+}
+
+function toggleConnectionMode() {
+  store.connectionMode = isOnlineMode() ? "offline" : "online";
+  localStorage.setItem("warehouseConnectionMode", store.connectionMode);
+  renderConnectionState();
+  if (isOnlineMode()) {
+    toast("Online mode on. Pending sync retry ho raha hai.");
+    retryOfflineQueue().catch(() => {});
+  } else {
+    toast("Offline mode on. Actions local queue me save honge.");
+  }
+}
+
+function renderConnectionState() {
+  const online = isOnlineMode();
+  const button = $("#online-toggle");
+  if (!button) return;
+  button.textContent = online ? "Online" : "Offline";
+  button.classList.toggle("online", online);
+  button.classList.toggle("offline", !online);
+  button.setAttribute("aria-pressed", online ? "true" : "false");
+  document.body.classList.toggle("offline-mode", !online);
 }
 
 function beginScanFill(target) {
@@ -351,10 +402,25 @@ async function changeWarehouse(event) {
 }
 
 async function refreshAll() {
+  renderConnectionState();
+  if (!isOnlineMode()) {
+    renderOrderQueue();
+    renderQuickOps();
+    renderBatchGroups();
+    renderHub();
+    renderOpsAutomation();
+    renderTools();
+    renderDispatchQueue();
+    renderActiveOrder();
+    renderReturnQueue();
+    toast("Offline mode: cached queue shown.");
+    return;
+  }
   await Promise.all([loadDashboard(), loadOrders(), loadReturns()]);
   renderHub();
   renderOpsAutomation();
   renderTools();
+  await runAutoPilot();
 }
 
 function startAutoRefresh() {
@@ -383,6 +449,7 @@ async function loadOrders() {
   try {
     const data = await apiFetch("/pick-list");
     store.orders = data.orders || [];
+    localStorage.setItem("warehouseCachedOrders", JSON.stringify(store.orders));
     const pending = store.orders.filter((order) => order.status === "pending").length;
     const picking = store.orders.filter((order) => order.status === "picking").length;
     const packed = store.orders.filter((order) => order.status === "packed").length;
@@ -405,6 +472,7 @@ async function loadReturns() {
   try {
     const data = await apiFetch("/returns/pick-list");
     store.returns = data.returns || [];
+    localStorage.setItem("warehouseCachedReturns", JSON.stringify(store.returns));
     renderReturnQueue();
     renderActiveReturn();
     renderReturnPv();
@@ -645,7 +713,7 @@ function runAutomationCheck() {
   renderQuickOps();
   renderBatchGroups();
   renderOpsAutomation();
-  toast("Automation check complete.");
+  runAutoPilot().then(() => toast("Automation check complete."));
 }
 
 function toggleAutomationSetting(key) {
@@ -728,7 +796,7 @@ function renderOpsAutomation() {
   $("#auto-batchable").textContent = batchGroups().length;
   $("#auto-quality").textContent = packedOrders.length ? `${packedOrders.length} ready` : "Clear";
   $("#auto-workload").textContent = pickOrders.length > 15 ? "High" : pickOrders.length > 5 ? "Medium" : "Low";
-  Object.entries({ autoAssign: "autoAssign", shortageAlert: "shortageAlert", routeAssist: "routeAssist", slaAlerts: "slaAlerts" }).forEach(([key, id]) => {
+  Object.entries({ autoAssign: "autoAssign", shortageAlert: "shortageAlert", routeAssist: "routeAssist", slaAlerts: "slaAlerts", autoPack: "autoPack" }).forEach(([key, id]) => {
     const node = $(`#toggle-${id}`);
     if (node) node.textContent = store.automationSettings[key] ? "On" : "Off";
   });
@@ -840,6 +908,31 @@ function startBestOrder() {
     return;
   }
   startOrder(best.id);
+}
+
+async function runAutoPilot() {
+  if (autoPilotRunning || !store.user || !isOnlineMode() || store.breakMode) return;
+  autoPilotRunning = true;
+  try {
+    if (!store.shiftStartedAt) {
+      store.shiftStartedAt = new Date().toISOString();
+      localStorage.setItem("warehouseShiftStartedAt", store.shiftStartedAt);
+    }
+    if (store.automationSettings.routeAssist) {
+      store.priorityFilter = "all";
+      localStorage.setItem("warehousePriorityFilter", store.priorityFilter);
+      const filter = $("#priority-filter");
+      if (filter) filter.value = store.priorityFilter;
+    }
+    const active = activeOrder();
+    const activeIncomplete = active && ["pending", "picking"].includes(active.status) && !orderFullyPicked(active);
+    if (store.automationSettings.autoAssign && !activeIncomplete && activeScreenId() !== "pick-screen") {
+      const best = filteredPickOrders()[0];
+      if (best) await startOrder(best.id, { auto: true, silent: true });
+    }
+  } finally {
+    autoPilotRunning = false;
+  }
 }
 
 async function retryOfflineQueue() {
@@ -1432,6 +1525,7 @@ function orderCardHtml(order) {
   const pickedQty = items.reduce((sum, item) => sum + item.picked_quantity, 0);
   const progress = totalQty ? Math.round((pickedQty / totalQty) * 100) : 0;
   const sla = slaMinutesLeft(order);
+  const auto = order.automation || {};
   return `
     <article class="order-card tappable" data-start-order="${order.id}">
       <div class="order-top">
@@ -1439,7 +1533,7 @@ function orderCardHtml(order) {
           <strong>${escapeHtml(order.order_number)}</strong>
           <span>${escapeHtml(order.customer_name)} · ${escapeHtml(routeKey(order) || "bin pending")}</span>
         </div>
-        <span class="badge ${order.priority === "urgent" ? "warn" : ""}">${escapeHtml(order.priority)}</span>
+        <span class="badge ${order.priority === "urgent" || auto.is_express ? "warn" : ""}">${escapeHtml(auto.is_express ? "Express" : order.priority)}</span>
       </div>
       <div class="progress-line"><span style="width:${progress}%"></span></div>
       <div class="order-meta">
@@ -1447,12 +1541,12 @@ function orderCardHtml(order) {
         <span>${pickedQty}/${totalQty} picked</span>
         <span>${sla <= 0 ? "SLA due" : `${sla} min left`}</span>
       </div>
-      <div class="order-cta">${order.status === "pending" ? "Tap to start picking" : "Tap to continue"}</div>
+      <div class="order-cta">${order.status === "pending" ? "Start pick route" : "Continue pick route"}</div>
     </article>
   `;
 }
 
-async function startOrder(orderId) {
+async function startOrder(orderId, options = {}) {
   store.activeOrderId = orderId;
   localStorage.setItem("warehouseActiveOrderId", String(orderId));
   resetActivePickBin();
@@ -1463,16 +1557,59 @@ async function startOrder(orderId) {
   }
   showScreen("pick-screen");
   renderActiveOrder();
+  if (options.auto && !options.silent) toast("Best order auto-started.");
 }
 
 function activeOrder() {
   return store.orders.find((order) => order.id === store.activeOrderId) || store.orders.find((order) => order.status === "picking") || null;
 }
 
+function pickerFlowEmptyHtml() {
+  return `
+    <div class="flow-steps">
+      <span class="current">1 Select order</span>
+      <span>2 Scan bin</span>
+      <span>3 Scan SKU</span>
+      <span>4 Auto pack</span>
+    </div>
+    <p>No active order. Ops se best order start karein.</p>
+  `;
+}
+
+function renderPickerFlow(order) {
+  const next = nextPickItem(order);
+  const picked = orderFullyPicked(order);
+  const step = picked ? 4 : store.activePickLocation ? 3 : 2;
+  $("#picker-flow-card").innerHTML = `
+    <div class="flow-steps">
+      <span class="${step >= 1 ? "done" : ""}">1 Order</span>
+      <span class="${step === 2 ? "current" : step > 2 ? "done" : ""}">2 Bin</span>
+      <span class="${step === 3 ? "current" : step > 3 ? "done" : ""}">3 SKU</span>
+      <span class="${step === 4 ? "current" : ""}">4 Pack</span>
+    </div>
+    <div class="flow-next">
+      <div>
+        <strong>${picked ? "All items picked" : store.activePickLocation ? `Scan ${escapeHtml(itemLabel(next || {}))}` : "Scan suggested bin"}</strong>
+        <span>${picked ? "Auto pack ready" : next ? escapeHtml(next.product?.name || next.product_name || "Next item") : "Route will update automatically"}</span>
+      </div>
+      <button type="button" id="flow-next-action">${picked ? "Pack now" : store.activePickLocation ? "Focus scan" : "Bin hint"}</button>
+    </div>
+  `;
+  $("#flow-next-action")?.addEventListener("click", () => {
+    if (picked) markActiveOrderPacked();
+    else if (store.activePickLocation) $("#manual-code").focus();
+    else {
+      $("#pick-bin-card").scrollIntoView({ behavior: "smooth", block: "center" });
+      toast("Suggested bin scan karein.");
+    }
+  });
+}
+
 function renderActiveOrder() {
   const order = activeOrder();
   if (!order) {
     $("#active-order-card").innerHTML = `<div class="empty-state">Select an order from the queue.</div>`;
+    $("#picker-flow-card").innerHTML = pickerFlowEmptyHtml();
     $("#pick-bin-card").innerHTML = `Scan bin barcode first.`;
     $("#pick-items").innerHTML = "";
     $("#scan-result").textContent = "Select an order first.";
@@ -1497,6 +1634,7 @@ function renderActiveOrder() {
     </article>
   `;
 
+  renderPickerFlow(order);
   renderPickBinCard(order);
   const itemsForBin = pickItemsForActiveBin(order);
   if (!store.activePickLocation) {
@@ -1601,12 +1739,29 @@ async function updatePickedQuantity(itemId, quantity) {
     replaceOrder(data.order);
     if (store.activePickLocation) await loadActivePickInventory(store.activePickLocation.barcode || store.activePickLocation.id);
     renderActiveOrder();
+    if (store.automationSettings.autoPack && orderFullyPicked(activeOrder())) {
+      await autoPackActiveOrder();
+    }
   } catch (error) {
     toast(error.message);
   }
 }
 
-async function markActiveOrderPacked() {
+function orderFullyPicked(order) {
+  return Boolean(order?.items?.length) && order.items.every((item) => Number(item.picked_quantity || 0) >= Number(item.quantity || 0));
+}
+
+function nextPickItem(order) {
+  return (order?.items || []).find((item) => Number(item.picked_quantity || 0) < Number(item.quantity || 0)) || null;
+}
+
+async function autoPackActiveOrder() {
+  const order = activeOrder();
+  if (!order || !orderFullyPicked(order)) return;
+  await markActiveOrderPacked({ silent: true, auto: true });
+}
+
+async function markActiveOrderPacked(options = {}) {
   const order = activeOrder();
   if (!order) return;
   try {
@@ -1615,7 +1770,7 @@ async function markActiveOrderPacked() {
     }
     const data = await apiFetch(`/orders/${order.id}/status`, { method: "POST", body: { status: "packed" } });
     replaceOrder(data.order);
-    toast("Order packed.");
+    toast(options.silent ? "Auto packed. Handoff queue ready." : "Order packed.");
     await loadOrders();
     showScreen("dispatch-screen");
   } catch (error) {
@@ -2106,6 +2261,13 @@ function replaceReturn(returnOrder) {
 
 async function apiFetch(path, options = {}) {
   if (!store.apiBase) throw new Error("API URL not set. Open API Settings.");
+  if (!isOnlineMode()) {
+    if ((options.method || "GET") !== "GET" && options.auth !== false) {
+      queueOfflineMutation(path, options);
+      throw new Error("Offline mode: action queued.");
+    }
+    throw new Error("Offline mode: cached data only.");
+  }
   const isFormData = options.body instanceof FormData;
   const init = {
     method: options.method || "GET",

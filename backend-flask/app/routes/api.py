@@ -692,7 +692,7 @@ def api_order_item_pick(order_id, item_id):
 
 
 @api_bp.post("/orders/<int:order_id>/items/<int:item_id>/pack")
-@api_role_required("manager", "staff", "packer")
+@api_role_required("manager", "staff", "picker", "packer")
 def api_order_item_pack(order_id, item_id):
     data = request.get_json(silent=True) or {}
     order = Order.query.get_or_404(order_id)

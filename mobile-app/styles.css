@@ -142,6 +142,29 @@ h2 {
   gap: 7px;
 }
 
+.status-toggle {
+  min-width: 78px;
+  height: 42px;
+  padding: 0 10px;
+  border-color: rgba(13, 124, 42, 0.28);
+  font-size: 0.78rem;
+}
+
+.status-toggle.online {
+  color: #fff;
+  background: var(--primary);
+}
+
+.status-toggle.offline {
+  color: #7c2d12;
+  background: #ffedd5;
+  border-color: #fed7aa;
+}
+
+.offline-mode .app-header {
+  box-shadow: inset 0 -3px 0 #fb923c;
+}
+
 .warehouse-select {
   width: 136px;
   height: 42px;
@@ -173,6 +196,7 @@ h2 {
 .result-card,
 .order-card,
 .pick-item,
+.picker-flow-card,
 .empty-state,
 .status-strip article,
 .quick-ops-grid article,
@@ -188,6 +212,72 @@ h2 {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.picker-flow-card {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: #ffffff;
+}
+
+.picker-flow-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.flow-steps span {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 7px 6px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: #eef4ee;
+  font-size: 0.68rem;
+  font-weight: 950;
+  text-align: center;
+}
+
+.flow-steps span.current {
+  color: #7c2d12;
+  background: #ffedd5;
+}
+
+.flow-steps span.done {
+  color: #fff;
+  background: var(--primary);
+}
+
+.flow-next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow-next div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.flow-next strong {
+  color: var(--ink);
+}
+
+.flow-next span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .login-panel,
@@ -829,12 +919,13 @@ input[type="file"] {
 
   .header-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 72px 78px;
+    grid-template-columns: 86px minmax(0, 1fr) 72px 78px;
     width: 100%;
   }
 
   .warehouse-select,
-  .icon-btn {
+  .icon-btn,
+  .status-toggle {
     width: 100%;
     min-width: 0;
   }
@@ -898,14 +989,23 @@ input[type="file"] {
   }
 
   .header-actions {
-    grid-template-columns: minmax(0, 1fr) 62px 68px;
+    grid-template-columns: 74px minmax(0, 1fr) 62px 68px;
     gap: 5px;
   }
 
   .warehouse-select,
   .icon-btn,
+  .status-toggle,
   .bottom-nav button {
     font-size: 0.66rem;
+  }
+
+  .flow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flow-next {
+    grid-template-columns: 1fr;
   }
 
   .pick-item,
