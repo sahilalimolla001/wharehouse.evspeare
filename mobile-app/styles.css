@@ -243,8 +243,9 @@ h2 {
 
 #pick-screen .scan-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
+  justify-items: center;
   gap: 10px;
 }
 
@@ -277,6 +278,7 @@ h2 {
 #pick-screen .button-row {
   display: grid;
   grid-template-columns: 1fr;
+  justify-self: center;
   gap: 0;
 }
 
