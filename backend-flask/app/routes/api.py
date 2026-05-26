@@ -185,6 +185,15 @@ def api_central_panel_users():
     return jsonify({"ok": True, "user": serialize_central_panel_user(user)})
 
 
+@api_bp.route("/central-panel/warehouses", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_warehouses():
+    if request.method == "OPTIONS":
+        return "", 204
+    warehouses = Warehouse.query.filter_by(is_active=True).order_by(Warehouse.code).all()
+    return jsonify({"ok": True, "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses]})
+
+
 @api_bp.get("/dashboard")
 @api_login_required
 def api_dashboard():
@@ -1684,6 +1693,7 @@ def serialize_central_panel_user(user):
         "pickerCode": user.picker_code,
         "status": "active" if user.is_active else "blocked",
         "warehouseId": user.warehouses[0].id if user.warehouses else None,
+        "warehouseCode": user.warehouses[0].code if user.warehouses else "",
         "warehouses": [serialize_warehouse(warehouse) for warehouse in user.warehouses],
         "permissions": sorted(user_page_permissions(user)) if user.page_permissions else role_permissions(user.role),
         "page_permissions": sorted(user_page_permissions(user)) if user.page_permissions else role_permissions(user.role),
