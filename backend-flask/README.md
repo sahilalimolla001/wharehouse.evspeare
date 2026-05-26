@@ -121,6 +121,10 @@ CUSTOMER_PRODUCT_WEBHOOK_TIMEOUT=10
 CUSTOMER_SHIPPING_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/shipping-status
 CUSTOMER_SHIPPING_WEBHOOK_TOKEN=strong-shared-secret
 CUSTOMER_SHIPPING_WEBHOOK_TIMEOUT=10
+RAZORPAY_KEY_ID=rzp_live_your_key_id
+RAZORPAY_KEY_SECRET=your-razorpay-key-secret
+RAZORPAY_WEBHOOK_SECRET=strong-random-webhook-secret
+RAZORPAY_TIMEOUT=20
 SHIPROCKET_API_BASE_URL=https://apiv2.shiprocket.in/v1/external
 SHIPROCKET_EMAIL=shiprocket-api-user@example.com
 SHIPROCKET_PASSWORD=strong-shiprocket-api-password
@@ -153,6 +157,16 @@ python -m flask --app run.py create-staff
 Set `STAFF_EMAIL`, `STAFF_PASSWORD`, `STAFF_NAME`, and `STAFF_ROLE=picker` before running it.
 
 For Google Sheet sync, `GOOGLE_APPS_SCRIPT_WEBHOOK_URL` is the simplest option. If it is empty, the app falls back to the service-account Google Sheets API setup. Use either `GOOGLE_APPLICATION_CREDENTIALS` for a local JSON key file, or `GOOGLE_APPLICATION_CREDENTIALS_JSON` for raw/base64 service-account JSON in hosted environments.
+
+## Razorpay Refunds
+
+Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to approve prepaid cancellation refunds from `/payment-refunds`. Set a separate `RAZORPAY_WEBHOOK_SECRET`, then configure this Razorpay webhook URL for the `refund.processed` and `refund.failed` events:
+
+```text
+https://your-warehouse-domain.com/api/integrations/razorpay/webhook
+```
+
+The refund API is called only for captured Razorpay payments. Normal refunds are requested from the admin panel and the webhook records whether Razorpay processed or failed the refund.
 
 To test Google Cloud Storage locally:
 

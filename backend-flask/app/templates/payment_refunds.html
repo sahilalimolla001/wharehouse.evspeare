@@ -5,9 +5,9 @@
 
 {% block content %}
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <p class="text-muted mb-0">Approve PayU refunds created from customer cancellations.</p>
-    <span class="badge {{ 'text-bg-success' if payu_ready else 'text-bg-warning' }}">
-      PayU {{ 'ready' if payu_ready else 'env missing' }}
+    <p class="text-muted mb-0">Approve Razorpay refunds created from customer cancellations.</p>
+    <span class="badge {{ 'text-bg-success' if razorpay_ready else 'text-bg-warning' }}">
+      Razorpay {{ 'ready' if razorpay_ready else 'env missing' }}
     </span>
   </div>
 
@@ -19,7 +19,7 @@
             <th>Refund</th>
             <th>Order</th>
             <th>Customer</th>
-            <th>PayU</th>
+            <th>Razorpay</th>
             <th>Amount</th>
             <th>Status</th>
             <th class="text-end">Action</th>
@@ -46,7 +46,7 @@
               </td>
               <td>
                 <span class="text-uppercase">{{ refund.gateway }}</span>
-                <div class="text-muted small">mihpayid: {{ refund.gateway_payment_id or 'missing' }}</div>
+                <div class="text-muted small">payment id: {{ refund.gateway_payment_id or 'missing' }}</div>
                 {% if refund.refund_token %}
                   <div class="text-muted small">token: {{ refund.refund_token }}</div>
                 {% endif %}
@@ -63,7 +63,7 @@
               <td class="text-end">
                 {% if refund.status in ['requested', 'failed'] %}
                   <form method="post" action="{{ url_for('refunds.approve_payment_refund', refund_id=refund.id) }}" class="d-inline">
-                    <button class="btn btn-sm btn-success" type="submit" {% if not payu_ready or not refund.gateway_payment_id %}disabled{% endif %}>Approve Refund</button>
+                    <button class="btn btn-sm btn-success" type="submit" {% if not razorpay_ready or not refund.gateway_payment_id %}disabled{% endif %}>Approve Refund</button>
                   </form>
                   <form method="post" action="{{ url_for('refunds.reject_payment_refund', refund_id=refund.id) }}" class="d-inline">
                     <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>

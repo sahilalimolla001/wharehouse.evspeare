@@ -6,7 +6,7 @@ from sqlalchemy import or_
 
 from ..extensions import db
 from ..models import Order, PaymentRefund
-from ..utils.payu import PayURefundError, initiate_payu_refund, payu_refund_enabled
+from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, razorpay_refund_enabled
 from ..utils.finance import record_money_transaction
 from ..utils.stock import log_activity
 from .auth import get_current_user, role_required, selected_warehouse
@@ -23,7 +23,7 @@ def payment_refunds():
     if warehouse:
         query = query.filter(or_(PaymentRefund.order_id.is_(None), Order.warehouse_id == warehouse.id))
     refunds = query.order_by(PaymentRefund.created_at.desc()).limit(300).all()
-    return render_template("payment_refunds.html", refunds=refunds, payu_ready=payu_refund_enabled())
+    return render_template("payment_refunds.html", refunds=refunds, razorpay_ready=razorpay_refund_enabled())
 
 
 @refunds_bp.post("/payment-refunds/<int:refund_id>/approve")
@@ -33,17 +33,18 @@ def approve_payment_refund(refund_id):
     if refund.status in {"approved", "refunded"}:
         flash("Refund is already approved.", "info")
         return redirect(url_for("refunds.payment_refunds"))
-    if refund.gateway != "payu":
-        flash("Only PayU refunds can be approved from this panel.", "warning")
+    if refund.gateway != "razorpay":
+        flash("Only Razorpay refunds can be approved from this panel.", "warning")
         return redirect(url_for("refunds.payment_refunds"))
 
     try:
         token = ensure_refund_token(refund)
-        payload = initiate_payu_refund(mihpayid=refund.gateway_payment_id, token=token, amount=refund.amount)
-        refund.status = "approved"
+        payload = initiate_razorpay_refund(payment_id=refund.gateway_payment_id, receipt=token, amount=refund.amount)
+        refund.status = "refunded" if str(payload.get("status") or "").lower() == "processed" else "approved"
         refund.approved_at = datetime.utcnow()
         user = get_current_user()
         refund.approved_by_id = user.id if user else None
+        refund.gateway_transaction_id = payload.get("id")
         refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
         record_money_transaction(
             order=refund.order,
@@ -52,22 +53,22 @@ def approve_payment_refund(refund_id):
             direction="debit",
             status="approved",
             amount=refund.amount,
-            gateway="payu",
+            gateway="razorpay",
             reference=refund.gateway_payment_id,
-            notes=f"PayU refund {refund.refund_number}",
+            notes=f"Razorpay refund {refund.refund_number}",
             payload=payload,
         )
         log_activity(
             "payment_refund_approved",
-            f"Approved PayU refund {refund.refund_number}",
+            f"Approved Razorpay refund {refund.refund_number}",
             user_id=user.id if user else None,
             entity_type="PaymentRefund",
             entity_id=refund.id,
-            meta={"amount": float(refund.amount or 0), "mihpayid": refund.gateway_payment_id},
+            meta={"amount": float(refund.amount or 0), "payment_id": refund.gateway_payment_id},
         )
         db.session.commit()
-        flash("PayU refund approved and sent.", "success")
-    except (PayURefundError, ValueError) as error:
+        flash("Razorpay refund approved and sent.", "success")
+    except (RazorpayRefundError, ValueError) as error:
         db.session.rollback()
         flash(f"Refund approval failed: {error}", "danger")
     return redirect(url_for("refunds.payment_refunds"))

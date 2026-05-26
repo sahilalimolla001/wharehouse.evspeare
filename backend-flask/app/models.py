@@ -375,7 +375,7 @@ class PaymentRefund(TimestampMixin, db.Model):
     request_id = db.Column(db.String(120), unique=True, index=True)
     customer_name = db.Column(db.String(160), nullable=False)
     customer_phone = db.Column(db.String(30))
-    gateway = db.Column(db.String(40), default="payu", nullable=False)
+    gateway = db.Column(db.String(40), default="razorpay", nullable=False)
     gateway_payment_id = db.Column(db.String(120), index=True)
     gateway_transaction_id = db.Column(db.String(120), index=True)
     refund_token = db.Column(db.String(23), unique=True, index=True)

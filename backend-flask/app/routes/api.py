@@ -16,7 +16,7 @@ from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.finance import ensure_invoice, record_money_transaction
 from ..utils.order_payload import order_automation_summary
-from ..utils.payu import PayURefundError, initiate_payu_refund
+from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, verify_razorpay_webhook
 from ..utils.picker_identity import ensure_picker_code
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
 from ..utils.sku import normalize_sku, sku_lookup_candidates
@@ -451,23 +451,36 @@ def api_approve_payment_refund(refund_id):
         approve_payment_refund(refund)
         db.session.commit()
         return jsonify({"ok": True, "refund": serialize_payment_refund(refund)})
-    except (PayURefundError, ValueError) as error:
+    except (RazorpayRefundError, ValueError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
 
 
-@api_bp.post("/integrations/payu/refund-callback")
-def api_payu_refund_callback():
-    payload = request.form.to_dict() if request.form else (request.get_json(silent=True) or {})
-    token = trim_text(payload.get("var2") or payload.get("token") or payload.get("refund_token") or payload.get("request_id"), 23)
-    refund = PaymentRefund.query.filter_by(refund_token=token).first() if token else None
-    if refund:
+@api_bp.post("/integrations/razorpay/webhook")
+def api_razorpay_webhook():
+    raw_body = request.get_data(cache=False)
+    if not verify_razorpay_webhook(raw_body, request.headers.get("X-Razorpay-Signature", "")):
+        return jsonify({"ok": False, "message": "Invalid Razorpay webhook signature"}), 400
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return jsonify({"ok": False, "message": "Invalid Razorpay webhook payload"}), 400
+    event = str(payload.get("event") or "").lower()
+    refund_data = (((payload.get("payload") or {}).get("refund") or {}).get("entity") or {})
+    refund_id = trim_text(refund_data.get("id"), 120)
+    payment_id = trim_text(refund_data.get("payment_id"), 120)
+    refund = PaymentRefund.query.filter_by(gateway_transaction_id=refund_id).first() if refund_id else None
+    if not refund and payment_id:
+        refund = (
+            PaymentRefund.query.filter_by(gateway_payment_id=payment_id)
+            .filter(PaymentRefund.status.in_(["requested", "approved"]))
+            .order_by(PaymentRefund.created_at.desc())
+            .first()
+        )
+    if refund and event in {"refund.processed", "refund.failed"}:
+        refund.gateway_transaction_id = refund_id or refund.gateway_transaction_id
         refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
-        status = str(payload.get("status") or payload.get("refund_status") or payload.get("request_status") or "").lower()
-        if status in {"success", "refunded", "1"}:
-            refund.status = "refunded"
-        elif status in {"failed", "failure", "0"}:
-            refund.status = "failed"
+        refund.status = "refunded" if event == "refund.processed" else "failed"
         db.session.commit()
     return jsonify({"ok": True})
 
@@ -1196,27 +1209,27 @@ def create_refund_from_cancel(data, order=None):
     gateway = trim_text(refund_data.get("gateway") or payment.get("gateway") or snapshot_payment.get("gateway"), 40).lower()
     payment_method = trim_text(payment.get("method") or snapshot_payment.get("method"), 40).lower()
     payment_status = trim_text(payment.get("status") or snapshot_payment.get("status"), 40).lower()
-    mihpayid = trim_text(
-        refund_data.get("mihpayid")
+    payment_id = trim_text(
+        refund_data.get("paymentId")
         or refund_data.get("gatewayPaymentId")
-        or payment.get("mihpayid")
         or payment.get("paymentId")
-        or snapshot_payment.get("mihpayid")
         or snapshot_payment.get("paymentId"),
         120,
     )
-    eligible = bool(refund_data.get("eligible")) or (gateway == "payu" and payment_method == "online" and payment_status in {"paid", "captured", "success"})
+    eligible = bool(refund_data.get("eligible")) or (gateway == "razorpay" and payment_method == "online" and payment_status in {"paid", "captured", "success"})
     if not eligible:
         return None, False
-    if not mihpayid:
-        raise ValueError("PayU refund request needs mihpayid from the paid order")
+    if gateway != "razorpay":
+        raise ValueError("Only Razorpay refunds are supported")
+    if not payment_id:
+        raise ValueError("Razorpay refund request needs paymentId from the paid order")
 
     request_id = trim_text(data.get("requestId") or refund_data.get("requestId"), 120)
     existing = None
     if request_id:
         existing = PaymentRefund.query.filter_by(request_id=request_id).first()
     if not existing:
-        existing = PaymentRefund.query.filter_by(gateway_payment_id=mihpayid, status="requested").first()
+        existing = PaymentRefund.query.filter_by(gateway_payment_id=payment_id, status="requested").first()
     if existing:
         return existing, False
 
@@ -1231,9 +1244,9 @@ def create_refund_from_cancel(data, order=None):
         request_id=request_id or None,
         customer_name=trim_text(customer.get("name") or (order.customer_name if order else ""), 160) or "Customer",
         customer_phone=trim_text(customer.get("phone") or (order.customer_phone if order else ""), 30),
-        gateway="payu",
-        gateway_payment_id=mihpayid,
-        gateway_transaction_id=trim_text(refund_data.get("txnid") or payment.get("txnid") or snapshot_payment.get("txnid"), 120),
+        gateway="razorpay",
+        gateway_payment_id=payment_id,
+        gateway_transaction_id=trim_text(refund_data.get("gatewayOrderId") or payment.get("gatewayOrderId") or snapshot_payment.get("gatewayOrderId"), 120),
         amount=amount,
         currency=trim_text(refund_data.get("currency") or amounts.get("currency") or "INR", 8) or "INR",
         reason=trim_text(data.get("reason") or refund_data.get("reason") or "Customer cancelled order", 160),
@@ -1299,20 +1312,21 @@ def refund_token(refund):
 
 
 def approve_payment_refund(refund):
-    if refund.gateway != "payu":
-        raise ValueError("Only PayU refunds can be approved from this panel")
-    payload = initiate_payu_refund(mihpayid=refund.gateway_payment_id, token=refund_token(refund), amount=refund.amount)
-    refund.status = "approved"
+    if refund.gateway != "razorpay":
+        raise ValueError("Only Razorpay refunds can be approved from this panel")
+    payload = initiate_razorpay_refund(payment_id=refund.gateway_payment_id, receipt=refund_token(refund), amount=refund.amount)
+    refund.status = "refunded" if str(payload.get("status") or "").lower() == "processed" else "approved"
     refund.approved_at = datetime.utcnow()
     refund.approved_by_id = current_api_user_id()
+    refund.gateway_transaction_id = trim_text(payload.get("id"), 120)
     refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
     log_activity(
         "payment_refund_approved",
-        f"Approved PayU refund {refund.refund_number}",
+        f"Approved Razorpay refund {refund.refund_number}",
         user_id=current_api_user_id(),
         entity_type="PaymentRefund",
         entity_id=refund.id,
-        meta={"amount": float(refund.amount or 0), "mihpayid": refund.gateway_payment_id},
+        meta={"amount": float(refund.amount or 0), "payment_id": refund.gateway_payment_id},
     )
 
 
