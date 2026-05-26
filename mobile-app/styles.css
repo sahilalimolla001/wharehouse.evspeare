@@ -75,7 +75,7 @@ button:disabled {
 
 .mobile-shell {
   min-height: 100vh;
-  padding: 12px 12px calc(94px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px));
 }
 
 .app-header {
@@ -176,6 +176,12 @@ h2 {
   min-width: 62px;
   padding: 0 10px;
   font-size: 0.8rem;
+}
+
+.menu-btn {
+  border-color: var(--dark);
+  background: var(--dark);
+  color: #fff;
 }
 
 .screen {
@@ -831,7 +837,7 @@ input[type="file"] {
 
 .sticky-action {
   position: sticky;
-  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   z-index: 4;
   padding: 8px;
   border: 1px solid var(--line);
@@ -845,39 +851,110 @@ input[type="file"] {
   flex: 1;
 }
 
-.bottom-nav {
+.drawer-backdrop {
   position: fixed;
-  left: 8px;
-  right: 8px;
-  bottom: max(8px, env(safe-area-inset-bottom, 0px));
-  z-index: 12;
+  inset: 0;
+  z-index: 18;
+  background: rgba(16, 32, 25, 0.28);
+  backdrop-filter: blur(2px);
+}
+
+.side-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 19;
+  width: min(356px, 92vw);
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 4px;
-  padding: 6px;
-  border: 1px solid rgba(16, 37, 30, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 16px 40px rgba(16, 32, 25, 0.18);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-left: 1px solid rgba(16, 37, 30, 0.12);
+  background: rgba(248, 251, 246, 0.98);
+  box-shadow: -18px 0 44px rgba(16, 32, 25, 0.2);
+  transform: translateX(105%);
+  transition: transform 180ms ease;
 }
 
-.bottom-nav button {
-  min-height: 42px;
-  padding: 0 4px;
-  font-size: 0.72rem;
+.drawer-open .side-drawer {
+  transform: translateX(0);
 }
 
-.bottom-nav button.active {
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.drawer-head h2 {
+  font-size: 1.22rem;
+}
+
+.drawer-nav {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.drawer-nav button {
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.drawer-nav button span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.drawer-nav button.active {
   border-color: var(--dark);
   background: var(--dark);
   color: #fff;
+}
+
+.drawer-nav button.active span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.variance-pill {
+  min-width: 42px;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.variance-pill.ok {
+  background: var(--soft);
+  color: var(--primary-dark);
+}
+
+.variance-pill.warn {
+  background: #fff1d6;
+  color: #9a4d00;
+}
+
+.tool-row small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
 }
 
 .toast {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   min-height: 46px;
   display: grid;
@@ -902,17 +979,11 @@ input[type="file"] {
     width: min(760px, 100%);
     margin: 0 auto;
   }
-
-  .bottom-nav {
-    left: 50%;
-    width: min(760px, calc(100% - 16px));
-    transform: translateX(-50%);
-  }
 }
 
 @media (max-width: 560px) {
   .mobile-shell {
-    padding: 10px 10px calc(156px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 10px calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-header {
@@ -923,7 +994,7 @@ input[type="file"] {
 
   .header-actions {
     display: grid;
-    grid-template-columns: 86px minmax(0, 1fr) 72px 78px;
+    grid-template-columns: 82px minmax(0, 1fr) 62px 66px 70px;
     width: 100%;
   }
 
@@ -951,18 +1022,8 @@ input[type="file"] {
   .mission-rail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .bottom-nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .bottom-nav button {
-    min-height: 40px;
-    font-size: 0.68rem;
-  }
-
   .toast {
-    bottom: calc(142px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
   .inventory-item {
@@ -993,14 +1054,13 @@ input[type="file"] {
   }
 
   .header-actions {
-    grid-template-columns: 74px minmax(0, 1fr) 62px 68px;
+    grid-template-columns: 70px minmax(0, 1fr) 56px 58px 62px;
     gap: 5px;
   }
 
   .warehouse-select,
   .icon-btn,
-  .status-toggle,
-  .bottom-nav button {
+  .status-toggle {
     font-size: 0.66rem;
   }
 

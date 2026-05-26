@@ -49,6 +49,7 @@
           <button class="status-toggle online" id="online-toggle" type="button" aria-pressed="true">Online</button>
           <select class="warehouse-select" id="warehouse-select" aria-label="Warehouse"></select>
           <button class="icon-btn" id="sync-btn" type="button">Sync</button>
+          <button class="icon-btn menu-btn" id="menu-btn" type="button" aria-controls="side-drawer" aria-expanded="false">Menu</button>
           <button class="icon-btn ghost" id="logout-btn" type="button">Logout</button>
         </div>
       </header>
@@ -258,6 +259,36 @@
           <div class="card-list" id="inventory-items"></div>
         </section>
 
+        <section class="screen" id="stock-take-screen">
+          <form id="stock-take-form" class="form-card wide-card">
+            <h2>Stock Take</h2>
+            <label>Bin Barcode / ID
+              <span class="scan-input"><input name="location" required placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="#stock-take-form [name='location']">Scan</button></span>
+            </label>
+            <label>Product SKU / Barcode
+              <span class="scan-input"><input name="product" required inputmode="numeric" placeholder="1001"><button type="button" data-scan-fill="#stock-take-form [name='product']">Scan</button></span>
+            </label>
+            <div class="two-col">
+              <label>System Qty
+                <input name="system_quantity" type="number" min="0" value="0" readonly>
+              </label>
+              <label>Counted Qty
+                <input name="counted_quantity" type="number" min="0" required>
+              </label>
+            </div>
+            <label>Note
+              <input name="note" placeholder="Damage, mismatch, recount">
+            </label>
+            <div class="result-card" id="stock-take-preview">Scan bin and product to compare stock.</div>
+            <button class="primary" type="submit">Save Count</button>
+          </form>
+          <div class="section-head">
+            <h2>Recent Counts</h2>
+            <button id="clear-stock-takes" type="button">Clear</button>
+          </div>
+          <div class="card-list" id="stock-take-list"></div>
+        </section>
+
         <section class="screen" id="tools-screen">
           <div class="automation-hero">
             <div>
@@ -269,9 +300,9 @@
 
           <div class="mission-rail">
             <button data-screen-jump="stock-screen" type="button"><b>Stock In</b><span>Receive inventory</span></button>
+            <button data-screen-jump="stock-take-screen" type="button"><b>Stock Take</b><span>Audit count</span></button>
             <button data-screen-jump="move-screen" type="button"><b>Move</b><span>Bin to bin</span></button>
             <button data-screen-jump="inventory-screen" type="button"><b>Bins</b><span>Lookup stock</span></button>
-            <button data-screen-jump="orders-screen" type="button"><b>Pick</b><span>Assigned queue</span></button>
           </div>
 
           <div class="tool-grid">
@@ -321,14 +352,27 @@
         </section>
       </main>
 
-      <nav class="bottom-nav" aria-label="Picker navigation">
-        <button class="active" data-screen="hub-screen" type="button">Home</button>
-        <button data-screen="orders-screen" type="button">Pick</button>
-        <button data-screen="dispatch-screen" type="button">Ship</button>
-        <button data-screen="return-screen" type="button">Return</button>
-        <button data-screen="tools-screen" type="button">Tools</button>
-        <button data-screen="inventory-screen" type="button">Bins</button>
-      </nav>
+      <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+      <aside class="side-drawer" id="side-drawer" aria-hidden="true">
+        <div class="drawer-head">
+          <div>
+            <p class="section-kicker">Picker Menu</p>
+            <h2>Floor Console</h2>
+          </div>
+          <button class="icon-btn ghost" id="close-drawer" type="button">Close</button>
+        </div>
+        <nav class="drawer-nav" aria-label="Picker navigation">
+          <button class="active" data-screen="hub-screen" type="button"><b>Home</b><span>Shift command</span></button>
+          <button data-screen="orders-screen" type="button"><b>Pick</b><span>Assigned orders</span></button>
+          <button data-screen="dispatch-screen" type="button"><b>Ship</b><span>Packed handoff</span></button>
+          <button data-screen="return-screen" type="button"><b>Return</b><span>Receive returns</span></button>
+          <button data-screen="stock-screen" type="button"><b>Stock In</b><span>Add inventory</span></button>
+          <button data-screen="stock-take-screen" type="button"><b>Stock Take</b><span>Audit bin count</span></button>
+          <button data-screen="move-screen" type="button"><b>Move Stock</b><span>Bin transfer</span></button>
+          <button data-screen="inventory-screen" type="button"><b>Bins</b><span>Lookup stock</span></button>
+          <button data-screen="tools-screen" type="button"><b>Tools</b><span>Tote, incident, wave</span></button>
+        </nav>
+      </aside>
     </div>
 
     <div class="toast" id="toast"></div>

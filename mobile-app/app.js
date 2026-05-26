@@ -25,6 +25,7 @@ const store = {
   incidents: JSON.parse(localStorage.getItem("warehouseIncidents") || "[]"),
   totes: JSON.parse(localStorage.getItem("warehouseTotes") || "[]"),
   waves: JSON.parse(localStorage.getItem("warehouseWaves") || "[]"),
+  stockTakes: JSON.parse(localStorage.getItem("warehouseStockTakes") || "[]"),
   preferences: JSON.parse(localStorage.getItem("warehousePickerPreferences") || "{}"),
   breakMode: localStorage.getItem("warehouseBreakMode") === "true",
 };
@@ -60,8 +61,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function bindNavigation() {
-  $$(".bottom-nav [data-screen]").forEach((button) => {
-    button.addEventListener("click", () => showScreen(button.dataset.screen));
+  $("#menu-btn")?.addEventListener("click", openDrawer);
+  $("#close-drawer")?.addEventListener("click", closeDrawer);
+  $("#drawer-backdrop")?.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDrawer();
+  });
+  $$(".drawer-nav [data-screen]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showScreen(button.dataset.screen);
+      closeDrawer();
+    });
   });
 }
 
@@ -123,6 +133,13 @@ function bindActions() {
   $("#load-move-bin").addEventListener("click", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
   $('#location-form [name="from_location"]').addEventListener("change", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
   $('#location-form [name="from_location"]').addEventListener("blur", () => loadMoveBinInventory($('#location-form [name="from_location"]').value.trim()));
+  $("#stock-take-form").addEventListener("submit", saveStockTake);
+  $('#stock-take-form [name="location"]').addEventListener("change", loadStockTakePreview);
+  $('#stock-take-form [name="location"]').addEventListener("blur", loadStockTakePreview);
+  $('#stock-take-form [name="product"]').addEventListener("input", scheduleStockTakePreview);
+  $('#stock-take-form [name="product"]').addEventListener("change", loadStockTakePreview);
+  $('#stock-take-form [name="product"]').addEventListener("blur", loadStockTakePreview);
+  $("#clear-stock-takes").addEventListener("click", clearStockTakes);
   $("#inventory-lookup-form").addEventListener("submit", (event) => {
     event.preventDefault();
     loadInventoryView($('#inventory-lookup-form [name="location"]').value.trim());
@@ -132,6 +149,22 @@ function bindActions() {
   $$("[data-scan-fill]").forEach((button) => {
     button.addEventListener("click", () => beginScanFill(button.dataset.scanFill));
   });
+}
+
+function openDrawer() {
+  document.body.classList.add("drawer-open");
+  $("#side-drawer")?.setAttribute("aria-hidden", "false");
+  $("#menu-btn")?.setAttribute("aria-expanded", "true");
+  const backdrop = $("#drawer-backdrop");
+  if (backdrop) backdrop.hidden = false;
+}
+
+function closeDrawer() {
+  document.body.classList.remove("drawer-open");
+  $("#side-drawer")?.setAttribute("aria-hidden", "true");
+  $("#menu-btn")?.setAttribute("aria-expanded", "false");
+  const backdrop = $("#drawer-backdrop");
+  if (backdrop) backdrop.hidden = true;
 }
 
 function automationDefaults(saved = {}) {
@@ -255,7 +288,7 @@ function restoreFromHistory(event) {
 function showScreen(screenId, options = {}) {
   const previousScreenId = activeScreenId();
   $$(".screen").forEach((screen) => screen.classList.toggle("active", screen.id === screenId));
-  $$(".bottom-nav [data-screen]").forEach((button) => button.classList.toggle("active", button.dataset.screen === screenId));
+  $$(".drawer-nav [data-screen]").forEach((button) => button.classList.toggle("active", button.dataset.screen === screenId));
   const titles = {
     "hub-screen": "Command",
     "orders-screen": "Orders",
@@ -264,12 +297,14 @@ function showScreen(screenId, options = {}) {
     "return-screen": "Returns",
     "pv-screen": "Return PV",
     "stock-screen": "Stock In",
+    "stock-take-screen": "Stock Take",
     "move-screen": "Move Stock",
     "inventory-screen": "View Inventory",
     "tools-screen": "Tools",
   };
   $("#screen-title").textContent = titles[screenId] || "Picker";
   if (screenId === "tools-screen") renderTools();
+  if (screenId === "stock-take-screen") renderStockTakes();
   if (screenId !== "pick-screen") stopScanner();
   if (options.history !== false) {
     if (previousScreenId === screenId && !options.forceHistory) replaceAppHistory(screenId);
@@ -339,6 +374,7 @@ async function testApiConnection() {
 
 async function logout(callApi = true) {
   if (callApi) await apiFetch("/logout", { method: "POST", auth: false }).catch(() => {});
+  closeDrawer();
   store.user = null;
   store.token = "";
   store.warehouses = [];
@@ -412,6 +448,7 @@ async function refreshAll() {
     renderDispatchQueue();
     renderActiveOrder();
     renderReturnQueue();
+    renderStockTakes();
     toast("Offline mode: cached queue shown.");
     return;
   }
@@ -419,6 +456,7 @@ async function refreshAll() {
   renderHub();
   renderOpsAutomation();
   renderTools();
+  renderStockTakes();
   await runAutoPilot();
 }
 
@@ -2007,6 +2045,9 @@ function fillScanTarget(value) {
   if (target === '#stock-in-form [name=\'product\']') {
     loadStockProductPreview(value);
   }
+  if (target === '#stock-take-form [name=\'product\']' || target === '#stock-take-form [name=\'location\']') {
+    loadStockTakePreview();
+  }
   if (target === '#inventory-lookup-form [name=\'location\']') {
     loadInventoryView(value);
   }
@@ -2023,6 +2064,8 @@ function reportScanFillError(message) {
   if (returnScreen) showScreen(returnScreen);
   if (target === '#inventory-lookup-form [name=\'location\']') {
     $("#inventory-bin-card").textContent = message;
+  } else if (target === '#stock-take-form [name=\'product\']' || target === '#stock-take-form [name=\'location\']') {
+    $("#stock-take-preview").textContent = message;
   } else if (target === '#location-form [name=\'from_location\']') {
     $("#move-bin-preview").textContent = message;
     $("#move-bin-items").innerHTML = "";
@@ -2053,6 +2096,99 @@ async function submitStock(event, endpoint) {
   } catch (error) {
     toast(error.message);
   }
+}
+
+function scheduleStockTakePreview() {
+  window.clearTimeout(stockPreviewTimer);
+  stockPreviewTimer = window.setTimeout(loadStockTakePreview, 350);
+}
+
+async function loadStockTakePreview() {
+  const form = $("#stock-take-form");
+  if (!form) return;
+  const location = form.elements.location.value.trim();
+  const productCode = form.elements.product.value.trim();
+  const preview = $("#stock-take-preview");
+  form.elements.system_quantity.value = 0;
+  if (!location || !productCode) {
+    preview.textContent = "Scan bin and product to compare stock.";
+    return;
+  }
+  try {
+    const [inventoryData, productData] = await Promise.all([
+      apiFetch(`/location-inventory/${encodeURIComponent(location)}`),
+      apiFetch(`/scan/${encodeURIComponent(productCode)}`),
+    ]);
+    if (productData.type !== "product") {
+      preview.textContent = "Product SKU/barcode scan karein.";
+      return;
+    }
+    const row = (inventoryData.items || []).find((item) => Number(item.product.id) === Number(productData.product.id) || item.product.sku === productData.product.sku);
+    const systemQty = Number(row?.available_quantity || 0);
+    form.elements.system_quantity.value = systemQty;
+    preview.innerHTML = `
+      <strong>${escapeHtml(productData.product.sku)} / ${escapeHtml(productData.product.name)}</strong><br>
+      ${escapeHtml(inventoryData.location.full_code)} me system qty ${systemQty}
+    `;
+  } catch (error) {
+    preview.textContent = error.message;
+  }
+}
+
+function saveStockTake(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const location = form.elements.location.value.trim();
+  const product = form.elements.product.value.trim();
+  const systemQuantity = Number(form.elements.system_quantity.value || 0);
+  const countedQuantity = Number(form.elements.counted_quantity.value || 0);
+  if (!location || !product) {
+    toast("Bin aur product scan karein.");
+    return;
+  }
+  const variance = countedQuantity - systemQuantity;
+  store.stockTakes.unshift({
+    id: crypto.randomUUID?.() || String(Date.now()),
+    location,
+    product,
+    system_quantity: systemQuantity,
+    counted_quantity: countedQuantity,
+    variance,
+    note: form.elements.note.value.trim(),
+    created_at: new Date().toISOString(),
+  });
+  store.stockTakes = store.stockTakes.slice(0, 30);
+  localStorage.setItem("warehouseStockTakes", JSON.stringify(store.stockTakes));
+  form.reset();
+  $("#stock-take-preview").textContent = "Count saved. Next bin/product scan karein.";
+  renderStockTakes();
+  toast(variance === 0 ? "Stock take matched." : `Stock take saved. Variance ${variance}.`);
+}
+
+function renderStockTakes() {
+  const target = $("#stock-take-list");
+  if (!target) return;
+  if (!store.stockTakes.length) {
+    target.innerHTML = `<div class="empty-state">No stock count saved yet.</div>`;
+    return;
+  }
+  target.innerHTML = store.stockTakes.slice(0, 8).map((item) => `
+    <article class="tool-row">
+      <div>
+        <strong>${escapeHtml(item.product)} @ ${escapeHtml(item.location)}</strong>
+        <span>System ${item.system_quantity} / Counted ${item.counted_quantity} / Variance ${item.variance} - ${timeAgo(item.created_at)}</span>
+        ${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}
+      </div>
+      <b class="variance-pill ${item.variance === 0 ? "ok" : "warn"}">${item.variance > 0 ? "+" : ""}${item.variance}</b>
+    </article>
+  `).join("");
+}
+
+function clearStockTakes() {
+  store.stockTakes = [];
+  localStorage.removeItem("warehouseStockTakes");
+  renderStockTakes();
+  toast("Stock take list cleared.");
 }
 
 function scheduleStockProductPreview() {
