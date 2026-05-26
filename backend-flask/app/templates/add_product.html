@@ -14,13 +14,13 @@
         <input class="form-control" name="name" required value="{{ product.name if product else '' }}">
       </div>
       <div class="col-md-4">
-        <label class="form-label">Category</label>
-        <select class="form-select" name="category_id">
-          <option value="">Select category</option>
+        <label class="form-label">Vehicle Category</label>
+        <select class="form-select" name="category_id" required>
           {% for category in categories %}
-            <option value="{{ category.id }}" {% if product and product.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+            <option value="{{ category.id }}" {% if (product and product.category_id == category.id) or (not product and default_category and default_category.id == category.id) %}selected{% endif %}>{{ category.name }}</option>
           {% endfor %}
         </select>
+        <div class="form-text">Product kis vehicle ka hai yahan set hoga.</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Supplier</label>

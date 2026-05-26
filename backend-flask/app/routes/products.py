@@ -11,10 +11,14 @@ from .auth import login_required, role_required
 
 products_bp = Blueprint("products", __name__)
 
+VEHICLE_CATEGORIES = ["E Scooty", "E Rickshaw", "Auto", "Car"]
+DEFAULT_PRODUCT_CATEGORY = "E Rickshaw"
+
 
 @products_bp.route("/products")
 @login_required
 def products():
+    ensure_vehicle_categories()
     q = request.args.get("q", "").strip()
     query = Product.query.filter_by(is_active=True)
     if q:
@@ -58,21 +62,22 @@ def import_images():
 @role_required("manager")
 def product_form(product_id=None):
     product = Product.query.get(product_id) if product_id else None
-    categories = Category.query.order_by(Category.name).all()
+    default_category = ensure_vehicle_categories()
+    categories = vehicle_categories()
     suppliers = Supplier.query.filter_by(is_active=True).order_by(Supplier.name).all()
 
     if request.method == "POST":
         sku = normalize_sku(request.form.get("sku"))
         if not sku or not sku.isdigit():
             flash("SKU me sirf number hona chahiye. Example: 1001", "danger")
-            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers, default_category=default_category)
 
         existing = Product.query.filter(Product.sku.in_(sku_lookup_candidates(sku)))
         if product:
             existing = existing.filter(Product.id != product.id)
         if existing.first():
             flash("SKU number already exists.", "danger")
-            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers, default_category=default_category)
 
         if not product:
             product = Product()
@@ -82,7 +87,11 @@ def product_form(product_id=None):
         product.sku = sku
         product.brand = request.form.get("brand", "").strip()
         product.unit = request.form.get("unit", "pcs").strip() or "pcs"
-        product.category_id = int_or_none(request.form.get("category_id"))
+        category_id = int_or_none(request.form.get("category_id")) or default_category.id
+        if not Category.query.get(category_id):
+            flash("Select a valid vehicle category.", "danger")
+            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers, default_category=default_category)
+        product.category_id = category_id
         product.supplier_id = int_or_none(request.form.get("supplier_id"))
         product.purchase_price = numeric_or_zero(request.form.get("purchase_price"))
         product.selling_price = numeric_or_zero(request.form.get("selling_price"))
@@ -94,7 +103,7 @@ def product_form(product_id=None):
                 product.image_url = upload_product_image(uploaded_file, sku=product.sku)
             except (RuntimeError, ValueError) as error:
                 flash(str(error), "danger")
-                return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+                return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers, default_category=default_category)
         else:
             product.image_url = request.form.get("image_url", "").strip()
         try:
@@ -113,14 +122,14 @@ def product_form(product_id=None):
         except IntegrityError:
             db.session.rollback()
             flash("SKU number already exists. Product duplicate save nahi hua.", "danger")
-            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+            return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers, default_category=default_category)
 
         push_result = notify_product_change(product, "product.saved")
         flash("Product saved.", "success")
         flash_customer_push_result(push_result)
         return redirect(url_for("products.products"))
 
-    return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers)
+    return render_template("add_product.html", product=product, categories=categories, suppliers=suppliers, default_category=default_category)
 
 
 @products_bp.post("/product/<int:product_id>/delete")
@@ -144,6 +153,26 @@ def numeric_or_zero(value):
         return float(value or 0)
     except ValueError:
         return 0
+
+
+def ensure_vehicle_categories():
+    existing = {category.name.lower(): category for category in Category.query.all()}
+    for name in VEHICLE_CATEGORIES:
+        if name.lower() not in existing:
+            category = Category(name=name, description=f"{name} spare parts")
+            db.session.add(category)
+            existing[name.lower()] = category
+    db.session.flush()
+    default_category = existing[DEFAULT_PRODUCT_CATEGORY.lower()]
+    Product.query.filter(Product.category_id.is_(None)).update({Product.category_id: default_category.id})
+    db.session.commit()
+    return default_category
+
+
+def vehicle_categories():
+    rows = Category.query.filter(Category.name.in_(VEHICLE_CATEGORIES)).all()
+    order = {name: index for index, name in enumerate(VEHICLE_CATEGORIES)}
+    return sorted(rows, key=lambda category: order.get(category.name, 999))
 
 
 def flash_customer_push_result(result):

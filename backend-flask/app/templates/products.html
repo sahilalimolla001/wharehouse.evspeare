@@ -25,6 +25,7 @@
           <tr>
             <th>SKU</th>
             <th>Product</th>
+            <th>Category</th>
             <th>Description</th>
             <th>Value</th>
             {% if can_manage_products %}
@@ -44,6 +45,7 @@
                   <span>{{ product.name }}</span>
                 </div>
               </td>
+              <td>{{ product.category.name if product.category else "-" }}</td>
               <td>{{ product.description or "-" }}</td>
               <td>{{ product.purchase_price|money }}</td>
               {% if can_manage_products %}
@@ -53,7 +55,7 @@
               {% endif %}
             </tr>
           {% else %}
-            <tr><td colspan="{{ 5 if can_manage_products else 4 }}" class="text-secondary">No products yet.</td></tr>
+            <tr><td colspan="{{ 6 if can_manage_products else 5 }}" class="text-secondary">No products yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
