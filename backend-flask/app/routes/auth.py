@@ -73,6 +73,7 @@ ADMIN_PANEL_PERMISSIONS = {
     "panel_ops_config": "Warehouse Ops Config",
     "panel_automation": "Automation",
     "panel_inbound_customers": "Inbound Customers",
+    "panel_item_not_found": "Item Not Found",
 }
 
 PICKER_APP_PERMISSIONS = {

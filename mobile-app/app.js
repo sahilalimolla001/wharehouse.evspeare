@@ -40,6 +40,7 @@ let refreshTimer = null;
 let stockPreviewTimer = null;
 let lastSlaAlertAt = 0;
 let autoPilotRunning = false;
+let assignmentAlertTimer = null;
 const defaultScreenId = "hub-screen";
 const pickerScreenPermissions = {
   "hub-screen": "picker_home",
@@ -348,6 +349,7 @@ async function initializeSession() {
 
 async function login(event) {
   event.preventDefault();
+  armAssignmentAudio();
   store.apiBase = normalizeApiBase($("#api-base").value);
   localStorage.setItem("warehouseMobileApi", store.apiBase);
   try {
@@ -559,9 +561,17 @@ async function loadDashboard() {
 
 async function loadOrders() {
   try {
+    const previousAssignedIds = new Set(
+      store.orders.filter(orderAssignedToCurrentPicker).map((order) => String(order.id))
+    );
     const data = await apiFetch("/pick-list");
     store.orders = data.orders || [];
     localStorage.setItem("warehouseCachedOrders", JSON.stringify(store.orders));
+    const newlyAssigned = store.orders.find((order) => orderAssignedToCurrentPicker(order) && !previousAssignedIds.has(String(order.id)));
+    if (newlyAssigned) {
+      playNewAssignmentAlert();
+      toast(`New pick assigned: ${newlyAssigned.order_number}`);
+    }
     const pickerOrders = store.orders.filter(orderBelongsToCurrentPicker);
     const pending = pickerOrders.filter((order) => order.status === "pending").length;
     const picking = pickerOrders.filter((order) => order.status === "picking").length;
@@ -804,6 +814,10 @@ function orderBelongsToCurrentPicker(order) {
   const assignedTo = Number(order.assigned_to_id || 0);
   const pickerId = Number(store.user?.id || 0);
   return !assignedTo || !pickerId || assignedTo === pickerId;
+}
+
+function orderAssignedToCurrentPicker(order) {
+  return Number(order.assigned_to_id || 0) > 0 && Number(order.assigned_to_id) === Number(store.user?.id || 0);
 }
 
 function changePriorityFilter(event) {
@@ -1761,6 +1775,9 @@ function renderActiveOrder() {
   $("#pick-items").querySelectorAll("[data-pick-item]").forEach((button) => {
     button.addEventListener("click", () => updatePickedQuantity(Number(button.dataset.pickItem), Number(button.dataset.quantity)));
   });
+  $("#pick-items").querySelectorAll("[data-item-not-found]").forEach((button) => {
+    button.addEventListener("click", () => markItemNotFound(Number(button.dataset.itemNotFound)));
+  });
   $("#pick-bin-card").querySelector("[data-change-bin]")?.addEventListener("click", () => {
     resetActivePickBin();
     renderActiveOrder();
@@ -1840,6 +1857,7 @@ function pickItemHtml(item, inventory = null, locked = false) {
         <strong>${item.picked_quantity}/${item.quantity}</strong>
         <button type="button" data-pick-item="${item.id}" data-quantity="${Math.min(item.picked_quantity + 1, item.quantity)}" ${locked || done || binAvailable <= 0 ? "disabled" : ""}>+</button>
       </div>
+      <button class="item-not-found" type="button" data-item-not-found="${item.id}" ${locked || done ? "disabled" : ""}>Item Not Found</button>
     </article>
   `;
 }
@@ -1864,6 +1882,33 @@ async function updatePickedQuantity(itemId, quantity) {
     if (store.automationSettings.autoPack && orderFullyPicked(activeOrder())) {
       await autoPackActiveOrder();
     }
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+async function markItemNotFound(itemId) {
+  const order = activeOrder();
+  const item = order?.items.find((orderItem) => orderItem.id === itemId);
+  if (!order || !item) return;
+  if (!store.activePickLocation) {
+    toast("Item Not Found ke liye pehle bin scan karein.");
+    return;
+  }
+  const quantity = Math.max(Number(item.quantity || 0) - Number(item.picked_quantity || 0), 0);
+  if (!quantity || !window.confirm(`${item.product.name} ka remaining qty ${quantity} Item Not Found mark karein? Stock aur order quantity update hogi.`)) return;
+  try {
+    const data = await apiFetch(`/orders/${order.id}/items/${item.id}/not-found`, {
+      method: "POST",
+      body: {
+        quantity,
+        location: store.activePickLocation.barcode || store.activePickLocation.id,
+      },
+    });
+    replaceOrder(data.order);
+    await loadActivePickInventory(store.activePickLocation.barcode || store.activePickLocation.id);
+    renderActiveOrder();
+    toast("Item Not Found saved. Quantity stock aur order se minus ho gayi.");
   } catch (error) {
     toast(error.message);
   }
@@ -2717,4 +2762,39 @@ function toast(message) {
   node.classList.add("show");
   window.clearTimeout(toast.timer);
   toast.timer = window.setTimeout(() => node.classList.remove("show"), 2600);
+}
+
+function playNewAssignmentAlert() {
+  if (store.preferences.scanBeep === false) return;
+  window.clearInterval(assignmentAlertTimer);
+  const context = armAssignmentAudio();
+  if (!context) return;
+  context.resume().catch(() => {});
+  const beep = () => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "square";
+    oscillator.frequency.value = 920;
+    gain.gain.setValueAtTime(0.001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.2);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.22);
+  };
+  beep();
+  assignmentAlertTimer = window.setInterval(beep, 700);
+  window.setTimeout(() => {
+    window.clearInterval(assignmentAlertTimer);
+    assignmentAlertTimer = null;
+  }, 5000);
+}
+
+function armAssignmentAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  const context = playNewAssignmentAlert.context || new AudioContextClass();
+  playNewAssignmentAlert.context = context;
+  context.resume().catch(() => {});
+  return context;
 }

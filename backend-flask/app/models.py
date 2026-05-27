@@ -461,6 +461,32 @@ class OrderItem(TimestampMixin, db.Model):
         return f"<OrderItem order={self.order_id} product={self.product_id}>"
 
 
+class ItemNotFoundReport(TimestampMixin, db.Model):
+    __tablename__ = "item_not_found_reports"
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False, index=True)
+    order_item_id = db.Column(db.Integer, db.ForeignKey("order_items.id"), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False, index=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True)
+    location_id = db.Column(db.Integer, db.ForeignKey("warehouse_locations.id"), nullable=False)
+    picker_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    quantity = db.Column(db.Integer, nullable=False)
+    stock_deducted_quantity = db.Column(db.Integer, default=0, nullable=False)
+    unit_price = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    notes = db.Column(db.Text)
+
+    order = db.relationship("Order")
+    order_item = db.relationship("OrderItem")
+    product = db.relationship("Product")
+    warehouse = db.relationship("Warehouse")
+    location = db.relationship("WarehouseLocation")
+    picker = db.relationship("User")
+
+    def __repr__(self):
+        return f"<ItemNotFoundReport order={self.order_id} product={self.product_id}>"
+
+
 class Barcode(TimestampMixin, db.Model):
     __tablename__ = "barcodes"
 

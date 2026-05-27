@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Invoice, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
+from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Invoice, ItemNotFoundReport, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
@@ -19,7 +19,7 @@ from ..utils.finance import ensure_invoice
 from ..utils.order_payload import order_automation_summary
 from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, verify_razorpay_webhook
 from ..utils.picker_identity import ensure_picker_code
-from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location, update_picker_presence
+from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, picker_workload, product_pick_location, update_picker_presence
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import ADMIN_PANEL_PERMISSIONS, PAGE_PERMISSIONS, PICKER_APP_PERMISSIONS, user_has_role, user_page_permissions
@@ -266,6 +266,15 @@ def api_central_panel_inbound_orders():
         return "", 204
     orders = Order.query.filter_by(external_source="inbound_customer").order_by(Order.created_at.desc()).limit(500).all()
     return jsonify({"ok": True, "orders": [serialize_inbound_order(order) for order in orders]})
+
+
+@api_bp.route("/central-panel/item-not-found", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_item_not_found():
+    if request.method == "OPTIONS":
+        return "", 204
+    reports = ItemNotFoundReport.query.order_by(ItemNotFoundReport.created_at.desc()).limit(500).all()
+    return jsonify({"ok": True, "reports": [serialize_item_not_found_report(report) for report in reports]})
 
 
 @api_bp.get("/dashboard")
@@ -998,6 +1007,8 @@ def api_order_status(order_id):
     if status == "dispatched":
         return dispatch_order_api_response(order, data)
     if status == "picking" and not order.assigned_to_id:
+        if current_api_user().role == "picker" and picker_workload(current_api_user_id()) > 0:
+            return jsonify({"ok": False, "message": "Complete your active pick before starting another order"}), 409
         order.assigned_to_id = current_api_user_id()
     order.status = status
     if status == "completed":
@@ -1074,9 +1085,11 @@ def api_order_item_pick(order_id, item_id):
         return jsonify({"ok": False, "message": "Picked quantity must be between 0 and ordered quantity"}), 400
 
     try:
-        item.picked_quantity = quantity
         if not order.assigned_to_id:
+            if current_api_user().role == "picker" and picker_workload(current_api_user_id()) > 0:
+                return jsonify({"ok": False, "message": "Complete your active pick before picking another order"}), 409
             order.assigned_to_id = current_api_user_id()
+        item.picked_quantity = quantity
         if order.status == "pending":
             order.status = "picking"
         if all(order_item.picked_quantity >= order_item.quantity for order_item in order.items):
@@ -1099,6 +1112,71 @@ def api_order_item_pick(order_id, item_id):
         push_result = notify_product_change(item.product, "stock.changed")
         return jsonify({"ok": True, "order": serialize_order(order), "google_sheet": sync_result, "customer_website": push_result})
     except ValueError as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
+@api_bp.post("/orders/<int:order_id>/items/<int:item_id>/not-found")
+@api_role_required("manager", "staff", "picker")
+@picker_permission_required("picker_pick")
+def api_order_item_not_found(order_id, item_id):
+    data = request.get_json(silent=True) or {}
+    user = current_api_user()
+    order = Order.query.get_or_404(order_id)
+    if not can_access_order(user, order):
+        return jsonify({"ok": False, "message": "Permission denied for this order"}), 403
+    item = OrderItem.query.filter_by(id=item_id, order_id=order.id).first_or_404()
+    remaining = max(int(item.quantity or 0) - int(item.picked_quantity or 0), 0)
+    if remaining <= 0:
+        return jsonify({"ok": False, "message": "This item is already completed"}), 400
+    try:
+        quantity = positive_int(data.get("quantity") or remaining, "quantity")
+        if quantity > remaining:
+            raise ValueError("Quantity cannot exceed remaining pick quantity")
+        location = find_location(identifier=data.get("location") or data.get("location_id") or data.get("location_barcode"), required=True)
+        if location.warehouse_id != order.warehouse_id or location.is_virtual:
+            raise ValueError("Select a normal bin from this order warehouse")
+        inventory = Inventory.query.filter_by(product_id=item.product_id, location_id=location.id).first()
+        stock_deducted = min(quantity, int(inventory.quantity or 0)) if inventory else 0
+        if inventory and stock_deducted:
+            inventory.quantity -= stock_deducted
+            inventory.reserved_quantity = min(inventory.reserved_quantity, inventory.quantity)
+
+        report = ItemNotFoundReport(
+            order_id=order.id,
+            order_item_id=item.id,
+            product_id=item.product_id,
+            warehouse_id=order.warehouse_id,
+            location_id=location.id,
+            picker_id=user.id,
+            quantity=quantity,
+            stock_deducted_quantity=stock_deducted,
+            unit_price=item.unit_price or 0,
+            notes=trim_text(data.get("notes") or "Item not found during picking", 1000),
+        )
+        db.session.add(report)
+        item.quantity -= quantity
+        if item.packed_quantity > item.quantity:
+            item.packed_quantity = item.quantity
+        if all(order_item.picked_quantity >= order_item.quantity for order_item in order.items):
+            order.status = "packed" if data.get("auto_pack") else "picking"
+        revised_total = order.total_value
+        for invoice in Invoice.query.filter_by(order_id=order.id).all():
+            invoice.amount = revised_total
+        for transaction in MoneyTransaction.query.filter_by(order_id=order.id).all():
+            transaction.amount = revised_total
+        log_activity(
+            "item_not_found",
+            f"INF {item.product.sku}: removed {quantity} from order, stock adjusted {stock_deducted}",
+            user_id=user.id,
+            entity_type="ItemNotFoundReport",
+            meta={"order_id": order.id, "product_id": item.product_id, "warehouse_id": order.warehouse_id, "location_id": location.id, "quantity": quantity, "stock_deducted_quantity": stock_deducted},
+        )
+        db.session.commit()
+        sync_result = auto_sync_current_stock_sheet("item_not_found")
+        push_result = notify_product_change(item.product, "stock.changed")
+        return jsonify({"ok": True, "order": serialize_order(order), "report": serialize_item_not_found_report(report), "google_sheet": sync_result, "customer_website": push_result})
+    except (TypeError, ValueError) as error:
         db.session.rollback()
         return jsonify({"ok": False, "message": str(error)}), 400
 
@@ -2249,6 +2327,28 @@ def serialize_inbound_order(order):
         }
     )
     return result
+
+
+def serialize_item_not_found_report(report):
+    return {
+        "id": report.id,
+        "order_id": report.order_id,
+        "order_number": report.order.order_number if report.order else "",
+        "product_id": report.product_id,
+        "product_name": report.product.name if report.product else "",
+        "sku": report.product.sku if report.product else "",
+        "quantity": report.quantity,
+        "stock_deducted_quantity": report.stock_deducted_quantity,
+        "unit_price": float(report.unit_price or 0),
+        "amount": float(report.unit_price or 0) * int(report.quantity or 0),
+        "warehouse_id": report.warehouse_id,
+        "warehouse": report.warehouse.code if report.warehouse else "",
+        "location": report.location.barcode or report.location.full_code if report.location else "",
+        "picker_id": report.picker_id,
+        "picker": report.picker.full_name if report.picker else "",
+        "notes": report.notes or "",
+        "created_at": report.created_at.isoformat() + "Z" if report.created_at else None,
+    }
 
 
 def order_courier_payload(order):

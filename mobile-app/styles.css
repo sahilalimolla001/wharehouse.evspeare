@@ -847,6 +847,15 @@ input[type="file"] {
   align-items: center;
 }
 
+.pick-item .item-not-found {
+  grid-column: 1 / -1;
+  min-height: 40px;
+  border-color: #f2c5bf;
+  background: #fff3f1;
+  color: #b42318;
+  font-weight: 900;
+}
+
 .pick-product-detail {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
