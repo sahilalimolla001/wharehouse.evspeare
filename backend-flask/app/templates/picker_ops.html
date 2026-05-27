@@ -20,85 +20,73 @@
     </article>
   </section>
 
-  <div class="row g-3">
-    <div class="col-lg-8">
-      <section class="panel mb-3">
-        <div class="panel-heading">
-          <h2>Warehouse Live</h2>
-          <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
-        </div>
-        <div class="ops-live-grid">
-          <article><span>Live</span><strong>{{ live_count }}</strong></article>
-          <article><span>Unassigned</span><strong>{{ unassigned_count }}</strong></article>
-          <article><span>Assigned</span><strong>{{ assigned_count }}</strong></article>
-          <article><span>Processing</span><strong>{{ processing_count }}</strong></article>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-heading">
-          <h2>Live Orders</h2>
-          <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
-        </div>
-        <div class="picker-analysis-list">
-          {% for order, analysis in analyses %}
-            <article class="picker-analysis-card">
-              <div class="order-head">
-                <div>
-                  <strong>{{ order.order_number }}</strong>
-                  <span>{{ order.customer_name }} / {{ order.status|title }}</span>
-                </div>
-                <b class="{{ 'text-success' if analysis.ready else 'text-warning' }}">{{ "Ready" if analysis.ready else "Check stock" }}</b>
-              </div>
-              <div class="bin-hints admin-bin-hints">
-                {% for bin in analysis.route_bins %}
-                  <code>{{ bin }}</code>
-                {% else %}
-                  <code>No bin found</code>
-                {% endfor %}
-              </div>
-              <div class="table-responsive mt-2">
-                <table class="table table-sm align-middle">
-                  <thead><tr><th>SKU</th><th>Qty</th><th>Available</th><th>Recommended Bin</th><th>Short</th></tr></thead>
-                  <tbody>
-                    {% for item in analysis.items %}
-                      <tr>
-                        <td>{{ item.sku }}<br><small class="text-secondary">{{ item.product }}</small></td>
-                        <td>{{ item.remaining_quantity }}</td>
-                        <td>{{ item.available_quantity }}</td>
-                        <td>{{ item.recommended_bin.location.full_code if item.recommended_bin else "-" }}</td>
-                        <td>{{ item.shortage_quantity }}</td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </article>
-          {% else %}
-            <div class="empty-state">No floor orders right now.</div>
-          {% endfor %}
-        </div>
-      </section>
+  <section class="panel mb-3">
+    <div class="panel-heading">
+      <h2>Order Analysis</h2>
+      <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
     </div>
-    <div class="col-lg-4">
-      <section class="panel">
-        <div class="panel-heading">
-          <h2>Active Pickers</h2>
-        </div>
-        <div class="picker-analysis-list">
-          {% for item in active_pickers %}
-            <article class="tool-row">
-              <div>
-                <strong>{{ item.user.full_name }}</strong>
-                <span>{{ item.user.role|title }} / {{ item.user.picker_code or "-" }}</span>
-                <span>{{ item.live_count }} live / {{ item.processing_count }} processing</span>
-              </div>
-              <span class="badge {{ 'text-bg-warning' if item.processing_count else 'text-bg-success' }}">{{ item.status }}</span>
-            </article>
-          {% else %}
-            <div class="empty-state">No active picker mapped.</div>
-          {% endfor %}
-        </div>
-      </section>
+    <div class="picker-order-columns">
+      {% for title, status_class, count, status_orders in [
+        ("Unassigned", "warning", unassigned_count, unassigned_orders),
+        ("Assigned", "success", assigned_count, assigned_orders),
+        ("Processing", "express", processing_count, processing_orders)
+      ] %}
+        <section class="picker-order-column {{ status_class }}">
+          <header><strong>{{ title }}</strong><b>{{ count }}</b></header>
+          <div class="picker-order-list">
+            {% for order in status_orders %}
+              <article>
+                <a href="{{ url_for('orders.order_detail', order_id=order.id) }}">{{ order.order_number }}</a>
+                <span>Total Items: {{ order.total_items }}</span>
+                {% if order.assigned_to %}<small>{{ order.assigned_to.full_name }}</small>{% endif %}
+              </article>
+            {% else %}
+              <p class="text-secondary mb-0">No {{ title|lower }} orders.</p>
+            {% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="row g-3 justify-content-end">
+    <div class="col-lg-5">
+      <button class="btn btn-outline-primary w-100 picker-name-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#pickerNamePanel" aria-expanded="false" aria-controls="pickerNamePanel">
+        Picker Name
+      </button>
+      <div class="collapse mt-2" id="pickerNamePanel">
+        <section class="panel mb-3">
+          <div class="panel-heading">
+            <h2>Warehouse Live</h2>
+            <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
+          </div>
+          <div class="ops-live-grid">
+            <article><span>Live</span><strong>{{ live_count }}</strong></article>
+            <article><span>Unassigned</span><strong>{{ unassigned_count }}</strong></article>
+            <article><span>Assigned</span><strong>{{ assigned_count }}</strong></article>
+            <article><span>Processing</span><strong>{{ processing_count }}</strong></article>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>Active Pickers</h2>
+          </div>
+          <div class="picker-analysis-list">
+            {% for item in active_pickers %}
+              <article class="tool-row">
+                <div>
+                  <strong>{{ item.user.full_name }}</strong>
+                  <span>{{ item.user.role|title }} / {{ item.user.picker_code or "-" }}</span>
+                  <span>{{ item.live_count }} live / {{ item.processing_count }} processing</span>
+                </div>
+                <span class="badge {{ 'text-bg-warning' if item.processing_count else 'text-bg-success' }}">{{ item.status }}</span>
+              </article>
+            {% else %}
+              <div class="empty-state">No active picker mapped.</div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 {% endblock %}

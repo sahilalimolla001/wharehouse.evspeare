@@ -123,8 +123,9 @@ def picker_ops_summary(warehouse=None):
         picker_query = picker_query.filter(User.warehouses.any(id=warehouse.id))
     orders = query.order_by(priority_rank_expression(), Order.created_at).all()
     pickers = picker_query.order_by(User.full_name).all()
-    analyses = [(order, order_bin_analysis(order)) for order in orders]
-    processing_count = sum(1 for order in orders if order.status == "picking")
+    processing_orders = [order for order in orders if order.status == "picking"]
+    unassigned_orders = [order for order in orders if not order.assigned_to_id and order.status != "picking"]
+    assigned_orders = [order for order in orders if order.assigned_to_id and order.status != "picking"]
     active_pickers = []
     for picker in pickers:
         picker_orders = [order for order in orders if order.assigned_to_id == picker.id]
@@ -139,10 +140,12 @@ def picker_ops_summary(warehouse=None):
         )
     return {
         "orders": orders,
+        "unassigned_orders": unassigned_orders,
+        "assigned_orders": assigned_orders,
+        "processing_orders": processing_orders,
         "active_pickers": active_pickers,
-        "analyses": analyses,
         "live_count": len(orders),
-        "unassigned_count": sum(1 for order in orders if not order.assigned_to_id),
-        "assigned_count": sum(1 for order in orders if order.assigned_to_id),
-        "processing_count": processing_count,
+        "unassigned_count": len(unassigned_orders),
+        "assigned_count": len(assigned_orders),
+        "processing_count": len(processing_orders),
     }
