@@ -36,7 +36,6 @@ let scanFillTarget = null;
 let scanReturnScreen = null;
 let refreshTimer = null;
 let stockPreviewTimer = null;
-let activeReturnConfirmed = false;
 let lastSlaAlertAt = 0;
 let autoPilotRunning = false;
 const defaultScreenId = "hub-screen";
@@ -124,10 +123,6 @@ function bindActions() {
   $$("[data-automation-toggle]").forEach((button) => {
     button.addEventListener("click", () => toggleAutomationSetting(button.dataset.automationToggle));
   });
-  $("#return-lookup-form").addEventListener("submit", startReturnFromLookup);
-  $("#return-scan-item").addEventListener("click", () => scanReturnCode($("#return-code").value.trim()));
-  $("#back-to-returns").addEventListener("click", closeActiveReturn);
-  $("#initiate-pv").addEventListener("click", initiateReturnPv);
   $("#pv-back").addEventListener("click", () => showScreen("return-screen"));
   $$("[data-refresh-orders]").forEach((button) => button.addEventListener("click", refreshAll));
   $$("#handoff-bag-check, #handoff-label-check, #handoff-payment-check").forEach((input) => {
@@ -1349,77 +1344,57 @@ function renderReturnQueue() {
   const returns = store.returns.filter((item) => ["approved", "return_picking", "return_picked", "inspection"].includes(item.status));
   const target = $("#return-queue");
   if (!target) return;
-  const listHidden = Boolean(store.activeReturnId);
-  $("#return-lookup-form").classList.toggle("hidden", listHidden);
-  $("#return-list-head").classList.toggle("hidden", listHidden);
-  target.classList.toggle("hidden", listHidden);
-  if (listHidden) {
-    target.innerHTML = "";
-    return;
-  }
   if (!returns.length) {
-    target.innerHTML = `<div class="empty-state">No approved returns right now.</div>`;
+    target.innerHTML = `<div class="empty-state">Receive karne ke liye approved return product nahi hai.</div>`;
     return;
   }
   target.innerHTML = returns.map(returnCardHtml).join("");
-  target.querySelectorAll("[data-start-return]").forEach((card) => {
-    card.addEventListener("click", () => startReturn(Number(card.dataset.startReturn)));
+  target.querySelectorAll("[data-receive-return-product]").forEach((button) => {
+    button.addEventListener("click", () => {
+      receiveReturnProduct(Number(button.dataset.returnId), Number(button.dataset.itemId));
+    });
+  });
+  target.querySelectorAll("[data-open-return-pv]").forEach((button) => {
+    button.addEventListener("click", () => startReturn(Number(button.dataset.openReturnPv)));
+  });
+  target.querySelectorAll("[data-initiate-return-pv]").forEach((button) => {
+    button.addEventListener("click", () => initiateReturnPv(Number(button.dataset.initiateReturnPv)));
   });
 }
 
 function returnCardHtml(returnOrder) {
-  const totalQty = returnOrder.items.reduce((sum, item) => sum + item.expected_quantity, 0);
-  const pickedQty = returnOrder.items.reduce((sum, item) => sum + item.picked_quantity, 0);
-  const progress = totalQty ? Math.round((pickedQty / totalQty) * 100) : 0;
-  return `
-    <article class="order-card tappable" data-start-return="${returnOrder.id}">
-      <div class="order-top">
-        <div>
-          <strong>${escapeHtml(returnOrder.return_number)}</strong>
-          <span>${escapeHtml(returnOrder.website_order_id || returnOrder.customer_name)}</span>
+  const readyForPv = returnOrder.items.length > 0 && returnOrder.items.every((item) => item.picked_quantity >= item.expected_quantity);
+  return returnOrder.items.map((item) => {
+    const imageSrc = productImageSrc(item.product);
+    const received = item.picked_quantity >= item.expected_quantity;
+    const inPv = returnOrder.status === "inspection";
+    return `
+      <article class="return-product-card">
+        <div class="product-preview-thumb ${imageSrc ? "" : "empty"}">
+          ${imageSrc ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(item.product.name)}">` : "<span>No image</span>"}
         </div>
-        <span class="badge">${escapeHtml(returnOrder.status)}</span>
-      </div>
-      <div class="progress-line"><span style="width:${progress}%"></span></div>
-      <div class="order-meta">
-        <span>${returnOrder.items.length} SKUs</span>
-        <span>${pickedQty}/${totalQty} picked</span>
-        <span>${escapeHtml(returnOrder.reason || "return")}</span>
-      </div>
-      <div class="order-cta">${returnOrder.status === "inspection" ? "Open PV" : "Tap to receive return"}</div>
-    </article>
-  `;
-}
-
-async function startReturnFromLookup(event) {
-  event.preventDefault();
-  const lookup = $("#return-order-lookup").value.trim().toLowerCase();
-  if (!lookup) {
-    toast("Return or order ID enter karein.");
-    return;
-  }
-  const returnOrder = store.returns.find((item) =>
-    String(item.id) === lookup ||
-    String(item.return_number || "").toLowerCase() === lookup ||
-    String(item.website_order_id || "").toLowerCase() === lookup ||
-    String(item.order_id || "") === lookup
-  );
-  if (!returnOrder) {
-    toast("Approved return nahi mila.");
-    return;
-  }
-  startReturn(returnOrder.id);
+        <div class="return-product-info">
+          <strong>${escapeHtml(item.product.name)}</strong>
+          <span>${escapeHtml(item.product.sku)} / Qty ${item.expected_quantity}</span>
+          <span>${escapeHtml(item.product.brand || item.product.category || returnOrder.reason || "Return product")}</span>
+        </div>
+        ${inPv
+          ? `<button class="primary" type="button" data-open-return-pv="${returnOrder.id}">Open PV</button>`
+          : readyForPv
+            ? `<button class="primary" type="button" data-initiate-return-pv="${returnOrder.id}">Initiate PV</button>`
+          : `<button class="primary" type="button" data-receive-return-product data-return-id="${returnOrder.id}" data-item-id="${item.id}" ${received ? "disabled" : ""}>${received ? "Received" : "Receive Return"}</button>`}
+      </article>
+    `;
+  }).join("");
 }
 
 function startReturn(returnId) {
   store.activeReturnId = returnId;
-  activeReturnConfirmed = false;
   localStorage.setItem("warehouseActiveReturnId", String(returnId));
   const returnOrder = activeReturn();
   if (returnOrder?.status === "inspection") showScreen("pv-screen");
   else showScreen("return-screen", { forceHistory: true });
   renderReturnQueue();
-  renderActiveReturn();
   renderReturnPv();
 }
 
@@ -1427,155 +1402,39 @@ function activeReturn() {
   return store.returns.find((item) => item.id === store.activeReturnId) || null;
 }
 
-function closeActiveReturn() {
-  store.activeReturnId = 0;
-  activeReturnConfirmed = false;
-  localStorage.removeItem("warehouseActiveReturnId");
-  $("#return-code").value = "";
-  showScreen("return-screen");
-  renderReturnQueue();
-  renderActiveReturn();
-}
-
-function returnIdentifierMatches(returnOrder, code) {
-  const cleaned = String(code || "").trim().toLowerCase();
-  if (!cleaned) return false;
-  return [
-    returnOrder.id,
-    returnOrder.return_number,
-    returnOrder.website_order_id,
-    returnOrder.order_id,
-  ].some((value) => String(value || "").trim().toLowerCase() === cleaned);
-}
-
 function renderActiveReturn() {
-  const returnOrder = activeReturn();
   const card = $("#active-return-card");
   if (!card) return;
-  if (!returnOrder) {
-    card.innerHTML = `<div class="empty-state">Return/order ID type karein ya approved return select karein.</div>`;
-    $("#return-items").innerHTML = "";
-    $("#return-result").textContent = "Admin approve ke baad return list me dikhega.";
-    $("#return-code").placeholder = "Return / website order ID";
-    $("#initiate-pv").disabled = true;
-    return;
-  }
-  const totalQty = returnOrder.items.reduce((sum, item) => sum + item.expected_quantity, 0);
-  const pickedQty = returnOrder.items.reduce((sum, item) => sum + item.picked_quantity, 0);
-  const currentItem = nextReturnPickItem(returnOrder);
-  card.innerHTML = `
-    <article class="order-card active">
-      <div class="order-top">
-        <div>
-          <strong>${escapeHtml(returnOrder.return_number)}</strong>
-          <span>${escapeHtml(returnOrder.customer_name)} / ${escapeHtml(returnOrder.website_order_id || "-")}</span>
-        </div>
-        <span class="badge">${pickedQty}/${totalQty}</span>
-      </div>
-    </article>
-  `;
-  if (!activeReturnConfirmed) {
-    $("#return-code").placeholder = returnOrder.website_order_id || returnOrder.return_number;
-    $("#return-items").innerHTML = `<div class="empty-state">Step 1: Return/order ID scan ya type karein.</div>`;
-    $("#return-result").textContent = "Return ID confirm hone ke baad product scan open hoga.";
-    $("#initiate-pv").disabled = true;
-    return;
-  }
-  $("#return-code").placeholder = currentItem ? currentItem.product.sku : "PV ready";
-  $("#return-items").innerHTML = currentItem
-    ? returnItemHtml(currentItem)
-    : `<div class="empty-state">Return pick complete. Ab Initiate PV karein.</div>`;
-  $("#return-items").querySelectorAll("[data-return-pick]").forEach((button) => {
-    button.addEventListener("click", () => updateReturnPickedQuantity(Number(button.dataset.returnPick), Number(button.dataset.quantity)));
-  });
-  $("#return-result").textContent = currentItem ? `${currentItem.product.sku} scan karein.` : "All items picked. PV start karein.";
-  $("#initiate-pv").disabled = !returnOrder.items.every((item) => item.picked_quantity >= item.expected_quantity);
+  card.innerHTML = "";
 }
 
-function nextReturnPickItem(returnOrder) {
-  return returnOrder.items.find((item) => item.picked_quantity < item.expected_quantity) || null;
-}
-
-function returnItemHtml(item) {
-  const done = item.picked_quantity >= item.expected_quantity;
-  return `
-    <article class="pick-item ${done ? "done" : ""}">
-      <div>
-        <strong>${escapeHtml(item.product.sku)}</strong>
-        <span>${escapeHtml(item.product.name)}</span>
-      </div>
-      <div class="qty-control">
-        <button type="button" data-return-pick="${item.id}" data-quantity="${Math.max(item.picked_quantity - 1, 0)}">-</button>
-        <strong>${item.picked_quantity}/${item.expected_quantity}</strong>
-        <button type="button" data-return-pick="${item.id}" data-quantity="${Math.min(item.picked_quantity + 1, item.expected_quantity)}" ${done ? "disabled" : ""}>+</button>
-      </div>
-    </article>
-  `;
-}
-
-async function scanReturnCode(code) {
-  const returnOrder = activeReturn();
-  if (!returnOrder) {
-    toast("Return select karein.");
-    return;
-  }
-  if (!code) {
-    toast(activeReturnConfirmed ? "Product SKU/barcode enter karein." : "Return/order ID enter karein.");
-    return;
-  }
-  if (!activeReturnConfirmed) {
-    if (!returnIdentifierMatches(returnOrder, code)) {
-      $("#return-result").textContent = "Return/order ID match nahi hua.";
-      toast("Sahi return/order ID scan karein.");
-      return;
-    }
-    activeReturnConfirmed = true;
-    $("#return-code").value = "";
-    renderActiveReturn();
-    toast("Return confirmed. Product scan karein.");
-    return;
-  }
-  try {
-    const data = await apiFetch(`/scan/${encodeURIComponent(code)}`);
-    if (data.type !== "product") {
-      $("#return-result").textContent = "Product SKU/barcode scan karein.";
-      return;
-    }
-    const item = nextReturnPickItem(returnOrder);
-    if (!item) {
-      $("#return-result").textContent = "All return items picked. PV start karein.";
-      toast("PV start karein.");
-      return;
-    }
-    if (item.product.id !== data.product.id && item.product.sku !== data.product.sku) {
-      $("#return-result").innerHTML = `<strong>${escapeHtml(data.product.sku)}</strong><br>Abhi ${escapeHtml(item.product.sku)} scan karna hai.`;
-      toast("Next return item match nahi hua.");
-      return;
-    }
-    const nextQuantity = Math.min(item.picked_quantity + 1, item.expected_quantity);
-    await updateReturnPickedQuantity(item.id, nextQuantity);
-    $("#return-code").value = "";
-    $("#return-result").innerHTML = `<strong>${escapeHtml(data.product.sku)}</strong><br>Return picked ${nextQuantity}/${item.expected_quantity}`;
-  } catch (error) {
-    $("#return-result").textContent = error.message;
-    toast(error.message);
-  }
-}
-
-async function updateReturnPickedQuantity(itemId, quantity) {
+async function receiveReturnProduct(returnId, itemId) {
+  store.activeReturnId = returnId;
+  localStorage.setItem("warehouseActiveReturnId", String(returnId));
   const returnOrder = activeReturn();
   if (!returnOrder) return;
+  const item = returnOrder.items.find((row) => Number(row.id) === Number(itemId));
+  if (!item) return;
   try {
-    const data = await apiFetch(`/returns/${returnOrder.id}/items/${itemId}/pick`, { method: "POST", body: { quantity } });
+    const data = await apiFetch(`/returns/${returnOrder.id}/items/${itemId}/pick`, {
+      method: "POST",
+      body: { quantity: item.expected_quantity }
+    });
     replaceReturn(data.return_order);
     renderReturnQueue();
-    renderActiveReturn();
+    if (data.return_order.items.every((row) => row.picked_quantity >= row.expected_quantity)) {
+      await initiateReturnPv(returnOrder.id);
+      return;
+    }
+    toast("Product received. Remaining product select karein.");
   } catch (error) {
     toast(error.message);
   }
 }
 
-async function initiateReturnPv() {
+async function initiateReturnPv(returnId = store.activeReturnId) {
+  store.activeReturnId = returnId;
+  localStorage.setItem("warehouseActiveReturnId", String(returnId));
   const returnOrder = activeReturn();
   if (!returnOrder) return;
   try {
