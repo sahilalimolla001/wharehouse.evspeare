@@ -2,30 +2,41 @@
 {% block page_title %}Picker Ops{% endblock %}
 
 {% block content %}
-  <section class="metric-grid mb-3">
-    <article class="metric-card">
-      <span>Floor Orders</span>
-      <strong>{{ orders|length }}</strong>
+  <section class="metric-grid picker-metric-grid mb-3">
+    <article class="metric-card warning">
+      <span>Unassigned</span>
+      <strong>{{ unassigned_count }}</strong>
+      <small>Waiting for picker</small>
     </article>
     <article class="metric-card success">
-      <span>Bin Ready</span>
-      <strong>{{ ready_count }}</strong>
-    </article>
-    <article class="metric-card warning">
-      <span>Shortage Risk</span>
-      <strong>{{ shortage_count }}</strong>
-    </article>
-    <article class="metric-card express">
       <span>Assigned</span>
       <strong>{{ assigned_count }}</strong>
+      <small>Picker linked orders</small>
+    </article>
+    <article class="metric-card express">
+      <span>Processing</span>
+      <strong>{{ processing_count }}</strong>
+      <small>Picking in progress</small>
     </article>
   </section>
 
   <div class="row g-3">
     <div class="col-lg-8">
+      <section class="panel mb-3">
+        <div class="panel-heading">
+          <h2>Warehouse Live</h2>
+          <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
+        </div>
+        <div class="ops-live-grid">
+          <article><span>Live</span><strong>{{ live_count }}</strong></article>
+          <article><span>Unassigned</span><strong>{{ unassigned_count }}</strong></article>
+          <article><span>Assigned</span><strong>{{ assigned_count }}</strong></article>
+          <article><span>Processing</span><strong>{{ processing_count }}</strong></article>
+        </div>
+      </section>
       <section class="panel">
         <div class="panel-heading">
-          <h2>Order Bin Analysis</h2>
+          <h2>Live Orders</h2>
           <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
         </div>
         <div class="picker-analysis-list">
@@ -71,19 +82,20 @@
     <div class="col-lg-4">
       <section class="panel">
         <div class="panel-heading">
-          <h2>Pickers</h2>
+          <h2>Active Pickers</h2>
         </div>
         <div class="picker-analysis-list">
-          {% for picker in pickers %}
+          {% for item in active_pickers %}
             <article class="tool-row">
               <div>
-                <strong>{{ picker.full_name }}</strong>
-                <span>{{ picker.role|title }} / {{ picker.email }}</span>
+                <strong>{{ item.user.full_name }}</strong>
+                <span>{{ item.user.role|title }} / {{ item.user.picker_code or "-" }}</span>
+                <span>{{ item.live_count }} live / {{ item.processing_count }} processing</span>
               </div>
-              <span class="badge text-bg-success">App online assigns automatically</span>
+              <span class="badge {{ 'text-bg-warning' if item.processing_count else 'text-bg-success' }}">{{ item.status }}</span>
             </article>
           {% else %}
-            <div class="empty-state">No picker users mapped.</div>
+            <div class="empty-state">No active picker mapped.</div>
           {% endfor %}
         </div>
       </section>

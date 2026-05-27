@@ -517,11 +517,39 @@ body {
   gap: 12px;
 }
 
+.picker-metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .picker-analysis-card {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   background: #fbfcfb;
+}
+
+.ops-live-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ops-live-grid article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+}
+
+.ops-live-grid span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ops-live-grid strong {
+  font-size: 24px;
 }
 
 .admin-bin-hints {
@@ -547,6 +575,14 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .picker-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ops-live-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .tracking-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -568,6 +604,14 @@ body {
   }
 
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .picker-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-live-grid {
     grid-template-columns: 1fr;
   }
 

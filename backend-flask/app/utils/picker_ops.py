@@ -124,11 +124,25 @@ def picker_ops_summary(warehouse=None):
     orders = query.order_by(priority_rank_expression(), Order.created_at).all()
     pickers = picker_query.order_by(User.full_name).all()
     analyses = [(order, order_bin_analysis(order)) for order in orders]
+    processing_count = sum(1 for order in orders if order.status == "picking")
+    active_pickers = []
+    for picker in pickers:
+        picker_orders = [order for order in orders if order.assigned_to_id == picker.id]
+        picker_processing = sum(1 for order in picker_orders if order.status == "picking")
+        active_pickers.append(
+            {
+                "user": picker,
+                "live_count": len(picker_orders),
+                "processing_count": picker_processing,
+                "status": "Processing" if picker_processing else "Available",
+            }
+        )
     return {
         "orders": orders,
-        "pickers": pickers,
+        "active_pickers": active_pickers,
         "analyses": analyses,
-        "ready_count": sum(1 for _, analysis in analyses if analysis["ready"]),
-        "shortage_count": sum(1 for _, analysis in analyses if not analysis["ready"]),
+        "live_count": len(orders),
+        "unassigned_count": sum(1 for order in orders if not order.assigned_to_id),
         "assigned_count": sum(1 for order in orders if order.assigned_to_id),
+        "processing_count": processing_count,
     }
