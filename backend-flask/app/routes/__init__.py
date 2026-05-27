@@ -3,6 +3,7 @@ def register_blueprints(app):
     from .auth import auth_bp
     from .dashboard import dashboard_bp
     from .finance import finance_bp
+    from .inbound import inbound_bp
     from .orders import orders_bp
     from .products import products_bp
     from .reports import reports_bp
@@ -16,6 +17,7 @@ def register_blueprints(app):
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(finance_bp)
+    app.register_blueprint(inbound_bp)
     app.register_blueprint(products_bp)
     app.register_blueprint(suppliers_bp)
     app.register_blueprint(stock_bp)

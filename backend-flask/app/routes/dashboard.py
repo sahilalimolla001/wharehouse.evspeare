@@ -55,6 +55,7 @@ def dashboard():
     if user_has_role(user, "manager", "staff"):
         courier_pending_query = Order.query.filter(
             Order.status.in_(["packed", "dispatched"]),
+            db.or_(Order.external_source.is_(None), Order.external_source != "inbound_customer"),
             db.or_(Order.courier_order_id.is_(None), Order.courier_order_id == ""),
             db.or_(Order.courier_shipment_id.is_(None), Order.courier_shipment_id == ""),
         )

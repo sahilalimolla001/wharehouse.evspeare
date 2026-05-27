@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block page_title %}Inbound Customers{% endblock %}
+{% block content %}
+  <section class="metric-grid mb-3">
+    <article class="metric-card"><span>Inbound Orders</span><strong>{{ orders|length }}</strong></article>
+    <article class="metric-card success"><span>Invoiced Value</span><strong>{{ total|money }}</strong></article>
+    <article class="metric-card success"><span>Payment Collected</span><strong>{{ paid|money }}</strong></article>
+    <article class="metric-card warning"><span>Pending Amount</span><strong>{{ (total - paid)|money }}</strong></article>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Retail Orders And Payments</h2>
+        <p class="text-secondary mb-0">Inbound orders use a fixed 20% discount and local warehouse handoff only.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Order / Customer</th><th>Item Details</th><th>Invoice</th><th>Payment</th><th>Fulfilment</th></tr></thead>
+        <tbody>
+          {% for order in orders %}
+            {% set invoice = invoices.get(order.id) %}
+            {% set payment = payment_by_order.get(order.id) %}
+            <tr>
+              <td>
+                <a href="{{ url_for('orders.order_detail', order_id=order.id) }}"><strong>{{ order.order_number }}</strong></a><br>
+                {{ order.customer_name }}<br><small class="text-muted">{{ order.customer_phone }}</small>
+              </td>
+              <td>
+                {% for item in order.items %}
+                  <div><code>{{ item.product.sku }}</code> {{ item.product.name }} x {{ item.quantity }} = {{ (item.unit_price * item.quantity)|money }}</div>
+                {% endfor %}
+                <span class="badge text-bg-success">20% inbound discount</span>
+              </td>
+              <td>
+                {% if invoice %}
+                  <strong>{{ invoice.amount|money }}</strong><br>
+                  <code>{{ invoice.invoice_number }}</code><br>
+                  <a class="btn btn-sm btn-outline-primary mt-1" href="{{ url_for('inbound.download_invoice', invoice_id=invoice.id) }}">Download</a>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>
+                {% if payment %}
+                  <form method="post" action="{{ url_for('inbound.update_payment', order_id=order.id) }}" class="d-grid gap-1">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <small>{{ payment.gateway|upper }}</small>
+                    <select class="form-select form-select-sm" name="status">
+                      {% for status in ["pending", "payment_pending", "paid", "collected", "failed"] %}
+                        <option value="{{ status }}" {% if payment.status == status %}selected{% endif %}>{{ status|replace("_", " ")|title }}</option>
+                      {% endfor %}
+                    </select>
+                    <input class="form-control form-control-sm" name="reference" value="{{ payment.reference or '' }}" placeholder="UTR / receipt ID">
+                    <button class="btn btn-sm btn-outline-success" type="submit">Save Payment</button>
+                  </form>
+                {% else %}-{% endif %}
+              </td>
+              <td><span class="badge text-bg-secondary">{{ order.status|title }}</span><br><small>No Shiprocket</small></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-4">No inbound customer orders yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

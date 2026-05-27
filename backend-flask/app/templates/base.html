@@ -31,6 +31,7 @@
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('refunds.') %}active{% endif %}" href="{{ url_for('refunds.payment_refunds') }}">Payment Refunds</a>
           <a class="nav-link {% if request.endpoint == 'finance.money_tracking' %}active{% endif %}" href="{{ url_for('finance.money_tracking') }}">Money Tracking</a>
           <a class="nav-link {% if request.endpoint == 'finance.invoices' %}active{% endif %}" href="{{ url_for('finance.invoices') }}">Invoices</a>
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('inbound.') %}active{% endif %}" href="{{ url_for('inbound.customers') }}">Inbound Customers</a>
           <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}">Reports</a>
           <a class="nav-link {% if request.endpoint == 'users.users' %}active{% endif %}" href="{{ url_for('users.users') }}">Users</a>
           <a class="nav-link {% if request.endpoint == 'users.ops_config' %}active{% endif %}" href="{{ url_for('users.ops_config') }}">Ops Config</a>

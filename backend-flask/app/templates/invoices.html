@@ -5,7 +5,7 @@
     <h2>Stored Invoices</h2>
     <div class="table-responsive">
       <table class="table align-middle">
-        <thead><tr><th>Invoice</th><th>Type</th><th>Order</th><th>Customer</th><th>Amount</th><th>Status</th><th>Issued</th></tr></thead>
+        <thead><tr><th>Invoice</th><th>Type</th><th>Order</th><th>Customer</th><th>Amount</th><th>Status</th><th>Issued</th><th></th></tr></thead>
         <tbody>
           {% for invoice in invoices %}
             <tr>
@@ -16,9 +16,10 @@
               <td><strong>{{ invoice.currency }} {{ '%.2f'|format(invoice.amount or 0) }}</strong></td>
               <td><span class="badge text-bg-secondary">{{ invoice.status }}</span></td>
               <td>{{ invoice.issued_at.strftime('%d %b %Y %I:%M %p') if invoice.issued_at else '' }}</td>
+              <td>{% if invoice.order and invoice.order.external_source == "inbound_customer" %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('inbound.download_invoice', invoice_id=invoice.id) }}">Download</a>{% endif %}</td>
             </tr>
           {% else %}
-            <tr><td colspan="7" class="text-center text-muted py-4">No invoices yet.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted py-4">No invoices yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

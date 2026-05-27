@@ -112,6 +112,12 @@ def dispatch_order(order_id):
         flash("Pack all order items before dispatch.", "warning")
         return redirect(url_for("orders.order_detail", order_id=order.id))
 
+    if order.external_source == "inbound_customer":
+        order.status = "dispatched"
+        db.session.commit()
+        flash("Inbound customer order handed off locally. Shiprocket was not created.", "success")
+        return redirect(url_for("orders.order_detail", order_id=order.id))
+
     try:
         result = dispatch_order_with_shiprocket(order, request.form, user_id=get_current_user().id if get_current_user() else None)
         db.session.commit()

@@ -11,11 +11,11 @@ from sqlalchemy.exc import IntegrityError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
+from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Invoice, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
-from ..utils.finance import ensure_invoice, record_money_transaction
+from ..utils.finance import ensure_invoice
 from ..utils.order_payload import order_automation_summary
 from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, verify_razorpay_webhook
 from ..utils.picker_identity import ensure_picker_code
@@ -258,6 +258,15 @@ def api_central_panel_warehouses():
     return jsonify({"ok": True, "warehouses": [serialize_warehouse(warehouse) for warehouse in warehouses]})
 
 
+@api_bp.route("/central-panel/inbound-orders", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_inbound_orders():
+    if request.method == "OPTIONS":
+        return "", 204
+    orders = Order.query.filter_by(external_source="inbound_customer").order_by(Order.created_at.desc()).limit(500).all()
+    return jsonify({"ok": True, "orders": [serialize_inbound_order(order) for order in orders]})
+
+
 @api_bp.get("/dashboard")
 @api_login_required
 @picker_permission_required("picker_home")
@@ -355,6 +364,71 @@ def api_public_product_image(product_id):
     return serve_product_image(product)
 
 
+@api_bp.get("/inbound/catalog")
+@api_login_required
+def api_inbound_catalog():
+    user = current_api_user()
+    if user.role != "inbound_customer":
+        return jsonify({"ok": False, "message": "Inbound customer login required"}), 403
+    products = Product.query.filter_by(is_active=True).order_by(Product.name).limit(200).all()
+    return jsonify(
+        {
+            "ok": True,
+            "discount_percent": 20,
+            "products": [
+                serialize_inbound_product(product, user.warehouses[0].id)
+                for product in products
+                if inbound_available_quantity(product, user.warehouses[0].id) > 0
+            ],
+        }
+    )
+
+
+@api_bp.get("/inbound/orders")
+@api_login_required
+def api_inbound_orders():
+    user = current_api_user()
+    if user.role != "inbound_customer":
+        return jsonify({"ok": False, "message": "Inbound customer login required"}), 403
+    orders = (
+        Order.query.filter_by(external_source="inbound_customer", customer_phone=user.phone)
+        .order_by(Order.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return jsonify({"ok": True, "orders": [serialize_inbound_order(order) for order in orders]})
+
+
+@api_bp.post("/inbound/orders")
+@api_login_required
+def api_create_inbound_order():
+    user = current_api_user()
+    if user.role != "inbound_customer":
+        return jsonify({"ok": False, "message": "Inbound customer login required"}), 403
+    data = request.get_json(silent=True) or {}
+    if not user.warehouses:
+        return jsonify({"ok": False, "message": "Customer is not assigned to a warehouse"}), 409
+    try:
+        prepared = prepare_inbound_order_payload(data, user)
+        order, created = create_order_from_integration(prepared)
+        invoice = ensure_invoice(order, "sale", "issued", payload=prepared)
+        if created:
+            payment = prepared["payment"]
+            transaction = MoneyTransaction.query.filter_by(invoice_id=invoice.id, transaction_type="sale").first()
+            if transaction:
+                transaction.transaction_type = "inbound_payment"
+                transaction.status = "pending" if payment["method"] == "cod" else "payment_pending"
+                transaction.gateway = payment["method"]
+                transaction.reference = payment.get("reference", "")
+                transaction.notes = "Inbound customer checkout payment"
+                transaction.payload_json = json.dumps(payment, default=str, separators=(",", ":"))[:20000]
+        db.session.commit()
+        return jsonify({"ok": True, "created": created, "order": serialize_inbound_order(order)}), 201 if created else 200
+    except (TypeError, ValueError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
 @api_bp.get("/products/<int:product_id>")
 @api_login_required
 def api_product_detail(product_id):
@@ -389,6 +463,92 @@ def serve_product_image(product):
             return jsonify({"ok": False, "message": str(error)}), 404
 
     return jsonify({"ok": False, "message": "Unsupported product image URL"}), 400
+
+
+def inbound_available_quantity(product, warehouse_id):
+    return max(int(
+        db.session.query(func.coalesce(func.sum(Inventory.quantity - Inventory.reserved_quantity), 0))
+        .join(WarehouseLocation, Inventory.location_id == WarehouseLocation.id)
+        .filter(
+            Inventory.product_id == product.id,
+            WarehouseLocation.warehouse_id == warehouse_id,
+            WarehouseLocation.is_virtual.is_(False),
+        )
+        .scalar()
+        or 0
+    ), 0)
+
+
+def serialize_inbound_product(product, warehouse_id):
+    product_data = serialize_public_product(product)
+    regular_price = float(product.selling_price or product.purchase_price or 0)
+    available_quantity = inbound_available_quantity(product, warehouse_id)
+    product_data.update(
+        {
+            "regular_price": regular_price,
+            "inbound_price": round(regular_price * 0.80, 2),
+            "discount_percent": 20,
+            "available_quantity": available_quantity,
+            "in_stock": available_quantity > 0,
+        }
+    )
+    return product_data
+
+
+def prepare_inbound_order_payload(data, user):
+    if not isinstance(data, dict):
+        raise ValueError("JSON body must be an object")
+    if not user.phone:
+        raise ValueError("Inbound customer account needs a phone number")
+    items = data.get("items")
+    if not isinstance(items, list) or not items:
+        raise ValueError("Add at least one product to the cart")
+    priced_items = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("Each cart item must be an object")
+        product = find_product_from_payload(item, required=True)
+        quantity = positive_int(item.get("quantity"), "quantity")
+        available_quantity = inbound_available_quantity(product, user.warehouses[0].id)
+        if available_quantity < quantity:
+            raise ValueError(f"Only {available_quantity} {product.name} available in your warehouse")
+        regular_price = float(product.selling_price or product.purchase_price or 0)
+        priced_items.append(
+            {
+                "product_id": product.id,
+                "sku": product.sku,
+                "quantity": quantity,
+                "regular_price": regular_price,
+                "unit_price": round(regular_price * 0.80, 2),
+                "discount_percent": 20,
+            }
+        )
+    payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+    payment_method = trim_text(payment.get("method") or "cod", 20).lower()
+    if payment_method not in {"cod", "upi", "bank_transfer", "card"}:
+        raise ValueError("Supported payments are COD, UPI, bank transfer or card")
+    order_id = trim_text(data.get("order_id") or data.get("orderId"), 120) or f"INB-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+    address = trim_text(data.get("customer_address") or data.get("address"), 2000)
+    if not address:
+        raise ValueError("Delivery address is required")
+    return {
+        "source": "inbound_customer",
+        "external_order_id": order_id,
+        "order_number": order_id,
+        "warehouse_id": user.warehouses[0].id,
+        "customer_name": user.full_name,
+        "customer_phone": user.phone,
+        "customer_address": address,
+        "priority": "normal",
+        "discount": {"type": "inbound_customer", "percent": 20},
+        "payment": {
+            "method": payment_method,
+            "status": "pending",
+            "reference": trim_text(payment.get("reference"), 160),
+        },
+        "customer": {"id": user.id, "email": user.email, "name": user.full_name, "phone": user.phone},
+        "items": priced_items,
+    }
 
 
 @api_bp.get("/scan/<path:code>")
@@ -2049,6 +2209,8 @@ def serialize_order(order):
                 "id": item.id,
                 "product": serialize_product(item.product),
                 "quantity": item.quantity,
+                "unit_price": float(item.unit_price or 0),
+                "line_total": float(item.unit_price or 0) * item.quantity,
                 "picked_quantity": item.picked_quantity,
                 "packed_quantity": item.packed_quantity,
                 "recommended_bin": product_pick_location(item.product, order.warehouse_id),
@@ -2057,6 +2219,35 @@ def serialize_order(order):
         ],
         "bin_analysis": order_bin_analysis(order),
     }
+
+
+def serialize_inbound_order(order):
+    result = serialize_order(order)
+    invoice = Invoice.query.filter_by(order_id=order.id, invoice_type="sale").first()
+    payment = (
+        MoneyTransaction.query.filter_by(order_id=order.id, transaction_type="inbound_payment")
+        .order_by(MoneyTransaction.id.desc())
+        .first()
+    )
+    result.update(
+        {
+            "discount_percent": 20,
+            "amount": float(invoice.amount if invoice else order.total_value),
+            "invoice": {
+                "id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "amount": float(invoice.amount or 0),
+                "currency": invoice.currency,
+                "issued_at": invoice.issued_at.isoformat() + "Z" if invoice.issued_at else None,
+            } if invoice else None,
+            "payment": {
+                "method": payment.gateway,
+                "status": payment.status,
+                "reference": payment.reference or "",
+            } if payment else None,
+        }
+    )
+    return result
 
 
 def order_courier_payload(order):

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ invoice.invoice_number }}</title>
+    <style>
+      body { font: 14px Arial, sans-serif; color: #17201c; margin: 32px auto; max-width: 760px; }
+      header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f766e; padding-bottom: 18px; }
+      h1 { margin: 0; color: #0f766e; } table { width: 100%; border-collapse: collapse; margin-top: 28px; }
+      th, td { border-bottom: 1px solid #dfe6e2; padding: 10px; text-align: left; }
+      .right { text-align: right; } .total { font-size: 18px; font-weight: bold; }
+      .note { background: #ebfaf4; padding: 12px; margin-top: 22px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div><h1>EV Speare</h1><p>Inbound Customer Invoice</p></div>
+      <div><strong>{{ invoice.invoice_number }}</strong><br>{{ invoice.issued_at.strftime('%d %b %Y') if invoice.issued_at else '' }}</div>
+    </header>
+    <p><strong>Order:</strong> {{ order.order_number }}<br><strong>Customer:</strong> {{ order.customer_name }} / {{ order.customer_phone }}<br><strong>Address:</strong> {{ order.customer_address }}</p>
+    <table>
+      <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th class="right">Discounted Price</th><th class="right">Total</th></tr></thead>
+      <tbody>
+        {% for item in order.items %}
+          <tr><td>{{ item.product.name }}</td><td>{{ item.product.sku }}</td><td>{{ item.quantity }}</td><td class="right">{{ item.unit_price|money }}</td><td class="right">{{ (item.unit_price * item.quantity)|money }}</td></tr>
+        {% endfor %}
+        <tr><td colspan="4" class="right total">Grand Total</td><td class="right total">{{ invoice.amount|money }}</td></tr>
+      </tbody>
+    </table>
+    <div class="note">Inbound customer pricing includes the fixed 20% discount. This order is fulfilled directly by the warehouse without Shiprocket creation.</div>
+  </body>
+</html>

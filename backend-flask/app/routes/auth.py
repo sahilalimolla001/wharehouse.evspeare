@@ -14,6 +14,7 @@ ROLE_LABELS = {
     "picker": "Picker",
     "packer": "Packer",
     "delivery": "Delivery Staff",
+    "inbound_customer": "Inbound Customer",
 }
 
 
@@ -50,6 +51,7 @@ PAGE_PERMISSIONS = {
     "refunds": "Payment Refunds",
     "money_tracking": "Money Tracking",
     "invoices": "Invoices",
+    "inbound_customers": "Inbound Customers",
     "reports": "Reports",
     "users": "Users",
     "ops_config": "Ops Config",
@@ -70,6 +72,7 @@ ADMIN_PANEL_PERMISSIONS = {
     "panel_content": "Website / App Edit",
     "panel_ops_config": "Warehouse Ops Config",
     "panel_automation": "Automation",
+    "panel_inbound_customers": "Inbound Customers",
 }
 
 PICKER_APP_PERMISSIONS = {
@@ -100,6 +103,7 @@ ADMIN_PANEL_PAGE_PERMISSIONS = {
     "panel_shiprocket": {"shiprocket", "shipping_status"},
     "panel_tracking": {"shipping_status"},
     "panel_ops_config": {"ops_config", "settings"},
+    "panel_inbound_customers": {"inbound_customers"},
 }
 
 
@@ -141,6 +145,8 @@ def endpoint_permission(endpoint):
         return "money_tracking"
     if endpoint == "finance.invoices":
         return "invoices"
+    if endpoint and endpoint.startswith("inbound."):
+        return "inbound_customers"
     prefix = endpoint.split(".", 1)[0]
     return prefix if prefix in PAGE_PERMISSIONS else ""
 
