@@ -779,13 +779,15 @@ def api_return_item_stock_in(return_id, item_id):
 
     condition = str(data.get("condition") or "no_issue").strip().lower()
     try:
+        location = find_location(identifier=data.get("location") or data.get("location_id") or data.get("location_barcode"), required=True)
         if condition == "issue":
-            location = ensure_virtual_return_bins()["customer_return"]
+            suggested_location = ensure_virtual_return_bins()["customer_return"]
+            if not location.is_virtual or location.id != suggested_location.id:
+                raise ValueError(f"Product issue stock must go to virtual return bin {suggested_location.barcode}")
             item.issue_quantity += quantity
             item.status = "issue" if item.remaining_stock_in_quantity == 0 else "partial"
             notes = f"Customer return issue stock in: {return_order.return_number}"
         elif condition == "no_issue":
-            location = find_location(identifier=data.get("location") or data.get("location_id") or data.get("location_barcode"), required=True)
             if location.is_virtual:
                 raise ValueError("No-issue stock must go to a normal bin")
             item.stocked_quantity += quantity
@@ -2105,9 +2107,36 @@ def serialize_return_order(return_order):
                 "remaining_stock_in_quantity": item.remaining_stock_in_quantity,
                 "status": item.status,
                 "notes": item.notes,
+                "suggested_bins": serialize_return_stock_bins(item.product),
             }
             for item in return_order.items
         ],
+    }
+
+
+def serialize_return_stock_bins(product):
+    warehouse = current_api_warehouse()
+    query = (
+        Inventory.query.join(WarehouseLocation)
+        .filter(
+            Inventory.product_id == product.id,
+            WarehouseLocation.is_active.is_(True),
+            WarehouseLocation.is_virtual.is_(False),
+        )
+    )
+    normal_location_query = WarehouseLocation.query.filter(
+        WarehouseLocation.is_active.is_(True),
+        WarehouseLocation.is_virtual.is_(False),
+    )
+    if warehouse:
+        query = query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+        normal_location_query = normal_location_query.filter(WarehouseLocation.warehouse_id == warehouse.id)
+    inventory = query.order_by(Inventory.quantity.desc(), WarehouseLocation.zone, WarehouseLocation.rack, WarehouseLocation.bin_code).first()
+    normal_location = inventory.location if inventory else normal_location_query.order_by(WarehouseLocation.zone, WarehouseLocation.rack, WarehouseLocation.bin_code).first()
+    issue_location = WarehouseLocation.query.filter_by(barcode="RC-DA-01", is_virtual=True, is_active=True).first()
+    return {
+        "no_issue": serialize_location(normal_location) if normal_location else None,
+        "issue": serialize_location(issue_location) if issue_location else None,
     }
 
 

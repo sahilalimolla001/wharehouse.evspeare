@@ -893,6 +893,19 @@ input[type="file"] {
   font-weight: 850;
 }
 
+.return-bin-suggestion {
+  margin-block: 8px;
+}
+
+.return-bin-suggestion code {
+  font-weight: 850;
+  color: var(--primary-dark);
+}
+
+.return-bin-suggestion small {
+  color: var(--muted);
+}
+
 .qty-control {
   display: grid;
   grid-template-columns: 38px 58px 38px;

@@ -1463,7 +1463,7 @@ function renderReturnPv() {
       <div class="order-top">
         <div>
           <strong>${escapeHtml(returnOrder.return_number)}</strong>
-          <span>${escapeHtml(returnOrder.status)} / issue items RC-DA-01 me jayenge</span>
+          <span>${escapeHtml(returnOrder.status)} / condition select karke suggested bin scan karein</span>
         </div>
       </div>
     </article>
@@ -1471,6 +1471,8 @@ function renderReturnPv() {
   target.innerHTML = returnOrder.items.map(returnPvItemHtml).join("");
   target.querySelectorAll("[data-return-stock-form]").forEach((form) => {
     form.addEventListener("submit", submitReturnStockIn);
+    form.querySelector("[name='condition']").addEventListener("change", () => updateReturnPvBinSuggestion(form));
+    updateReturnPvBinSuggestion(form);
   });
   target.querySelectorAll("[data-scan-fill]").forEach((button) => {
     button.addEventListener("click", () => beginScanFill(button.dataset.scanFill));
@@ -1489,8 +1491,9 @@ function returnPvItemHtml(item) {
           <option value="issue">Product Issue</option>
         </select>
       </label>
-      <label>Normal Bin For No Issue
-        <span class="scan-input"><input name="location" placeholder="LOC:A-2-4-08"><button type="button" data-scan-fill="[data-return-stock-form='${item.id}'] [name='location']">Scan</button></span>
+      <div class="result-card return-bin-suggestion" data-return-bin-suggestion></div>
+      <label data-return-bin-label>Available Bin For No Issue
+        <span class="scan-input"><input name="location" required placeholder="Scan suggested bin"><button type="button" data-scan-fill="[data-return-stock-form='${item.id}'] [name='location']">Scan</button></span>
       </label>
       <label>Quantity
         <input name="quantity" type="number" min="1" max="${pending}" value="${pending || 1}" required>
@@ -1498,6 +1501,24 @@ function returnPvItemHtml(item) {
       <button class="primary" type="submit" ${pending <= 0 ? "disabled" : ""}>Stock In Return</button>
     </form>
   `;
+}
+
+function updateReturnPvBinSuggestion(form) {
+  const returnOrder = activeReturn();
+  const item = returnOrder?.items.find((row) => Number(row.id) === Number(form.dataset.returnStockForm));
+  if (!item) return;
+  const condition = form.querySelector("[name='condition']").value;
+  const suggestion = item.suggested_bins?.[condition];
+  const issueSelected = condition === "issue";
+  const label = form.querySelector("[data-return-bin-label]");
+  const input = form.querySelector("[name='location']");
+  const target = form.querySelector("[data-return-bin-suggestion]");
+  label.firstChild.textContent = issueSelected ? "Virtual Bin For Product Issue " : "Available Bin For No Issue ";
+  input.value = "";
+  input.placeholder = suggestion?.barcode || "Scan selected bin";
+  target.innerHTML = suggestion
+    ? `<strong>Suggested ${issueSelected ? "virtual" : "available"} bin</strong><br>${escapeHtml(suggestion.full_code)}<br><code>${escapeHtml(suggestion.barcode || suggestion.id)}</code><br><small>Stock in ke liye isi bin ko scan karein.</small>`
+    : `<strong>No suggested bin found.</strong><br><small>Valid ${issueSelected ? "virtual return" : "normal"} bin scan karein.</small>`;
 }
 
 async function submitReturnStockIn(event) {
