@@ -1463,7 +1463,7 @@ function renderReturnPv() {
       <div class="order-top">
         <div>
           <strong>${escapeHtml(returnOrder.return_number)}</strong>
-          <span>${escapeHtml(returnOrder.status)} / condition select karke suggested bin scan karein</span>
+          <span>${escapeHtml(returnOrder.status)} / isi form me return bin scan karke stock in karein</span>
         </div>
       </div>
     </article>
@@ -1492,8 +1492,8 @@ function returnPvItemHtml(item) {
         </select>
       </label>
       <div class="result-card return-bin-suggestion" data-return-bin-suggestion></div>
-      <label data-return-bin-label>Available Bin For No Issue
-        <span class="scan-input"><input name="location" required placeholder="Scan suggested bin"><button type="button" data-scan-fill="[data-return-stock-form='${item.id}'] [name='location']">Scan</button></span>
+      <label data-return-bin-label>Return Bin Scan For No Issue
+        <span class="scan-input"><input name="location" required placeholder="Scan bin, e.g. A1-01-4C"><button type="button" data-scan-fill="[data-return-stock-form='${item.id}'] [name='location']">Scan</button></span>
       </label>
       <label>Quantity
         <input name="quantity" type="number" min="1" max="${pending}" value="${pending || 1}" required>
@@ -1513,9 +1513,9 @@ function updateReturnPvBinSuggestion(form) {
   const label = form.querySelector("[data-return-bin-label]");
   const input = form.querySelector("[name='location']");
   const target = form.querySelector("[data-return-bin-suggestion]");
-  label.firstChild.textContent = issueSelected ? "Virtual Bin For Product Issue " : "Available Bin For No Issue ";
+  label.firstChild.textContent = issueSelected ? "Return Virtual Bin Scan For Product Issue " : "Return Bin Scan For No Issue ";
   input.value = "";
-  input.placeholder = suggestion?.barcode || "Scan selected bin";
+  input.placeholder = suggestion?.barcode || "Scan bin, e.g. A1-01-4C";
   target.innerHTML = suggestion
     ? `<strong>Suggested ${issueSelected ? "virtual" : "available"} bin</strong><br>${escapeHtml(suggestion.full_code)}<br><code>${escapeHtml(suggestion.barcode || suggestion.id)}</code><br><small>Stock in ke liye isi bin ko scan karein.</small>`
     : `<strong>No suggested bin found.</strong><br><small>Valid ${issueSelected ? "virtual return" : "normal"} bin scan karein.</small>`;

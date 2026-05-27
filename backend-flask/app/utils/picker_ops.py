@@ -147,13 +147,13 @@ def picker_ops_summary(warehouse=None):
         picker_query = picker_query.filter(User.warehouses.any(id=warehouse.id))
     orders = query.order_by(priority_rank_expression(), Order.created_at).all()
     pickers = picker_query.order_by(User.full_name).all()
-    processing_orders = [order for order in orders if order.status == "picking"]
-    unassigned_orders = [order for order in orders if not order.assigned_to_id and order.status != "picking"]
-    assigned_orders = [order for order in orders if order.assigned_to_id and order.status != "picking"]
+    processing_orders = [order for order in orders if order_has_picked_item(order)]
+    unassigned_orders = [order for order in orders if not order.assigned_to_id and not order_has_picked_item(order)]
+    assigned_orders = [order for order in orders if order.assigned_to_id and not order_has_picked_item(order)]
     active_pickers = []
     for picker in pickers:
         picker_orders = [order for order in orders if order.assigned_to_id == picker.id]
-        picker_processing = sum(1 for order in picker_orders if order.status == "picking")
+        picker_processing = sum(1 for order in picker_orders if order_has_picked_item(order))
         active_pickers.append(
             {
                 "user": picker,
@@ -173,3 +173,7 @@ def picker_ops_summary(warehouse=None):
         "assigned_count": len(assigned_orders),
         "processing_count": len(processing_orders),
     }
+
+
+def order_has_picked_item(order):
+    return any(int(item.picked_quantity or 0) > 0 for item in order.items)
