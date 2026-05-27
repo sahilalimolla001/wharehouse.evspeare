@@ -779,6 +779,23 @@ input[type="file"] {
   padding: 12px;
 }
 
+.dispatch-dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dispatch-dimensions label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dispatch-dimensions input {
+  min-width: 0;
+}
+
 .batch-card,
 .exception-card,
 .setting-row,

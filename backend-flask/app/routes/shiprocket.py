@@ -300,31 +300,35 @@ def dispatch_order_with_shiprocket(order, package_input, user_id=None):
     result = None
     result_summary = current_shiprocket_summary(order)
     created = False
-    if not order.courier_order_id and not order.courier_shipment_id:
+    skipped = False
+    if not order.courier_order_id and not order.courier_shipment_id and is_shiprocket_configured(current_app.config):
         payload = build_shiprocket_payload_for_order(order, package)
         result = create_shiprocket_order(payload, current_app.config)
         result_summary = summarize_shiprocket_response(result)
         save_shiprocket_response(order, result, result_summary)
         created = True
+    elif not order.courier_order_id and not order.courier_shipment_id:
+        skipped = True
 
     order.status = "dispatched"
+    dispatch_mode = "via Shiprocket" if order.courier_order_id or order.courier_shipment_id else "without Shiprocket courier"
     log_activity(
         "order_dispatch",
-        f"Order {order.order_number} dispatched via Shiprocket",
+        f"Order {order.order_number} dispatched {dispatch_mode}",
         user_id=user_id,
         entity_type="Order",
         entity_id=order.id,
-        meta={"shiprocket": result_summary, "package": serialize_package(package), "created_courier_order": created},
+        meta={"shiprocket": result_summary, "package": serialize_package(package), "created_courier_order": created, "shiprocket_skipped": skipped},
     )
-    return {"created": created, "result": result, "summary": result_summary, "package": package}
+    return {"created": created, "skipped": skipped, "result": result, "summary": result_summary, "package": package}
 
 
-def ensure_shiprocket_order(order, user_id=None):
+def ensure_shiprocket_order(order, user_id=None, package_input=None):
     if not is_shiprocket_configured(current_app.config):
         return {"created": False, "skipped": True, "summary": current_shiprocket_summary(order), "message": "Shiprocket is not configured"}
     if order.courier_order_id or order.courier_shipment_id:
         return {"created": False, "skipped": False, "summary": current_shiprocket_summary(order)}
-    package = order_package_defaults(order)
+    package = package_dimensions_from_data(package_input, required=True) if package_input else order_package_defaults(order)
     payload = build_shiprocket_payload_for_order(order, package)
     result = create_shiprocket_order(payload, current_app.config)
     summary = summarize_shiprocket_response(result)
@@ -341,12 +345,12 @@ def ensure_shiprocket_order(order, user_id=None):
     return {"created": True, "skipped": False, "result": result, "summary": summary}
 
 
-def ensure_shiprocket_label(order, user_id=None):
+def ensure_shiprocket_label(order, user_id=None, package_input=None):
     label_url = shiprocket_label_url(order)
     if label_url:
         return {"created": False, "label_url": label_url, "summary": current_shiprocket_summary(order)}
     if not order.courier_shipment_id:
-        ensure_shiprocket_order(order, user_id=user_id)
+        ensure_shiprocket_order(order, user_id=user_id, package_input=package_input)
     if not order.courier_shipment_id:
         raise ShiprocketError("Shiprocket shipment id is missing. Label can be generated after shipment/AWB creation.")
     result = generate_shiprocket_label([order.courier_shipment_id], current_app.config)

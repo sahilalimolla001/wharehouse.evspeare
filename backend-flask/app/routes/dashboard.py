@@ -6,7 +6,7 @@ from sqlalchemy import func
 from ..extensions import db
 from ..models import Inventory, Order, Product, StockIn, StockOut, WarehouseLocation
 from ..utils.order_payload import order_automation_summary
-from .auth import accessible_warehouses, get_current_user, login_required, selected_warehouse
+from .auth import accessible_warehouses, get_current_user, login_required, selected_warehouse, user_has_role
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -51,6 +51,16 @@ def dashboard():
     express_orders = sum(1 for item in active_order_summaries if item["is_express"])
     auto_discount_orders = sum(1 for item in active_order_summaries if item["auto_discount"] > 0)
     auto_discount_total = sum(item["auto_discount"] for item in active_order_summaries)
+    courier_pending_orders = []
+    if user_has_role(user, "manager", "staff"):
+        courier_pending_query = Order.query.filter(
+            Order.status.in_(["packed", "dispatched"]),
+            db.or_(Order.courier_order_id.is_(None), Order.courier_order_id == ""),
+            db.or_(Order.courier_shipment_id.is_(None), Order.courier_shipment_id == ""),
+        )
+        if warehouse:
+            courier_pending_query = courier_pending_query.filter(Order.warehouse_id == warehouse.id)
+        courier_pending_orders = courier_pending_query.order_by(Order.updated_at.desc(), Order.created_at.desc()).limit(20).all()
 
     top_selling_rows = (
         db.session.query(Product.name, Product.sku, func.coalesce(func.sum(StockOut.quantity), 0).label("sold_qty"))
@@ -81,6 +91,7 @@ def dashboard():
         express_orders=express_orders,
         auto_discount_orders=auto_discount_orders,
         auto_discount_total=auto_discount_total,
+        courier_pending_orders=courier_pending_orders,
         top_selling_rows=top_selling_rows,
         recent_inventory=recent_inventory,
         warehouses=warehouses,

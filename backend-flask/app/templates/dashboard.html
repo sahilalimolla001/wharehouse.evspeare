@@ -96,4 +96,33 @@
       </section>
     </div>
   </div>
+
+  {% if current_user_can("manager", "staff") and user_can_page(current_user, "shiprocket.create_order") %}
+    <section class="panel mt-3">
+      <div class="panel-heading">
+        <h2>Courier Pending</h2>
+        <span class="badge text-bg-warning">{{ courier_pending_orders|length }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Warehouse</th><th></th></tr></thead>
+          <tbody>
+            {% for order in courier_pending_orders %}
+              <tr>
+                <td><a href="{{ url_for('orders.order_detail', order_id=order.id) }}">{{ order.order_number }}</a></td>
+                <td>{{ order.customer_name }}</td>
+                <td><span class="badge text-bg-secondary">{{ order.status|title }}</span></td>
+                <td><code>{{ order.warehouse.code if order.warehouse else "-" }}</code></td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('shiprocket.create_order', order_id=order.id) }}">Create Courier</a>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" class="text-secondary">All packed and dispatched orders have a courier order.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
 {% endblock %}

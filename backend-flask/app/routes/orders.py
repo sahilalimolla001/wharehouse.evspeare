@@ -115,7 +115,12 @@ def dispatch_order(order_id):
     try:
         result = dispatch_order_with_shiprocket(order, request.form, user_id=get_current_user().id if get_current_user() else None)
         db.session.commit()
-        message = "Shiprocket courier created and order dispatched." if result["created"] else "Order dispatched with existing Shiprocket courier."
+        if result["created"]:
+            message = "Shiprocket courier created and order dispatched."
+        elif result.get("skipped"):
+            message = "Order dispatched. Shiprocket is not configured, so no courier was created."
+        else:
+            message = "Order dispatched with existing Shiprocket courier."
         flash(message, "success")
     except (ShiprocketError, ValueError) as error:
         db.session.rollback()

@@ -23,7 +23,7 @@ from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, 
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import ADMIN_PANEL_PERMISSIONS, PAGE_PERMISSIONS, PICKER_APP_PERMISSIONS, user_has_role, user_page_permissions
-from .shiprocket import ShiprocketError, create_shiprocket_return_for_customer_return, ensure_shiprocket_label, ensure_shiprocket_order, dispatch_order_with_shiprocket
+from .shiprocket import ShiprocketError, create_shiprocket_return_for_customer_return, ensure_shiprocket_label, dispatch_order_with_shiprocket
 from ..utils.shiprocket import cancel_shiprocket_order
 
 api_bp = Blueprint("api", __name__)
@@ -435,7 +435,7 @@ def api_import_order():
     data = request.get_json(silent=True) or {}
     try:
         order, created = create_order_from_integration(data)
-        shiprocket = ensure_shiprocket_order(order, user_id=current_api_user_id())
+        shiprocket = {"created": False, "skipped": True, "message": "Courier creation deferred until dispatch"}
         ensure_invoice(order, "sale", "issued", payload=data)
         db.session.commit()
         return jsonify({"ok": True, "created": created, "order": serialize_order(order), "shiprocket": shiprocket}), 201 if created else 200
@@ -805,11 +805,12 @@ def api_dispatch_order(order_id):
 @api_role_required("manager", "staff", "picker", "packer", "delivery")
 @picker_permission_required("picker_ship")
 def api_order_label(order_id):
+    data = request.get_json(silent=True) or {}
     order = Order.query.get_or_404(order_id)
     if not can_access_order(current_api_user(), order):
         return jsonify({"ok": False, "message": "Permission denied for this order"}), 403
     try:
-        result = ensure_shiprocket_label(order, user_id=current_api_user_id())
+        result = ensure_shiprocket_label(order, user_id=current_api_user_id(), package_input=data)
         db.session.commit()
         return jsonify({"ok": True, "label_url": result.get("label_url"), "order": serialize_order(order), "shiprocket": result.get("summary")})
     except (ShiprocketError, ValueError) as error:

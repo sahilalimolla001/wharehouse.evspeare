@@ -1924,7 +1924,9 @@ function renderDispatchQueue() {
   }
 
   target.innerHTML = orders
-    .map((order) => `
+    .map((order) => {
+      const packageDimensions = order.package || {};
+      return `
       <article class="order-card">
         <div class="order-top">
           <div>
@@ -1938,19 +1940,31 @@ function renderDispatchQueue() {
           <span>${escapeHtml(order.payment_method || order.payment_status || "payment")}</span>
           <span>${handoffReady ? "Checklist ok" : "Checklist pending"}</span>
         </div>
-        <div class="order-actions">
-          <button type="button" data-download-label="${order.id}">Label Download</button>
-          <button class="primary" type="button" data-manual-dispatch="${order.id}" ${handoffReady ? "" : "disabled"}>Dispatch</button>
-        </div>
+        <form class="dispatch-package" data-dispatch-form="${order.id}">
+          <div class="dispatch-dimensions">
+            <label>Length (cm)<input name="length" type="number" min="0.01" step="0.01" value="${numberInput(packageDimensions.length)}" required></label>
+            <label>Breadth (cm)<input name="breadth" type="number" min="0.01" step="0.01" value="${numberInput(packageDimensions.breadth)}" required></label>
+            <label>Height (cm)<input name="height" type="number" min="0.01" step="0.01" value="${numberInput(packageDimensions.height)}" required></label>
+            <label>Weight (kg)<input name="weight" type="number" min="0.01" step="0.001" value="${numberInput(packageDimensions.weight)}" required></label>
+          </div>
+          <div class="order-actions">
+            <button type="button" data-download-label="${order.id}">Label Download</button>
+            <button class="primary" type="submit" ${handoffReady ? "" : "disabled"}>Dispatch</button>
+          </div>
+        </form>
       </article>
-    `)
+    `;
+    })
     .join("");
 
-  target.querySelectorAll("[data-manual-dispatch]").forEach((button) => {
-    button.addEventListener("click", () => dispatchOrderManually(button.dataset.manualDispatch));
+  target.querySelectorAll("[data-dispatch-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      dispatchOrderManually(form);
+    });
   });
   target.querySelectorAll("[data-download-label]").forEach((button) => {
-    button.addEventListener("click", () => downloadOrderLabel(button.dataset.downloadLabel));
+    button.addEventListener("click", () => downloadOrderLabel(button));
   });
 }
 
@@ -1963,9 +1977,11 @@ function numberInput(value) {
   return number > 0 ? String(number) : "";
 }
 
-async function dispatchOrderManually(orderId) {
+async function dispatchOrderManually(form) {
+  const orderId = form.dataset.dispatchForm;
+  const payload = Object.fromEntries(new FormData(form).entries());
   try {
-    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body: {} });
+    const data = await apiFetch(`/orders/${orderId}/dispatch`, { method: "POST", body: payload });
     replaceOrder(data.order);
     toast("Order dispatched.");
     await loadOrders();
@@ -1974,12 +1990,16 @@ async function dispatchOrderManually(orderId) {
   }
 }
 
-async function downloadOrderLabel(orderId) {
+async function downloadOrderLabel(button) {
+  const orderId = button.dataset.downloadLabel;
   try {
     const order = store.orders.find((item) => Number(item.id) === Number(orderId));
     let labelUrl = order?.label_url || order?.courier?.label_url || "";
     if (!labelUrl) {
-      const data = await apiFetch(`/orders/${orderId}/label`, { method: "POST", body: {} });
+      const form = button.closest("[data-dispatch-form]");
+      if (form && !form.reportValidity()) return;
+      const payload = form ? Object.fromEntries(new FormData(form).entries()) : {};
+      const data = await apiFetch(`/orders/${orderId}/label`, { method: "POST", body: payload });
       replaceOrder(data.order);
       labelUrl = data.label_url || data.order?.label_url || data.order?.courier?.label_url || "";
     }
