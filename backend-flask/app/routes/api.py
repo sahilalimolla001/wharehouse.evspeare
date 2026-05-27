@@ -465,37 +465,50 @@ def api_import_return():
 def api_import_order_cancel():
     data = request.get_json(silent=True) or {}
     try:
-        order = find_order_for_action(data)
-        cancel_stock_order = None
-        shiprocket_cancel = None
-        if order:
+        orders = find_orders_for_action(data)
+        if not orders:
+            return jsonify({"ok": False, "message": "Order not found for cancellation"}), 404
+        cancel_stock_orders = []
+        shiprocket_cancels = []
+        for order in orders:
+            shiprocket_cancel = None
             if order.courier_order_id and not order_is_shipped(order):
                 shiprocket_cancel = cancel_shiprocket_order([order.courier_order_id], current_app.config)
             cancel_stock_order = create_cancel_stock_in_order(order, data)
             order.status = "cancelled" if not cancel_stock_order else "cancel_requested"
             ensure_invoice(order, "cancel", "cancelled", payload=data)
-        refund, created = create_refund_from_cancel(data, order)
+            if cancel_stock_order:
+                cancel_stock_orders.append(cancel_stock_order)
+            if shiprocket_cancel:
+                shiprocket_cancels.append(shiprocket_cancel)
+        primary_order = orders[0]
+        refund, created = create_refund_from_cancel(data, primary_order)
         log_activity(
             "order_cancel_request",
-            f"Imported cancel request for {data.get('orderId') or data.get('order_id') or (order.order_number if order else 'order')}",
+            f"Imported cancel request for {data.get('orderId') or data.get('order_id') or primary_order.order_number}",
             entity_type="Order",
-            entity_id=order.id if order else None,
+            entity_id=primary_order.id,
             meta={
                 "refund_id": refund.id if refund else None,
                 "refund_created": created,
-                "cancel_stock_order_id": cancel_stock_order.id if cancel_stock_order else None,
-                "shiprocket_cancel": shiprocket_cancel,
+                "cancelled_order_ids": [order.id for order in orders],
+                "cancel_stock_order_ids": [return_order.id for return_order in cancel_stock_orders],
+                "shiprocket_cancels": shiprocket_cancels,
             },
         )
         db.session.commit()
         return jsonify(
             {
                 "ok": True,
-                "order": serialize_order(order) if order else None,
+                "order": serialize_order(primary_order),
+                "orders": [serialize_order(order) for order in orders],
+                "cancelled_order_count": len(orders),
                 "refund": serialize_payment_refund(refund) if refund else None,
                 "refund_created": created,
-                "cancel_stock_order": serialize_return_order(cancel_stock_order) if cancel_stock_order else None,
-                "shiprocket_cancel": shiprocket_cancel,
+                "cancel_stock_order": serialize_return_order(cancel_stock_orders[0]) if cancel_stock_orders else None,
+                "cancel_stock_orders": [serialize_return_order(return_order) for return_order in cancel_stock_orders],
+                "shiprocket_cancel": shiprocket_cancels[0] if shiprocket_cancels else None,
+                "shiprocket_cancels": shiprocket_cancels,
             }
         )
     except (TypeError, ValueError, ShiprocketError) as error:
@@ -1282,13 +1295,29 @@ def find_order_for_return(data, website_order_id):
     return Order.query.filter(or_(Order.order_number == order_lookup, Order.external_order_id == order_lookup)).first()
 
 
-def find_order_for_action(data):
+def find_orders_for_action(data):
     if not isinstance(data, dict):
-        return None
+        return []
     lookup = trim_text(data.get("orderId") or data.get("order_id") or data.get("order_number") or data.get("external_order_id"), 120)
     if not lookup:
-        return None
-    return Order.query.filter(or_(Order.order_number == lookup, Order.external_order_id == lookup)).first()
+        return []
+    candidates = Order.query.filter(
+        or_(
+            Order.order_number == lookup,
+            Order.external_order_id == lookup,
+            Order.order_number.like(f"{lookup}-%"),
+        )
+    ).order_by(Order.id).all()
+    return [
+        order
+        for order in candidates
+        if order.order_number == lookup
+        or order.external_order_id == lookup
+        or (
+            order.order_number.startswith(f"{lookup}-")
+            and order.order_number[len(lookup) + 1:].isdigit()
+        )
+    ]
 
 
 def create_refund_from_cancel(data, order=None):
