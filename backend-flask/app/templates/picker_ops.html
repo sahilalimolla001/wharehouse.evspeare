@@ -23,7 +23,7 @@
   <section class="panel mb-3">
     <div class="panel-heading">
       <h2>Order Analysis</h2>
-      <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }}</span>
+      <span class="text-secondary">{{ warehouse.code if warehouse else "All warehouses" }} / Live refresh every 5 sec</span>
     </div>
     <div class="picker-order-columns">
       {% for title, status_class, count, status_orders in [
@@ -38,6 +38,11 @@
               <article>
                 <a href="{{ url_for('orders.order_detail', order_id=order.id) }}">{{ order.order_number }}</a>
                 <span>Total Items: {{ order.total_items }}</span>
+                <span>
+                  {% for item in order.items %}
+                    {{ item.product.sku }} x {{ item.quantity }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </span>
                 {% if order.assigned_to %}<small>{{ order.assigned_to.full_name }}</small>{% endif %}
               </article>
             {% else %}
@@ -89,4 +94,12 @@
       </div>
     </div>
   </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.setInterval(function () {
+      window.location.reload();
+    }, 5000);
+  </script>
 {% endblock %}

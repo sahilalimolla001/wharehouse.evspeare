@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
@@ -41,9 +42,16 @@ def add_order():
         if not warehouse:
             flash("Select a warehouse before creating an order.", "warning")
             return redirect(url_for("orders.add_order"))
-        product_id = int(request.form["product_id"])
-        product = Product.query.get_or_404(product_id)
-        quantity = int(request.form["quantity"])
+        try:
+            submitted_items = json.loads(request.form.get("items_json", "") or "null")
+        except json.JSONDecodeError:
+            flash("Order items format is invalid.", "danger")
+            return redirect(url_for("orders.add_order"))
+        if submitted_items is None:
+            submitted_items = [{"product_id": request.form["product_id"], "quantity": request.form["quantity"]}]
+        if not isinstance(submitted_items, list) or not submitted_items:
+            flash("At least one order item is required.", "danger")
+            return redirect(url_for("orders.add_order"))
         order = Order(
             order_number=request.form.get("order_number", "").strip() or f"ORD-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
             customer_name=request.form.get("customer_name", "").strip(),
@@ -54,13 +62,22 @@ def add_order():
             assigned_to_id=int_or_none(request.form.get("assigned_to_id")),
             created_by_id=get_current_user().id if get_current_user() else None,
         )
-        order.items.append(
-            OrderItem(
-                product_id=product.id,
-                quantity=quantity,
-                unit_price=product.selling_price,
-            )
-        )
+        try:
+            for item in submitted_items:
+                product = Product.query.get_or_404(int(item["product_id"]))
+                quantity = int(item["quantity"])
+                if quantity <= 0:
+                    raise ValueError
+                order.items.append(
+                    OrderItem(
+                        product_id=product.id,
+                        quantity=quantity,
+                        unit_price=product.selling_price,
+                    )
+                )
+        except (KeyError, TypeError, ValueError):
+            flash("Each order item requires a valid product and quantity.", "danger")
+            return redirect(url_for("orders.add_order"))
         db.session.add(order)
         db.session.commit()
         flash("Order created.", "success")

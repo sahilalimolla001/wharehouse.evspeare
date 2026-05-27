@@ -539,7 +539,7 @@ function startAutoRefresh() {
   if (refreshTimer) return;
   refreshTimer = window.setInterval(() => {
     if (store.user) refreshAll().catch(() => {});
-  }, 15000);
+  }, 5000);
 }
 
 function stopAutoRefresh() {
