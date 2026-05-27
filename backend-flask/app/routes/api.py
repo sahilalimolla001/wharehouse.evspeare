@@ -1878,6 +1878,7 @@ def serialize_product(product):
         "name": product.name,
         "sku": product.sku,
         "brand": product.brand,
+        "description": product.description or "",
         "unit": product.unit,
         "category": product.category.name if product.category else "",
         "minimum_stock": product.minimum_stock,

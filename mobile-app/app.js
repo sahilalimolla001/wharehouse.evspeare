@@ -1772,7 +1772,9 @@ function renderActiveOrder() {
     $("#pick-manual-label").textContent = "Manual Bin Barcode";
     $("#manual-code").placeholder = "LOC:A-2-4-08";
     $("#scan-result").textContent = "Scan bin first. Product scan will open after bin is selected.";
-    $("#pick-items").innerHTML = `<div class="empty-state">Bin scan ke baad product list dikhegi.</div>`;
+    $("#pick-items").innerHTML = order.items.length
+      ? order.items.map((item) => pickItemHtml(item, null, true)).join("")
+      : `<div class="empty-state">Order me product details available nahi hain.</div>`;
   } else {
     $("#pick-manual-label").textContent = "Manual SKU Number / Barcode";
     $("#manual-code").placeholder = "1001 or barcode";
@@ -1839,20 +1841,29 @@ function binInventoryForProduct(productId) {
   return store.activePickInventory.find((item) => item.product.id === productId);
 }
 
-function pickItemHtml(item, inventory = null) {
+function pickItemHtml(item, inventory = null, locked = false) {
   const done = item.picked_quantity >= item.quantity;
   const binAvailable = Number(inventory?.available_quantity || 0);
+  const product = item.product || {};
+  const imageSrc = productImageSrc(product);
+  const productMeta = [product.brand, product.category, product.unit].filter(Boolean).join(" / ");
   return `
     <article class="pick-item ${done ? "done" : ""}" data-product-sku="${escapeHtml(item.product.sku)}" data-item-id="${item.id}">
-      <div>
-        <strong>${escapeHtml(item.product.sku)}</strong>
-        <span>${escapeHtml(item.product.name)}</span>
-        ${inventory ? `<span>Bin available: ${binAvailable}</span>` : ""}
+      <div class="pick-product-detail">
+        <div class="product-preview-thumb ${imageSrc ? "" : "empty"}">
+          ${imageSrc ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(product.name)}">` : "<span>No image</span>"}
+        </div>
+        <div>
+          <strong>${escapeHtml(product.sku)} / ${escapeHtml(product.name)}</strong>
+          ${productMeta ? `<span>${escapeHtml(productMeta)}</span>` : ""}
+          ${product.description ? `<span class="pick-description">${escapeHtml(product.description)}</span>` : ""}
+          <span>Order qty: ${item.quantity}${inventory ? ` / Bin available: ${binAvailable}` : ""}</span>
+        </div>
       </div>
       <div class="qty-control">
-        <button type="button" data-pick-item="${item.id}" data-quantity="${Math.max(item.picked_quantity - 1, 0)}">-</button>
+        <button type="button" data-pick-item="${item.id}" data-quantity="${Math.max(item.picked_quantity - 1, 0)}" ${locked ? "disabled" : ""}>-</button>
         <strong>${item.picked_quantity}/${item.quantity}</strong>
-        <button type="button" data-pick-item="${item.id}" data-quantity="${Math.min(item.picked_quantity + 1, item.quantity)}" ${done || binAvailable <= 0 ? "disabled" : ""}>+</button>
+        <button type="button" data-pick-item="${item.id}" data-quantity="${Math.min(item.picked_quantity + 1, item.quantity)}" ${locked || done || binAvailable <= 0 ? "disabled" : ""}>+</button>
       </div>
     </article>
   `;
