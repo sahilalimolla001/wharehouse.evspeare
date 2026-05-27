@@ -123,6 +123,24 @@ def integration_key_required(view):
     return wrapped
 
 
+def integration_key_or_staff_session_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return "", 204
+        configured_key = current_app.config.get("INTEGRATION_API_KEY", "")
+        supplied_key = integration_request_key()
+        if configured_key and supplied_key and secrets.compare_digest(configured_key, supplied_key):
+            return view(*args, **kwargs)
+        if user_has_role(current_api_user(), "manager", "staff"):
+            return view(*args, **kwargs)
+        if not configured_key:
+            return jsonify({"ok": False, "message": "Order import API is not configured"}), 503
+        return jsonify({"ok": False, "message": "Invalid integration key"}), 401
+
+    return wrapped
+
+
 def integration_request_key():
     authorization = request.headers.get("Authorization", "")
     if authorization.lower().startswith("bearer "):
@@ -461,7 +479,7 @@ def api_import_return():
 
 
 @api_bp.post("/integrations/order-cancel")
-@integration_key_required
+@integration_key_or_staff_session_required
 def api_import_order_cancel():
     data = request.get_json(silent=True) or {}
     try:
