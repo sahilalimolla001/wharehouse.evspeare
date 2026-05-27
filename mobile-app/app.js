@@ -1756,7 +1756,6 @@ function renderActiveOrder() {
 
   if ($("#picker-flow-card")) renderPickerFlow(order);
   renderPickBinCard(order);
-  const itemsForBin = pickItemsForActiveBin(order);
   if (!store.activePickLocation) {
     $("#pick-manual-label").textContent = "Manual Bin Barcode";
     $("#manual-code").placeholder = "LOC:A-2-4-08";
@@ -1768,9 +1767,9 @@ function renderActiveOrder() {
     $("#pick-manual-label").textContent = "Manual SKU Number / Barcode";
     $("#manual-code").placeholder = "1001 or barcode";
     $("#scan-result").textContent = "Scan product barcode from this bin.";
-    $("#pick-items").innerHTML = itemsForBin.length
-      ? itemsForBin.map((item) => pickItemHtml(item, binInventoryForProduct(item.product.id))).join("")
-      : `<div class="empty-state">Is bin me active order ka item nahi mila. Dusra bin scan karein.</div>`;
+    $("#pick-items").innerHTML = order.items.length
+      ? order.items.map((item) => pickItemHtml(item, binInventoryForProduct(item.product.id))).join("")
+      : `<div class="empty-state">Order me product details available nahi hain.</div>`;
   }
   $("#pick-items").querySelectorAll("[data-pick-item]").forEach((button) => {
     button.addEventListener("click", () => updatePickedQuantity(Number(button.dataset.pickItem), Number(button.dataset.quantity)));
@@ -1849,7 +1848,7 @@ function pickItemHtml(item, inventory = null, locked = false) {
           <strong>${escapeHtml(product.sku)} / ${escapeHtml(product.name)}</strong>
           ${productMeta ? `<span>${escapeHtml(productMeta)}</span>` : ""}
           ${product.description ? `<span class="pick-description">${escapeHtml(product.description)}</span>` : ""}
-          <span>Order qty: ${item.quantity}${inventory ? ` / Bin available: ${binAvailable}` : ""}</span>
+          <span>Order qty: ${item.quantity} / Bin available: ${binAvailable}</span>
         </div>
       </div>
       <div class="qty-control">
