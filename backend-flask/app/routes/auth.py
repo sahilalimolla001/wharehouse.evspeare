@@ -90,6 +90,18 @@ LEGACY_PAGE_PERMISSIONS = {
     "dispatch": {"shiprocket", "shipping_status"},
 }
 
+ADMIN_PANEL_PAGE_PERMISSIONS = {
+    "panel_dashboard": {"dashboard"},
+    "panel_orders": {"orders"},
+    "panel_pickers": {"picker_ops", "pick_transfer"},
+    "panel_returns": {"returns", "refunds"},
+    "panel_inventory": {"products", "stock_in", "stock_out", "inventory", "locations", "reports"},
+    "panel_user_create": {"users"},
+    "panel_shiprocket": {"shiprocket", "shipping_status"},
+    "panel_tracking": {"shipping_status"},
+    "panel_ops_config": {"ops_config", "settings"},
+}
+
 
 def user_page_permissions(user):
     try:
@@ -101,6 +113,7 @@ def user_page_permissions(user):
         if value in PAGE_PERMISSIONS or value in ADMIN_PANEL_PERMISSIONS or value in PICKER_APP_PERMISSIONS:
             allowed.add(value)
         allowed.update(LEGACY_PAGE_PERMISSIONS.get(value, set()))
+        allowed.update(ADMIN_PANEL_PAGE_PERMISSIONS.get(value, set()))
     return allowed
 
 
