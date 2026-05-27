@@ -10,6 +10,7 @@ const store = {
   warehouseId: Number(localStorage.getItem("warehouseMobileWarehouseId") || 0),
   orders: JSON.parse(localStorage.getItem("warehouseCachedOrders") || "[]"),
   returns: JSON.parse(localStorage.getItem("warehouseCachedReturns") || "[]"),
+  returnPvDrafts: JSON.parse(localStorage.getItem("warehouseReturnPvDrafts") || "{}"),
   activeOrderId: Number(localStorage.getItem("warehouseActiveOrderId") || 0),
   activeReturnId: Number(localStorage.getItem("warehouseActiveReturnId") || 0),
   activePickLocation: null,
@@ -1472,7 +1473,13 @@ function renderReturnPv() {
   target.innerHTML = returnOrder.items.map(returnPvItemHtml).join("");
   target.querySelectorAll("[data-return-stock-form]").forEach((form) => {
     form.addEventListener("submit", submitReturnStockIn);
-    form.querySelector("[name='condition']").addEventListener("change", () => updateReturnPvBinSuggestion(form));
+    form.querySelector("[name='condition']").addEventListener("change", () => {
+      saveReturnPvDraft(form.dataset.returnStockForm, { condition: form.querySelector("[name='condition']").value, location: "" });
+      updateReturnPvBinSuggestion(form, { clearLocation: true });
+    });
+    form.querySelector("[name='location']").addEventListener("input", () => {
+      saveReturnPvDraft(form.dataset.returnStockForm, { location: form.querySelector("[name='location']").value });
+    });
     updateReturnPvBinSuggestion(form);
   });
   target.querySelectorAll("[data-return-bin-scan]").forEach((button) => {
@@ -1485,19 +1492,21 @@ function renderReturnPv() {
 
 function returnPvItemHtml(item) {
   const pending = item.remaining_stock_in_quantity;
+  const draft = returnPvDraft(item.id);
+  const condition = draft.condition === "issue" ? "issue" : "no_issue";
   return `
     <form class="form-card return-pv-card" data-return-stock-form="${item.id}">
       <h2>${escapeHtml(item.product.sku)}</h2>
       <div class="result-card">${escapeHtml(item.product.name)}<br>Pending PV: ${pending}</div>
       <label>Product Condition
         <select name="condition">
-          <option value="no_issue">No Issue</option>
-          <option value="issue">Product Issue</option>
+          <option value="no_issue" ${condition === "no_issue" ? "selected" : ""}>No Issue</option>
+          <option value="issue" ${condition === "issue" ? "selected" : ""}>Product Issue</option>
         </select>
       </label>
       <div class="result-card return-bin-suggestion" data-return-bin-suggestion></div>
       <label data-return-bin-label>Return Bin Scan For No Issue
-        <span class="scan-input"><input name="location" required placeholder="Scan bin, e.g. A1-01-4C"><button type="button" data-return-bin-scan>Scan</button></span>
+        <span class="scan-input"><input name="location" required value="${escapeHtml(draft.location || "")}" placeholder="Scan bin, e.g. A1-01-4C"><button type="button" data-return-bin-scan>Scan</button></span>
       </label>
       <div class="return-inline-scanner hidden" data-return-inline-scanner>
         <video playsinline muted data-return-scanner-video></video>
@@ -1512,7 +1521,7 @@ function returnPvItemHtml(item) {
   `;
 }
 
-function updateReturnPvBinSuggestion(form) {
+function updateReturnPvBinSuggestion(form, options = {}) {
   const returnOrder = activeReturn();
   const item = returnOrder?.items.find((row) => Number(row.id) === Number(form.dataset.returnStockForm));
   if (!item) return;
@@ -1523,11 +1532,26 @@ function updateReturnPvBinSuggestion(form) {
   const input = form.querySelector("[name='location']");
   const target = form.querySelector("[data-return-bin-suggestion]");
   label.firstChild.textContent = issueSelected ? "Return Virtual Bin Scan For Product Issue " : "Return Bin Scan For No Issue ";
-  input.value = "";
+  if (options.clearLocation) input.value = "";
   input.placeholder = suggestion?.barcode || "Scan bin, e.g. A1-01-4C";
   target.innerHTML = suggestion
     ? `<strong>Suggested ${issueSelected ? "virtual" : "available"} bin</strong><br>${escapeHtml(suggestion.full_code)}<br><code>${escapeHtml(suggestion.barcode || suggestion.id)}</code><br><small>Stock in ke liye isi bin ko scan karein.</small>`
     : `<strong>No suggested bin found.</strong><br><small>Valid ${issueSelected ? "virtual return" : "normal"} bin scan karein.</small>`;
+}
+
+function returnPvDraft(itemId) {
+  return store.returnPvDrafts[String(itemId)] || {};
+}
+
+function saveReturnPvDraft(itemId, values) {
+  const key = String(itemId);
+  store.returnPvDrafts[key] = { ...returnPvDraft(key), ...values };
+  localStorage.setItem("warehouseReturnPvDrafts", JSON.stringify(store.returnPvDrafts));
+}
+
+function clearReturnPvDraft(itemId) {
+  delete store.returnPvDrafts[String(itemId)];
+  localStorage.setItem("warehouseReturnPvDrafts", JSON.stringify(store.returnPvDrafts));
 }
 
 async function startReturnBinScanner(form) {
@@ -1582,6 +1606,7 @@ async function applyReturnBinScan(form, code) {
       throw new Error("No Issue ke liye normal available bin scan karein.");
     }
     form.querySelector("[name='location']").value = location.barcode || location.id;
+    saveReturnPvDraft(form.dataset.returnStockForm, { condition, location: location.barcode || String(location.id) });
     status.innerHTML = `<strong>Selected Bin</strong><br>${escapeHtml(location.full_code)}<br><code>${escapeHtml(location.barcode || location.id)}</code>`;
     toast("Return bin selected.");
   } catch (error) {
@@ -1599,6 +1624,7 @@ async function submitReturnStockIn(event) {
   payload.quantity = Number(payload.quantity);
   try {
     const data = await apiFetch(`/returns/${returnOrder.id}/items/${form.dataset.returnStockForm}/stock-in`, { method: "POST", body: payload });
+    clearReturnPvDraft(form.dataset.returnStockForm);
     replaceReturn(data.return_order);
     renderReturnQueue();
     renderActiveReturn();
