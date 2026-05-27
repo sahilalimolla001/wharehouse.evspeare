@@ -1,6 +1,11 @@
+from datetime import datetime, timedelta
+
 from sqlalchemy import case
 
 from ..models import Inventory, Order, User, WarehouseLocation
+
+
+ONLINE_PICKER_WINDOW_SECONDS = 45
 
 
 def pickable_statuses():
@@ -9,6 +14,25 @@ def pickable_statuses():
 
 def picker_online_from_request(request):
     return str(request.headers.get("X-Picker-Online") or "").lower() in {"1", "true", "yes", "online"}
+
+
+def update_picker_presence(user, request):
+    if not user or user.role != "picker" or "X-Picker-Online" not in request.headers:
+        return False
+    user.last_online_at = datetime.utcnow() if picker_online_from_request(request) else None
+    return True
+
+
+def online_pickers_for_warehouse(warehouse=None):
+    cutoff = datetime.utcnow() - timedelta(seconds=ONLINE_PICKER_WINDOW_SECONDS)
+    query = User.query.filter(
+        User.role == "picker",
+        User.is_active.is_(True),
+        User.last_online_at >= cutoff,
+    )
+    if warehouse:
+        query = query.filter(User.warehouses.any(id=warehouse.id))
+    return query.order_by(User.full_name).all()
 
 
 def product_pick_location(product, warehouse_id=None):

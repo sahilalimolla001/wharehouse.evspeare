@@ -142,9 +142,38 @@
                 {% if item.status == "requested" %}
                   <form method="post" action="{{ url_for('returns.approve_customer_return', return_id=item.id) }}">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm btn-success w-100" type="submit">Approve & Push To Picker</button>
+                    <button class="btn btn-sm btn-success w-100" type="submit">Approve Return</button>
                   </form>
                 {% endif %}
+              </td>
+            </tr>
+            <tr class="table-light">
+              <td colspan="9">
+                <form method="post" action="{{ url_for('returns.assign_customer_return_picker', return_id=item.id) }}" class="row g-2 align-items-end">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <div class="col-md-4">
+                    <label class="form-label small mb-1">Assign Return To Online Picker ID</label>
+                    <select class="form-select form-select-sm" name="picker_id" {% if item.status in ["received", "rejected", "refunded"] or not online_pickers %}disabled{% endif %} required>
+                      <option value="">Select online picker</option>
+                      {% for picker in online_pickers %}
+                        <option value="{{ picker.id }}" {% if item.assigned_to_id == picker.id %}selected{% endif %}>{{ picker.picker_code or picker.id }} / {{ picker.full_name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="small text-secondary mb-1">Current assignment</div>
+                    {% if item.assigned_to %}
+                      <strong>Picker {{ item.assigned_to.picker_code or item.assigned_to.id }}</strong> / {{ item.assigned_to.full_name }}
+                    {% elif not online_pickers %}
+                      <span class="text-secondary">No online picker available.</span>
+                    {% else %}
+                      <span class="text-secondary">Not assigned yet.</span>
+                    {% endif %}
+                  </div>
+                  <div class="col-md-2">
+                    <button class="btn btn-sm btn-primary w-100" type="submit" {% if item.status in ["received", "rejected", "refunded"] or not online_pickers %}disabled{% endif %}>Assign Picker</button>
+                  </div>
+                </form>
               </td>
             </tr>
           {% else %}

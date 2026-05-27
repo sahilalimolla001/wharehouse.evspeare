@@ -19,7 +19,7 @@ from ..utils.finance import ensure_invoice, record_money_transaction
 from ..utils.order_payload import order_automation_summary
 from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, verify_razorpay_webhook
 from ..utils.picker_identity import ensure_picker_code
-from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location
+from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, product_pick_location, update_picker_presence
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
 from .auth import ADMIN_PANEL_PERMISSIONS, PAGE_PERMISSIONS, PICKER_APP_PERMISSIONS, user_has_role, user_page_permissions
@@ -676,6 +676,7 @@ def api_location_update():
 def api_pick_list():
     user = current_api_user()
     warehouse = current_api_warehouse()
+    presence_changed = update_picker_presence(user, request)
     if picker_online_from_request(request):
         assigned = auto_assign_order_to_picker(user, warehouse)
         if assigned:
@@ -686,7 +687,10 @@ def api_pick_list():
                 entity_type="Order",
                 entity_id=assigned.id,
             )
+        if assigned or presence_changed:
             db.session.commit()
+    elif presence_changed:
+        db.session.commit()
     query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
     if warehouse:
         query = query.filter(Order.warehouse_id == warehouse.id)
@@ -700,9 +704,16 @@ def api_pick_list():
 @api_role_required("manager", "staff", "picker")
 @picker_permission_required("picker_returns")
 def api_return_pick_list():
+    user = current_api_user()
+    warehouse = current_api_warehouse()
     ensure_virtual_return_bins()
+    update_picker_presence(user, request)
     db.session.commit()
     query = CustomerReturnOrder.query.filter(CustomerReturnOrder.status.in_(["approved", "return_picking", "return_picked", "inspection"]))
+    if user and user.role == "picker":
+        query = query.filter(CustomerReturnOrder.assigned_to_id == user.id)
+    elif warehouse:
+        query = query.outerjoin(Order).filter(or_(CustomerReturnOrder.order_id.is_(None), Order.warehouse_id == warehouse.id))
     returns = query.order_by(CustomerReturnOrder.requested_at, CustomerReturnOrder.id).all()
     return jsonify({"returns": [serialize_return_order(return_order) for return_order in returns]})
 
@@ -713,6 +724,8 @@ def api_return_pick_list():
 def api_return_item_pick(return_id, item_id):
     data = request.get_json(silent=True) or {}
     return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    if not can_access_return_order(current_api_user(), return_order):
+        return jsonify({"ok": False, "message": "This return is not assigned to you"}), 403
     if return_order.status not in {"approved", "return_picking", "return_picked"}:
         return jsonify({"ok": False, "message": "Return must be approved before picking"}), 400
     item = CustomerReturnItem.query.filter_by(id=item_id, return_order_id=return_order.id).first_or_404()
@@ -736,6 +749,8 @@ def api_return_item_pick(return_id, item_id):
 @picker_permission_required("picker_returns")
 def api_return_initiate_pv(return_id):
     return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    if not can_access_return_order(current_api_user(), return_order):
+        return jsonify({"ok": False, "message": "This return is not assigned to you"}), 403
     if not return_order.items or not all(item.picked_quantity >= item.expected_quantity for item in return_order.items):
         return jsonify({"ok": False, "message": "Pick all return items before PV"}), 400
     return_order.status = "inspection"
@@ -750,6 +765,8 @@ def api_return_initiate_pv(return_id):
 def api_return_item_stock_in(return_id, item_id):
     data = request.get_json(silent=True) or {}
     return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    if not can_access_return_order(current_api_user(), return_order):
+        return jsonify({"ok": False, "message": "This return is not assigned to you"}), 403
     if return_order.status != "inspection":
         return jsonify({"ok": False, "message": "Initiate PV before stock in"}), 400
     item = CustomerReturnItem.query.filter_by(id=item_id, return_order_id=return_order.id).first_or_404()
@@ -1066,6 +1083,14 @@ def can_access_order(user, order):
     warehouse_ids = {warehouse.id for warehouse in accessible_api_warehouses(user)}
     same_warehouse = not warehouse_ids or order.warehouse_id in warehouse_ids
     return bool(user and same_warehouse and (can_manage_all_orders(user) or order.assigned_to_id in {None, user.id}))
+
+
+def can_access_return_order(user, return_order):
+    if not user:
+        return False
+    if can_manage_all_orders(user):
+        return True
+    return user.role == "picker" and return_order.assigned_to_id == user.id
 
 
 def sync_order_product_pick_stock(order, product_id, location_identifier=None):
@@ -2062,6 +2087,12 @@ def serialize_return_order(return_order):
         "status": return_order.status,
         "refund_status": return_order.refund_status,
         "notes": return_order.notes,
+        "assigned_to_id": return_order.assigned_to_id,
+        "assigned_to": {
+            "id": return_order.assigned_to.id,
+            "full_name": return_order.assigned_to.full_name,
+            "picker_code": return_order.assigned_to.picker_code,
+        } if return_order.assigned_to else None,
         "requested_at": return_order.requested_at.isoformat() + "Z" if return_order.requested_at else None,
         "items": [
             {

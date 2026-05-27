@@ -5,6 +5,8 @@ from sqlalchemy import or_
 
 from ..extensions import db
 from ..models import CustomerReturnItem, CustomerReturnOrder, Inventory, Order, WarehouseLocation
+from ..utils.picker_ops import online_pickers_for_warehouse
+from ..utils.stock import log_activity
 from .api import ensure_virtual_return_bins
 from .auth import get_current_user, role_required, selected_warehouse
 
@@ -54,6 +56,7 @@ def customer_returns():
         recent_orders_query = recent_orders_query.filter(Order.warehouse_id == warehouse.id)
     returns = returns_query.order_by(CustomerReturnOrder.created_at.desc()).limit(200).all()
     recent_orders = recent_orders_query.order_by(Order.created_at.desc()).limit(100).all()
+    online_pickers = online_pickers_for_warehouse(warehouse)
     virtual_bins = (
         WarehouseLocation.query.filter_by(is_virtual=True)
         .order_by(WarehouseLocation.zone, WarehouseLocation.rack, WarehouseLocation.bin_code)
@@ -69,6 +72,7 @@ def customer_returns():
         "customer_returns.html",
         returns=returns,
         recent_orders=recent_orders,
+        online_pickers=online_pickers,
         virtual_bins=virtual_bins,
         virtual_inventory=virtual_inventory,
     )
@@ -106,7 +110,40 @@ def approve_customer_return(return_id):
     user = get_current_user()
     return_order.approved_by_id = user.id if user else None
     db.session.commit()
-    flash("Return approved and pushed to picker app.", "success")
+    flash("Return approved. Online picker assign karne ke baad picker app mein dikhega.", "success")
+    return redirect(url_for("returns.customer_returns"))
+
+
+@returns_bp.post("/customer-returns/<int:return_id>/assign-picker")
+@role_required("manager", "staff")
+def assign_customer_return_picker(return_id):
+    return_order = CustomerReturnOrder.query.get_or_404(return_id)
+    warehouse = selected_warehouse()
+    if warehouse and return_order.order and return_order.order.warehouse_id != warehouse.id:
+        flash("Return selected warehouse ka nahi hai.", "warning")
+        return redirect(url_for("returns.customer_returns"))
+    if return_order.status in {"received", "rejected", "refunded"}:
+        flash("Completed return picker ko assign nahi ho sakta.", "warning")
+        return redirect(url_for("returns.customer_returns"))
+    try:
+        picker_id = int(request.form.get("picker_id", ""))
+    except (TypeError, ValueError):
+        picker_id = None
+    picker = next((candidate for candidate in online_pickers_for_warehouse(warehouse) if candidate.id == picker_id), None)
+    if not picker:
+        flash("Selected picker ab online nahi hai. Online picker choose karo.", "danger")
+        return redirect(url_for("returns.customer_returns"))
+    return_order.assigned_to_id = picker.id
+    user = get_current_user()
+    log_activity(
+        "return_picker_assign",
+        f"Assigned {return_order.return_number} to {picker.full_name} / {picker.picker_code or picker.id}",
+        user_id=user.id if user else None,
+        entity_type="CustomerReturnOrder",
+        entity_id=return_order.id,
+    )
+    db.session.commit()
+    flash(f"{return_order.return_number} assigned to Picker ID {picker.picker_code or picker.id}.", "success")
     return redirect(url_for("returns.customer_returns"))
 
 

@@ -31,6 +31,7 @@ class User(TimestampMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     page_permissions = db.Column(db.Text)
+    last_online_at = db.Column(db.DateTime)
 
     stock_ins = db.relationship("StockIn", back_populates="received_by", foreign_keys="StockIn.received_by_id")
     stock_outs = db.relationship("StockOut", back_populates="dispatched_by", foreign_keys="StockOut.dispatched_by_id")
@@ -332,9 +333,11 @@ class CustomerReturnOrder(TimestampMixin, db.Model):
     requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     resolved_at = db.Column(db.DateTime)
     approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
 
     order = db.relationship("Order")
-    approved_by = db.relationship("User")
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id])
+    assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
     items = db.relationship("CustomerReturnItem", back_populates="return_order", cascade="all, delete-orphan")
 
     def __repr__(self):
