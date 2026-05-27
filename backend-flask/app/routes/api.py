@@ -191,12 +191,13 @@ def api_central_panel_users():
 
     data = request.get_json(silent=True) or {}
     email = (data.get("userId") or data.get("email") or "").strip().lower()
+    original_email = (data.get("originalUserId") or data.get("original_email") or email).strip().lower()
     user_id = data.get("id")
     is_new_user = False
     if request.method in {"PUT", "PATCH", "DELETE"}:
         user = User.query.filter_by(id=user_id).first() if str(user_id or "").isdigit() else None
-        if not user and email:
-            user = User.query.filter_by(email=email).first()
+        if not user and original_email:
+            user = User.query.filter_by(email=original_email).first()
         if not user:
             return jsonify({"ok": False, "message": "User not found"}), 404
         if request.method == "DELETE":
