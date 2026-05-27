@@ -76,25 +76,7 @@
           {% if order.status in ["packed", "dispatched"] and order.external_source != "inbound_customer" %}
             <form method="post" action="{{ url_for('orders.dispatch_order', order_id=order.id) }}" class="dispatch-package-form mt-3">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <strong>Package</strong>
-              <div class="row g-2 mt-1">
-                <div class="col-6">
-                  <label class="form-label">Length cm</label>
-                  <input class="form-control" name="length" type="number" min="0.01" step="0.01" value="{{ order.package_length_cm or '' }}" required>
-                </div>
-                <div class="col-6">
-                  <label class="form-label">Breadth cm</label>
-                  <input class="form-control" name="breadth" type="number" min="0.01" step="0.01" value="{{ order.package_breadth_cm or '' }}" required>
-                </div>
-                <div class="col-6">
-                  <label class="form-label">Height cm</label>
-                  <input class="form-control" name="height" type="number" min="0.01" step="0.01" value="{{ order.package_height_cm or '' }}" required>
-                </div>
-                <div class="col-6">
-                  <label class="form-label">Weight kg</label>
-                  <input class="form-control" name="weight" type="number" min="0.01" step="0.001" value="{{ order.package_weight_kg or '' }}" required>
-                </div>
-              </div>
+              <p class="text-secondary small mb-2">Package size is temporarily handled from default courier settings.</p>
               <button class="btn btn-success mt-2 w-100" type="submit">Dispatch With Shiprocket</button>
             </form>
           {% endif %}

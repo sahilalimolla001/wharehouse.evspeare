@@ -1956,7 +1956,6 @@ function renderDispatchQueue() {
 
   target.innerHTML = orders
     .map((order) => {
-      const packageDimensions = order.package || {};
       return `
       <article class="order-card">
         <div class="order-top">
@@ -1972,12 +1971,7 @@ function renderDispatchQueue() {
           <span>${handoffReady ? "Checklist ok" : "Checklist pending"}</span>
         </div>
         <form class="dispatch-package" data-dispatch-form="${order.id}">
-          <div class="dispatch-dimensions">
-            <label>Length (cm)<input name="length" type="number" min="0.01" step="0.01" value="${numberInput(packageDimensions.length)}" required></label>
-            <label>Breadth (cm)<input name="breadth" type="number" min="0.01" step="0.01" value="${numberInput(packageDimensions.breadth)}" required></label>
-            <label>Height (cm)<input name="height" type="number" min="0.01" step="0.01" value="${numberInput(packageDimensions.height)}" required></label>
-            <label>Weight (kg)<input name="weight" type="number" min="0.01" step="0.001" value="${numberInput(packageDimensions.weight)}" required></label>
-          </div>
+          <p class="dispatch-note">Package size abhi auto default se handle hoga.</p>
           <div class="order-actions">
             <button type="button" data-download-label="${order.id}">Label Download</button>
             <button class="primary" type="submit" ${handoffReady ? "" : "disabled"}>Dispatch</button>
@@ -2001,11 +1995,6 @@ function renderDispatchQueue() {
 
 function handoffChecklistReady() {
   return ["#handoff-bag-check", "#handoff-label-check", "#handoff-payment-check"].every((selector) => $(selector)?.checked);
-}
-
-function numberInput(value) {
-  const number = Number(value || 0);
-  return number > 0 ? String(number) : "";
 }
 
 async function dispatchOrderManually(form) {

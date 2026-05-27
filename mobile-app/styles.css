@@ -785,6 +785,16 @@ input[type="file"] {
   gap: 8px;
 }
 
+.dispatch-note {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 850;
+}
+
 .dispatch-dimensions label {
   display: grid;
   gap: 5px;
