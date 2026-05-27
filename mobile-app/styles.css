@@ -906,6 +906,37 @@ input[type="file"] {
   color: var(--muted);
 }
 
+.return-inline-scanner {
+  display: grid;
+  gap: 8px;
+  margin-block: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.return-inline-scanner.hidden {
+  display: none;
+}
+
+.return-inline-scanner video {
+  width: 100%;
+  min-height: 160px;
+  border-radius: 8px;
+  background: var(--dark);
+}
+
+.return-scan-status {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.return-scan-status code {
+  color: var(--primary-dark);
+}
+
 .qty-control {
   display: grid;
   grid-template-columns: 38px 58px 38px;

@@ -32,6 +32,7 @@ const store = {
 
 let videoStream = null;
 let scanTimer = null;
+let activeScannerVideo = null;
 let scanFillTarget = null;
 let scanReturnScreen = null;
 let refreshTimer = null;
@@ -1474,8 +1475,11 @@ function renderReturnPv() {
     form.querySelector("[name='condition']").addEventListener("change", () => updateReturnPvBinSuggestion(form));
     updateReturnPvBinSuggestion(form);
   });
-  target.querySelectorAll("[data-scan-fill]").forEach((button) => {
-    button.addEventListener("click", () => beginScanFill(button.dataset.scanFill));
+  target.querySelectorAll("[data-return-bin-scan]").forEach((button) => {
+    button.addEventListener("click", () => startReturnBinScanner(button.closest("[data-return-stock-form]")));
+  });
+  target.querySelectorAll("[data-stop-return-bin-scan]").forEach((button) => {
+    button.addEventListener("click", () => stopReturnBinScanner(button.closest("[data-return-stock-form]")));
   });
 }
 
@@ -1493,8 +1497,13 @@ function returnPvItemHtml(item) {
       </label>
       <div class="result-card return-bin-suggestion" data-return-bin-suggestion></div>
       <label data-return-bin-label>Return Bin Scan For No Issue
-        <span class="scan-input"><input name="location" required placeholder="Scan bin, e.g. A1-01-4C"><button type="button" data-scan-fill="[data-return-stock-form='${item.id}'] [name='location']">Scan</button></span>
+        <span class="scan-input"><input name="location" required placeholder="Scan bin, e.g. A1-01-4C"><button type="button" data-return-bin-scan>Scan</button></span>
       </label>
+      <div class="return-inline-scanner hidden" data-return-inline-scanner>
+        <video playsinline muted data-return-scanner-video></video>
+        <div class="return-scan-status" data-return-scan-status>Camera ready. Return bin barcode scan karein.</div>
+        <button type="button" data-stop-return-bin-scan>Stop Scan</button>
+      </div>
       <label>Quantity
         <input name="quantity" type="number" min="1" max="${pending}" value="${pending || 1}" required>
       </label>
@@ -1519,6 +1528,66 @@ function updateReturnPvBinSuggestion(form) {
   target.innerHTML = suggestion
     ? `<strong>Suggested ${issueSelected ? "virtual" : "available"} bin</strong><br>${escapeHtml(suggestion.full_code)}<br><code>${escapeHtml(suggestion.barcode || suggestion.id)}</code><br><small>Stock in ke liye isi bin ko scan karein.</small>`
     : `<strong>No suggested bin found.</strong><br><small>Valid ${issueSelected ? "virtual return" : "normal"} bin scan karein.</small>`;
+}
+
+async function startReturnBinScanner(form) {
+  if (!form) return;
+  const scanner = form.querySelector("[data-return-inline-scanner]");
+  const status = form.querySelector("[data-return-scan-status]");
+  const video = form.querySelector("[data-return-scanner-video]");
+  scanner.classList.remove("hidden");
+  if (!("BarcodeDetector" in window)) {
+    status.textContent = "Camera scan supported nahi hai. Bin code manually enter karein.";
+    toast("Camera barcode detector not supported. Manual bin code use karein.");
+    return;
+  }
+  stopScanner();
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    activeScannerVideo = video;
+    video.srcObject = videoStream;
+    await video.play();
+    const detector = new BarcodeDetector({ formats: ["qr_code", "ean_13", "code_128", "code_39"] });
+    status.textContent = "Scanning return bin...";
+    scanTimer = window.setInterval(async () => {
+      const codes = await detector.detect(video).catch(() => []);
+      if (!codes.length) return;
+      stopScanner();
+      await applyReturnBinScan(form, codes[0].rawValue);
+    }, 600);
+  } catch {
+    status.textContent = "Camera permission nahi mila. Bin code manually enter karein.";
+    toast("Camera permission nahi mila.");
+  }
+}
+
+function stopReturnBinScanner(form) {
+  stopScanner();
+  form?.querySelector("[data-return-inline-scanner]")?.classList.add("hidden");
+}
+
+async function applyReturnBinScan(form, code) {
+  const status = form.querySelector("[data-return-scan-status]");
+  try {
+    const data = await apiFetch(`/scan/${encodeURIComponent(code)}?type=location`);
+    const location = data.location;
+    const condition = form.querySelector("[name='condition']").value;
+    const returnOrder = activeReturn();
+    const item = returnOrder?.items.find((row) => Number(row.id) === Number(form.dataset.returnStockForm));
+    const suggested = item?.suggested_bins?.[condition];
+    if (condition === "issue" && (!location.is_virtual || (suggested && Number(location.id) !== Number(suggested.id)))) {
+      throw new Error(`Product issue ke liye virtual return bin ${suggested?.barcode || "scan"} karein.`);
+    }
+    if (condition === "no_issue" && location.is_virtual) {
+      throw new Error("No Issue ke liye normal available bin scan karein.");
+    }
+    form.querySelector("[name='location']").value = location.barcode || location.id;
+    status.innerHTML = `<strong>Selected Bin</strong><br>${escapeHtml(location.full_code)}<br><code>${escapeHtml(location.barcode || location.id)}</code>`;
+    toast("Return bin selected.");
+  } catch (error) {
+    status.textContent = error.message;
+    toast(error.message);
+  }
 }
 
 async function submitReturnStockIn(event) {
@@ -1911,6 +1980,7 @@ async function startScanner() {
   try {
     videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
     const video = $("#scanner-video");
+    activeScannerVideo = video;
     video.srcObject = videoStream;
     await video.play();
     const detector = new BarcodeDetector({ formats: ["qr_code", "ean_13", "code_128", "code_39"] });
@@ -1933,6 +2003,8 @@ function stopScanner() {
   scanTimer = null;
   if (videoStream) videoStream.getTracks().forEach((track) => track.stop());
   videoStream = null;
+  if (activeScannerVideo) activeScannerVideo.srcObject = null;
+  activeScannerVideo = null;
   $("#scanner-video").srcObject = null;
 }
 

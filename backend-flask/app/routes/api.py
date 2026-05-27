@@ -395,6 +395,12 @@ def serve_product_image(product):
 @api_login_required
 @picker_permission_required("picker_pick", "picker_stock_in", "picker_stock_take", "picker_move_stock", "picker_bins", "picker_returns")
 def api_scan(code):
+    if request.args.get("type") == "location":
+        location = find_location(identifier=code)
+        if location:
+            return jsonify({"type": "location", "location": serialize_location(location)})
+        return jsonify({"type": "unknown", "message": "Bin/location not found"}), 404
+
     product = find_product(identifier=code)
     if product:
         return jsonify({"type": "product", "product": serialize_product(product)})
