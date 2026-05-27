@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, CustomerReturnItem, CustomerReturnOrder, Inventory, Invoice, ItemNotFoundReport, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
+from ..models import Barcode, CentralPanelSetting, CustomerReturnItem, CustomerReturnOrder, Inventory, Invoice, ItemNotFoundReport, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
@@ -275,6 +275,117 @@ def api_central_panel_item_not_found():
         return "", 204
     reports = ItemNotFoundReport.query.order_by(ItemNotFoundReport.created_at.desc()).limit(500).all()
     return jsonify({"ok": True, "reports": [serialize_item_not_found_report(report) for report in reports]})
+
+
+@api_bp.route("/central-panel/products", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_products():
+    if request.method == "OPTIONS":
+        return "", 204
+    products = Product.query.filter_by(is_active=True).order_by(Product.name).limit(1000).all()
+    return jsonify({"ok": True, "products": [serialize_product(product) for product in products]})
+
+
+@api_bp.route("/central-panel/orders", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_orders():
+    if request.method == "OPTIONS":
+        return "", 204
+    orders = Order.query.order_by(Order.created_at.desc()).limit(1000).all()
+    return jsonify({"ok": True, "orders": [serialize_order(order) for order in orders]})
+
+
+@api_bp.route("/central-panel/customers", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_customers():
+    if request.method == "OPTIONS":
+        return "", 204
+    customers = {}
+    for order in Order.query.order_by(Order.created_at.desc()).all():
+        key = (order.customer_phone or order.customer_name or str(order.id)).strip().lower()
+        customer = customers.setdefault(
+            key,
+            {
+                "id": key,
+                "name": order.customer_name,
+                "phone": order.customer_phone or "",
+                "status": "active",
+                "orders": 0,
+                "value": 0.0,
+                "created_at": order.created_at.isoformat() + "Z" if order.created_at else None,
+            },
+        )
+        customer["orders"] += 1
+        customer["value"] += float(order.total_value)
+    return jsonify({"ok": True, "customers": list(customers.values())})
+
+
+@api_bp.route("/central-panel/picker-orders", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_picker_orders():
+    if request.method == "OPTIONS":
+        return "", 204
+    orders = (
+        Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
+        .order_by(Order.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    return jsonify({"ok": True, "orders": [serialize_order(order) for order in orders]})
+
+
+@api_bp.route("/central-panel/returns", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_returns():
+    if request.method == "OPTIONS":
+        return "", 204
+    returns = CustomerReturnOrder.query.order_by(CustomerReturnOrder.requested_at.desc()).limit(500).all()
+    return jsonify({"ok": True, "returns": [serialize_return_order(return_order) for return_order in returns]})
+
+
+@api_bp.route("/central-panel/inventory", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_inventory():
+    if request.method == "OPTIONS":
+        return "", 204
+    inventory = (
+        Inventory.query.join(WarehouseLocation)
+        .filter(WarehouseLocation.is_virtual.is_(False), WarehouseLocation.is_active.is_(True))
+        .order_by(WarehouseLocation.warehouse_id, WarehouseLocation.zone, WarehouseLocation.rack, WarehouseLocation.bin_code)
+        .limit(2000)
+        .all()
+    )
+    return jsonify({"ok": True, "items": [serialize_inventory_item(row) for row in inventory]})
+
+
+@api_bp.route("/central-panel/settings", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_settings():
+    if request.method == "OPTIONS":
+        return "", 204
+    settings = CentralPanelSetting.query.order_by(CentralPanelSetting.section).all()
+    return jsonify({"ok": True, "settings": [serialize_central_panel_setting(setting) for setting in settings]})
+
+
+@api_bp.route("/central-panel/update", methods=["POST", "OPTIONS"])
+@integration_key_required
+def api_central_panel_update():
+    if request.method == "OPTIONS":
+        return "", 204
+    data = request.get_json(silent=True) or {}
+    if data.get("type") != "editor":
+        return jsonify({"ok": False, "message": "This record is read-only in the central monitoring panel"}), 400
+    section = str(data.get("section") or "").strip()
+    updates = data.get("updates")
+    if not section or not isinstance(updates, dict):
+        return jsonify({"ok": False, "message": "Editor section and updates are required"}), 400
+    setting = CentralPanelSetting.query.filter_by(section=section).first()
+    if not setting:
+        setting = CentralPanelSetting(section=section, payload_json="{}")
+        db.session.add(setting)
+    setting.payload_json = json.dumps(updates)
+    db.session.commit()
+    return jsonify({"ok": True, "setting": serialize_central_panel_setting(setting)})
 
 
 @api_bp.get("/dashboard")
@@ -2262,10 +2373,18 @@ def serialize_order(order):
         "warehouse_id": order.warehouse_id,
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
+        "customer_address": order.customer_address,
         "status": order.status,
         "priority": order.priority,
         "assigned_to_id": order.assigned_to_id,
+        "picker": {
+            "id": order.assigned_to.id,
+            "name": order.assigned_to.full_name,
+            "picker_code": order.assigned_to.picker_code,
+        } if order.assigned_to else None,
+        "amount": float(order.total_value),
         "total_items": order.total_items,
+        "created_at": order.created_at.isoformat() + "Z" if order.created_at else None,
         "awb": order.courier_awb or "",
         "label_url": label_url,
         "courier": {
@@ -2351,6 +2470,19 @@ def serialize_item_not_found_report(report):
     }
 
 
+def serialize_central_panel_setting(setting):
+    try:
+        updates = json.loads(setting.payload_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        updates = {}
+    return {
+        "id": setting.id,
+        "section": setting.section,
+        "updates": updates if isinstance(updates, dict) else {},
+        "updated_at": setting.updated_at.isoformat() + "Z" if setting.updated_at else None,
+    }
+
+
 def order_courier_payload(order):
     try:
         payload = json.loads(order.courier_response or "{}")
@@ -2394,6 +2526,7 @@ def serialize_return_order(return_order):
             "picker_code": return_order.assigned_to.picker_code,
         } if return_order.assigned_to else None,
         "requested_at": return_order.requested_at.isoformat() + "Z" if return_order.requested_at else None,
+        "created_at": return_order.requested_at.isoformat() + "Z" if return_order.requested_at else None,
         "items": [
             {
                 "id": item.id,

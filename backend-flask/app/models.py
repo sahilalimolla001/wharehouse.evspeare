@@ -487,6 +487,17 @@ class ItemNotFoundReport(TimestampMixin, db.Model):
         return f"<ItemNotFoundReport order={self.order_id} product={self.product_id}>"
 
 
+class CentralPanelSetting(TimestampMixin, db.Model):
+    __tablename__ = "central_panel_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    section = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    payload_json = db.Column(db.Text, nullable=False)
+
+    def __repr__(self):
+        return f"<CentralPanelSetting {self.section}>"
+
+
 class Barcode(TimestampMixin, db.Model):
     __tablename__ = "barcodes"
 
