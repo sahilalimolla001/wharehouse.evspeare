@@ -2354,7 +2354,7 @@ def resolve_warehouse(identifier):
 def role_permissions(role):
     permissions = {
         "admin": list(ADMIN_PANEL_PERMISSIONS.keys()),
-        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "cash_tracker", "invoices", "reports"],
+        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "cash_tracker", "cash_settlements", "invoices", "reports"],
         "staff": ["dashboard", "products", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns"],
         "picker": list(PICKER_APP_PERMISSIONS.keys()),
         "packer": ["dashboard", "orders", "stock_out", "shiprocket", "shipping_status"],

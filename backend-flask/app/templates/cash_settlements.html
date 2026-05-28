@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block page_title %}Cash Settlements{% endblock %}
+{% block content %}
+  <section class="metric-grid mb-3">
+    <article class="metric-card success"><span>Total Settled</span><strong>{{ total_settled|money }}</strong></article>
+    <article class="metric-card"><span>Settlement Entries</span><strong>{{ settlements|length }}</strong></article>
+    <article class="metric-card"><span>Warehouses</span><strong>{{ warehouses|length }}</strong></article>
+    <article class="metric-card warning"><span>Filter</span><strong>{{ warehouse_by_id[selected_id].code if selected_id and warehouse_by_id.get(selected_id) else "All" }}</strong></article>
+  </section>
+
+  <section class="panel mb-3">
+    <div class="panel-heading">
+      <div>
+        <h2>Warehouse Settlement Summary</h2>
+        <p class="text-secondary mb-0">Cash settled from each warehouse with latest settlement time.</p>
+      </div>
+      <form method="get" class="d-flex gap-2">
+        <select class="form-select form-select-sm" name="warehouse_id" onchange="this.form.submit()" aria-label="Filter warehouse">
+          <option value="">All warehouses</option>
+          {% for warehouse in warehouses %}
+            <option value="{{ warehouse.id }}" {% if selected_id == warehouse.id %}selected{% endif %}>{{ warehouse.code }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Warehouse</th><th>Settled Amount</th><th>Entries</th><th>Last Settlement</th></tr></thead>
+        <tbody>
+          {% for warehouse in warehouses %}
+            {% set row = totals.get(warehouse.id) %}
+            <tr>
+              <td><code>{{ warehouse.code }}</code><br><small class="text-muted">{{ warehouse.name }}</small></td>
+              <td><strong>{{ (row.total_settled if row else 0)|money }}</strong></td>
+              <td>{{ row.settlement_count if row else 0 }}</td>
+              <td>{{ row.last_settled_at.strftime('%d %b %Y %I:%M %p') if row and row.last_settled_at else "-" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-4">No warehouses available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Settlement History</h2>
+        <p class="text-secondary mb-0">Bank settlement records created from Cash Tracker.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Date / Time</th><th>Warehouse</th><th>Amount</th><th>Bank</th><th>Receipt</th></tr></thead>
+        <tbody>
+          {% for row in settlements %}
+            <tr>
+              <td>{{ row.created_at.strftime('%d %b %Y %I:%M %p') if row.created_at else "-" }}</td>
+              <td>
+                {% if row.warehouse %}
+                  <code>{{ row.warehouse.code }}</code><br><small class="text-muted">{{ row.warehouse.name }}</small>
+                {% else %}
+                  <span class="text-muted">Unassigned</span>
+                {% endif %}
+              </td>
+              <td><strong>{{ row.amount|money }}</strong></td>
+              <td>{{ row.reference or "-" }}</td>
+              <td><code>{{ row.transaction_number }}</code></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-4">No cash settlements yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
