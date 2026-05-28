@@ -50,6 +50,7 @@ PAGE_PERMISSIONS = {
     "returns": "Customer Returns",
     "refunds": "Payment Refunds",
     "money_tracking": "Money Tracking",
+    "cash_tracker": "Cash Tracker",
     "invoices": "Invoices",
     "inbound_customers": "Inbound Customers",
     "reports": "Reports",
@@ -73,6 +74,7 @@ ADMIN_PANEL_PERMISSIONS = {
     "panel_ops_config": "Warehouse Ops Config",
     "panel_automation": "Automation",
     "panel_inbound_customers": "Inbound Customers",
+    "panel_cash_tracker": "Cash Tracker",
     "panel_item_not_found": "Item Not Found",
 }
 
@@ -105,6 +107,7 @@ ADMIN_PANEL_PAGE_PERMISSIONS = {
     "panel_tracking": {"shipping_status"},
     "panel_ops_config": {"ops_config", "settings"},
     "panel_inbound_customers": {"inbound_customers"},
+    "panel_cash_tracker": {"cash_tracker"},
 }
 
 
@@ -144,6 +147,8 @@ def endpoint_permission(endpoint):
         return "shipping_status"
     if endpoint == "finance.money_tracking":
         return "money_tracking"
+    if endpoint == "finance.cash_tracker":
+        return "cash_tracker"
     if endpoint == "finance.invoices":
         return "invoices"
     if endpoint and endpoint.startswith("inbound."):

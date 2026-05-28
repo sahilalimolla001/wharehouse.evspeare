@@ -437,6 +437,78 @@ def api_dashboard():
     )
 
 
+@api_bp.get("/cash-tracker/summary")
+@api_role_required("manager", "staff")
+def api_cash_tracker_summary():
+    warehouse = current_api_warehouse()
+    collected_query = (
+        MoneyTransaction.query.join(Order, MoneyTransaction.order_id == Order.id)
+        .filter(
+            MoneyTransaction.transaction_type == "inbound_payment",
+            MoneyTransaction.direction == "credit",
+            func.lower(MoneyTransaction.gateway).in_(["cod", "cash", "cash_on_delivery"]),
+            func.lower(MoneyTransaction.status).in_(["paid", "captured", "collected", "payment_complete", "complete", "completed"]),
+            Order.external_source == "inbound_customer",
+        )
+    )
+    if warehouse:
+        collected_query = collected_query.filter(Order.warehouse_id == warehouse.id)
+    collected = float(collected_query.with_entities(func.coalesce(func.sum(MoneyTransaction.amount), 0)).scalar() or 0)
+    settled_query = db.session.query(func.coalesce(func.sum(MoneyTransaction.amount), 0)).filter(
+        MoneyTransaction.transaction_type == "cash_settlement",
+        MoneyTransaction.direction == "debit",
+    )
+    settlements_query = MoneyTransaction.query.filter_by(transaction_type="cash_settlement", direction="debit")
+    if warehouse:
+        settled_query = settled_query.filter(MoneyTransaction.warehouse_id == warehouse.id)
+        settlements_query = settlements_query.filter(MoneyTransaction.warehouse_id == warehouse.id)
+    settled = float(settled_query.scalar() or 0)
+    recent_payments = collected_query.order_by(MoneyTransaction.updated_at.desc(), MoneyTransaction.id.desc()).limit(12).all()
+    recent_settlements = settlements_query.order_by(MoneyTransaction.created_at.desc(), MoneyTransaction.id.desc()).limit(12).all()
+    return jsonify(
+        {
+            "ok": True,
+            "currency": "INR",
+            "warehouse": serialize_warehouse(warehouse) if warehouse else None,
+            "collectedCash": round(collected, 2),
+            "settledCash": round(settled, 2),
+            "availableCash": round(max(collected - settled, 0), 2),
+            "recentPayments": [serialize_cash_transaction(row) for row in recent_payments],
+            "recentSettlements": [serialize_cash_transaction(row) for row in recent_settlements],
+        }
+    )
+
+
+@api_bp.post("/cash-tracker/settlements")
+@api_role_required("manager", "staff")
+def api_cash_tracker_settlement():
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = positive_money(data.get("amount"), "amount")
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    summary = api_cash_tracker_summary().get_json()
+    available = float(summary.get("availableCash") or 0)
+    if amount > available:
+        return jsonify({"ok": False, "message": "Settlement amount is greater than available cash"}), 400
+    transaction = MoneyTransaction(
+        transaction_number=next_transaction_number("CS"),
+        warehouse_id=summary_warehouse_id(),
+        transaction_type="cash_settlement",
+        direction="debit",
+        status="settled",
+        gateway="bank",
+        reference=trim_text(data.get("bank"), 160),
+        amount=amount,
+        currency="INR",
+        notes=trim_text(data.get("notes") or "Cash tracker settlement", 2000),
+        payload_json=json.dumps(data, default=str, separators=(",", ":"))[:20000],
+    )
+    db.session.add(transaction)
+    db.session.commit()
+    return jsonify({"ok": True, "settlement": serialize_cash_transaction(transaction)})
+
+
 @api_bp.get("/products")
 @api_login_required
 def api_products():
@@ -540,6 +612,7 @@ def api_create_inbound_order():
                 transaction.transaction_type = "inbound_payment"
                 transaction.status = "pending" if payment["method"] == "cod" else "payment_pending"
                 transaction.gateway = payment["method"]
+                transaction.warehouse_id = order.warehouse_id
                 transaction.reference = payment.get("reference", "")
                 transaction.notes = "Inbound customer checkout payment"
                 transaction.payload_json = json.dumps(payment, default=str, separators=(",", ":"))[:20000]
@@ -1826,6 +1899,18 @@ def next_refund_number():
     return f"RF-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
 
 
+def next_transaction_number(prefix="MT"):
+    while True:
+        number = f"{prefix}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+        if not MoneyTransaction.query.filter_by(transaction_number=number).first():
+            return number
+
+
+def summary_warehouse_id():
+    warehouse = current_api_warehouse()
+    return warehouse.id if warehouse else None
+
+
 def refund_token(refund):
     if refund.refund_token:
         return refund.refund_token
@@ -1969,6 +2054,16 @@ def resolve_assignee(data, warehouse=None):
 def positive_int(value, field_name):
     try:
         number = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{field_name} must be a number") from error
+    if number <= 0:
+        raise ValueError(f"{field_name} must be greater than zero")
+    return number
+
+
+def positive_money(value, field_name):
+    try:
+        number = round(float(value), 2)
     except (TypeError, ValueError) as error:
         raise ValueError(f"{field_name} must be a number") from error
     if number <= 0:
@@ -2259,7 +2354,7 @@ def resolve_warehouse(identifier):
 def role_permissions(role):
     permissions = {
         "admin": list(ADMIN_PANEL_PERMISSIONS.keys()),
-        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "invoices", "reports"],
+        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "cash_tracker", "invoices", "reports"],
         "staff": ["dashboard", "products", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns"],
         "picker": list(PICKER_APP_PERMISSIONS.keys()),
         "packer": ["dashboard", "orders", "stock_out", "shiprocket", "shipping_status"],
@@ -2446,6 +2541,28 @@ def serialize_inbound_order(order):
         }
     )
     return result
+
+
+def serialize_cash_transaction(transaction):
+    return {
+        "id": transaction.id,
+        "transactionNumber": transaction.transaction_number,
+        "warehouseId": transaction.warehouse_id,
+        "warehouseCode": transaction.warehouse.code if transaction.warehouse else "",
+        "orderId": transaction.order_id,
+        "orderNumber": transaction.order.order_number if transaction.order else "",
+        "customerName": transaction.customer_name or "",
+        "customerPhone": transaction.customer_phone or "",
+        "type": transaction.transaction_type,
+        "direction": transaction.direction,
+        "status": transaction.status,
+        "gateway": transaction.gateway or "",
+        "reference": transaction.reference or "",
+        "amount": float(transaction.amount or 0),
+        "currency": transaction.currency or "INR",
+        "createdAt": transaction.created_at.isoformat() + "Z" if transaction.created_at else None,
+        "updatedAt": transaction.updated_at.isoformat() + "Z" if transaction.updated_at else None,
+    }
 
 
 def serialize_item_not_found_report(report):

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Total Cash</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="cash-app" aria-label="Cash tracker">
+      <section class="cash-shell">
+        <header class="app-header">
+          <div>
+            <p class="eyebrow">Cash Tracker</p>
+            <h1>Total Cash</h1>
+          </div>
+        </header>
+
+        <section class="balance-panel" aria-label="Total cash">
+          <div>
+            <p class="balance-label">Available Balance</p>
+            <p class="balance-amount" id="totalCash">Rs 0</p>
+          </div>
+          <button class="settle-button" id="settleCash" type="button">Settle Cash</button>
+        </section>
+
+        <p class="status" id="statusText" hidden></p>
+
+        <section class="receipt-panel" id="receiptPanel" hidden aria-label="Settlement receipt">
+          <div class="receipt-head">
+            <div>
+              <p class="eyebrow">Settlement Receipt</p>
+              <h2>Cash settled</h2>
+            </div>
+            <button class="download-pdf" id="downloadReceipt" type="button">Download PDF</button>
+          </div>
+          <div class="receipt-sheet" id="receiptSheet">
+            <div class="receipt-title">
+              <div>
+                <p>Cash Tracker</p>
+                <h3>Settlement Receipt</h3>
+              </div>
+              <span id="receiptDate">-</span>
+            </div>
+            <div class="receipt-details">
+              <div>
+                <span>Bank</span>
+                <strong id="receiptBank">-</strong>
+              </div>
+              <div>
+                <span>Settled amount</span>
+                <strong id="receiptSettled">Rs 0</strong>
+              </div>
+              <div>
+                <span>Remaining due</span>
+                <strong id="receiptDue">Rs 0</strong>
+              </div>
+            </div>
+            <table class="receipt-table">
+              <thead>
+                <tr>
+                  <th>Note</th>
+                  <th>Count</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody id="receiptNotes"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="settle-dialog" id="settleDialog" aria-labelledby="settleDialogTitle">
+      <form method="dialog" class="settle-dialog-panel">
+        <div class="settle-dialog-head">
+          <p class="dialog-eyebrow">Cash settlement</p>
+          <h2 id="settleDialogTitle">Settle by notes</h2>
+        </div>
+        <div class="settle-summary">
+          <span>Available cash</span>
+          <strong id="settleDialogAmount">Rs 0</strong>
+        </div>
+        <div class="bank-field">
+          <label for="settleBank">Settle to bank</label>
+          <select id="settleBank">
+            <option value="">Select bank</option>
+            <option value="SBI Bank">SBI Bank</option>
+            <option value="HDFC Bank">HDFC Bank</option>
+            <option value="ICICI Bank">ICICI Bank</option>
+            <option value="Axis Bank">Axis Bank</option>
+            <option value="Bank of Baroda">Bank of Baroda</option>
+            <option value="Punjab National Bank">Punjab National Bank</option>
+            <option value="Kotak Mahindra Bank">Kotak Mahindra Bank</option>
+            <option value="Canara Bank">Canara Bank</option>
+          </select>
+        </div>
+        <div class="notes-panel" aria-label="Cash note counts">
+          <div class="note-row">
+            <label for="note500">Rs 500</label>
+            <input id="note500" class="note-count" data-value="500" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </div>
+          <div class="note-row">
+            <label for="note200">Rs 200</label>
+            <input id="note200" class="note-count" data-value="200" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </div>
+          <div class="note-row">
+            <label for="note100">Rs 100</label>
+            <input id="note100" class="note-count" data-value="100" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </div>
+          <div class="note-row">
+            <label for="note50">Rs 50</label>
+            <input id="note50" class="note-count" data-value="50" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </div>
+          <div class="note-row">
+            <label for="note20">Rs 20</label>
+            <input id="note20" class="note-count" data-value="20" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </div>
+          <div class="note-row">
+            <label for="note10">Rs 10</label>
+            <input id="note10" class="note-count" data-value="10" type="number" min="0" step="1" inputmode="numeric" value="0" />
+          </div>
+          <div class="note-row">
+            <label for="otherCash">Coins / other</label>
+            <input id="otherCash" class="other-cash" type="number" min="0" step="0.01" inputmode="decimal" value="0" />
+          </div>
+        </div>
+        <div class="settle-totals" aria-live="polite">
+          <div>
+            <span>Settling now</span>
+            <strong id="settleNowAmount">Rs 0</strong>
+          </div>
+          <div>
+            <span>Remaining due</span>
+            <strong id="remainingDueAmount">Rs 0</strong>
+          </div>
+        </div>
+        <div class="amount-check-field">
+          <label for="settleAmountCheck">Type settling amount to confirm</label>
+          <input id="settleAmountCheck" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Enter exact amount" />
+        </div>
+        <p class="settle-note" id="settleWarning">Enter note counts to settle cash.</p>
+        <div class="dialog-actions">
+          <button class="dialog-cancel" id="cancelSettle" value="cancel" type="button">Cancel</button>
+          <button class="dialog-confirm" id="confirmSettle" value="confirm" type="button" disabled>Review Settlement</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="settle-dialog" id="finalSettleDialog" aria-labelledby="finalSettleTitle">
+      <form method="dialog" class="settle-dialog-panel">
+        <div class="settle-dialog-head">
+          <p class="dialog-eyebrow">Final confirmation</p>
+          <h2 id="finalSettleTitle">Confirm settlement</h2>
+        </div>
+        <div class="final-confirm-list">
+          <div>
+            <span>Bank</span>
+            <strong id="finalBankName">-</strong>
+          </div>
+          <div>
+            <span>Cash settling</span>
+            <strong id="finalSettleAmount">Rs 0</strong>
+          </div>
+          <div>
+            <span>Remaining due</span>
+            <strong id="finalDueAmount">Rs 0</strong>
+          </div>
+        </div>
+        <p class="settle-note">After confirmation, this amount will be marked as settled.</p>
+        <div class="dialog-actions">
+          <button class="dialog-cancel" id="backToSettle" value="cancel" type="button">Back</button>
+          <button class="dialog-confirm" id="finalConfirmSettle" value="confirm" type="button">Confirm Settle</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

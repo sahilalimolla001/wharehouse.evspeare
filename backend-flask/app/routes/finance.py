@@ -14,6 +14,12 @@ def money_tracking():
     return render_template("money_tracking.html", transactions=transactions)
 
 
+@finance_bp.route("/cash-tracker")
+@role_required("manager", "staff")
+def cash_tracker():
+    return render_template("cash_tracker.html")
+
+
 @finance_bp.route("/invoices")
 @role_required("manager", "staff")
 def invoices():

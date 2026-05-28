@@ -28,7 +28,7 @@ def customers():
         for invoice in Invoice.query.filter(Invoice.order_id.in_([order.id for order in orders] or [-1]), Invoice.invoice_type == "sale").all()
     }
     total = sum(float(invoice.amount or 0) for invoice in invoices.values())
-    paid = sum(float(row.amount or 0) for row in transactions if row.status in {"paid", "captured", "collected"})
+    paid = sum(float(row.amount or 0) for row in transactions if row.status in {"paid", "captured", "collected", "payment_complete", "complete", "completed"})
     return render_template(
         "inbound_customers.html",
         orders=orders,

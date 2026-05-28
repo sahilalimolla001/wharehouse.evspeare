@@ -405,6 +405,7 @@ class MoneyTransaction(TimestampMixin, db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     transaction_number = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), index=True)
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
     refund_id = db.Column(db.Integer, db.ForeignKey("payment_refunds.id"), index=True)
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id"), index=True)
@@ -420,6 +421,7 @@ class MoneyTransaction(TimestampMixin, db.Model):
     notes = db.Column(db.Text)
     payload_json = db.Column(db.Text)
 
+    warehouse = db.relationship("Warehouse")
     order = db.relationship("Order")
     refund = db.relationship("PaymentRefund")
     invoice = db.relationship("Invoice")

@@ -45,6 +45,7 @@ def ensure_invoice(order, invoice_type="sale", status="issued", payload=None):
 def record_money_transaction(order=None, refund=None, invoice=None, transaction_type="payment", direction="credit", status="recorded", amount=0, gateway="", reference="", notes="", payload=None):
     transaction = MoneyTransaction(
         transaction_number=next_number("MT"),
+        warehouse_id=order.warehouse_id if order else None,
         order_id=order.id if order else None,
         refund_id=refund.id if refund else None,
         invoice_id=invoice.id if invoice else None,

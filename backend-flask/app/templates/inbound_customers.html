@@ -44,11 +44,20 @@
               </td>
               <td>
                 {% if payment %}
+                  {% set payment_complete = payment.status in ["paid", "captured", "collected", "payment_complete", "complete", "completed"] %}
                   <form method="post" action="{{ url_for('inbound.update_payment', order_id=order.id) }}" class="d-grid gap-1">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <small>{{ payment.gateway|upper }}</small>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                      <small>{{ payment.gateway|upper }}</small>
+                      {% if payment.gateway == "cod" %}
+                        <span class="badge text-bg-warning">COD Cash</span>
+                      {% endif %}
+                      {% if payment_complete %}
+                        <span class="badge text-bg-success">Payment Complete</span>
+                      {% endif %}
+                    </div>
                     <select class="form-select form-select-sm" name="status">
-                      {% for status in ["pending", "payment_pending", "paid", "collected", "failed"] %}
+                      {% for status in ["pending", "payment_pending", "paid", "collected", "payment_complete", "failed"] %}
                         <option value="{{ status }}" {% if payment.status == status %}selected{% endif %}>{{ status|replace("_", " ")|title }}</option>
                       {% endfor %}
                     </select>

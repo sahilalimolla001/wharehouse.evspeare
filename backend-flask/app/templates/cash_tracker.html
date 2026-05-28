@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block page_title %}Cash Tracker{% endblock %}
+{% block content %}
+  <section class="panel embedded-app-panel">
+    <iframe
+      class="embedded-app-frame"
+      title="Cash Tracker"
+      src="{{ url_for('static', filename='cash-tracker/index.html') }}"
+    ></iframe>
+  </section>
+{% endblock %}
