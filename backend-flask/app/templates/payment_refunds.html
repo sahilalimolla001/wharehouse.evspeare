@@ -63,9 +63,11 @@
               <td class="text-end">
                 {% if refund.status in ['requested', 'failed'] %}
                   <form method="post" action="{{ url_for('refunds.approve_payment_refund', refund_id=refund.id) }}" class="d-inline">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button class="btn btn-sm btn-success" type="submit" {% if not razorpay_ready or not refund.gateway_payment_id %}disabled{% endif %}>Approve Refund</button>
                   </form>
                   <form method="post" action="{{ url_for('refunds.reject_payment_refund', refund_id=refund.id) }}" class="d-inline">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
                   </form>
                 {% else %}

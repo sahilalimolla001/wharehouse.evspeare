@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Warehouse Transactions - {{ app_name }}{% endblock %}
+{% block page_title %}Warehouse Transactions{% endblock %}
+
+{% block content %}
+  <section class="metric-grid mb-4">
+    <article class="metric-card success"><span>Total Cash</span><strong>{{ summary.cash|money }}</strong></article>
+    <article class="metric-card"><span>Total Online</span><strong>{{ summary.online|money }}</strong></article>
+    <article class="metric-card"><span>Other / Unmapped</span><strong>{{ summary.other|money }}</strong></article>
+    <article class="metric-card warning"><span>Refunds</span><strong>{{ summary.refunds|money }}</strong></article>
+    <article class="metric-card"><span>Cash Settled</span><strong>{{ summary.settlements|money }}</strong></article>
+    <article class="metric-card success"><span>Net Balance</span><strong>{{ summary.net|money }}</strong></article>
+  </section>
+
+  <section class="panel mb-4">
+    <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
+      <div>
+        <h2 class="mb-1">Warehouse Wise Summary</h2>
+        <p class="text-secondary mb-0">Cash, online, refund, settlement, aur net balance warehouse ke hisaab se.</p>
+      </div>
+      <form method="get" class="d-flex gap-2">
+        <select class="form-select form-select-sm" name="warehouse_id">
+          <option value="">All Warehouses</option>
+          {% for warehouse in warehouses %}
+            <option value="{{ warehouse.id }}" {% if selected_id == warehouse.id %}selected{% endif %}>{{ warehouse.code }} - {{ warehouse.name }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-sm btn-primary" type="submit">Filter</button>
+      </form>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Warehouse</th>
+            <th>Cash</th>
+            <th>Online</th>
+            <th>Other</th>
+            <th>Refunds</th>
+            <th>Settlements</th>
+            <th>Net</th>
+            <th>Rows</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in totals %}
+            <tr>
+              <td>
+                {% if row.warehouse %}
+                  <strong>{{ row.warehouse.code }}</strong>
+                  <div class="text-muted small">{{ row.warehouse.name }}</div>
+                {% else %}
+                  <strong>Unassigned</strong>
+                  <div class="text-muted small">No warehouse linked</div>
+                {% endif %}
+              </td>
+              <td><strong>{{ row.cash|money }}</strong></td>
+              <td><strong>{{ row.online|money }}</strong></td>
+              <td>{{ row.other|money }}</td>
+              <td>{{ row.refunds|money }}</td>
+              <td>{{ row.settlements|money }}</td>
+              <td><span class="badge {{ 'text-bg-success' if row.net >= 0 else 'text-bg-danger' }}">{{ row.net|money }}</span></td>
+              <td>{{ row.count }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">No transactions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h2 class="mb-1">End To End Transaction Ledger</h2>
+        <p class="text-secondary mb-0">Latest 500 cash, online, refund, and settlement rows.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Warehouse</th>
+            <th>Type</th>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Gateway</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in transactions %}
+            <tr>
+              <td><code>{{ row.transaction_number }}</code></td>
+              <td>{{ row.warehouse.code if row.warehouse else "-" }}</td>
+              <td>{{ row.transaction_type }} / {{ row.direction }}</td>
+              <td>{{ row.order.order_number if row.order else "-" }}</td>
+              <td>{{ row.customer_name or "-" }}<br><small class="text-muted">{{ row.customer_phone or "" }}</small></td>
+              <td>{{ row.gateway or "-" }}<br><small class="text-muted">{{ row.reference or "" }}</small></td>
+              <td><strong>{{ row.currency }} {{ '%.2f'|format(row.amount or 0) }}</strong></td>
+              <td><span class="badge text-bg-secondary">{{ row.status }}</span></td>
+              <td>{{ row.created_at.strftime('%d %b %Y %I:%M %p') if row.created_at else '' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="9" class="text-center text-muted py-4">No money transactions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

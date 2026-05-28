@@ -857,7 +857,8 @@ def api_import_order():
     try:
         order, created = create_order_from_integration(data)
         shiprocket = {"created": False, "skipped": True, "message": "Courier creation deferred until dispatch"}
-        ensure_invoice(order, "sale", "issued", payload=data)
+        invoice = ensure_invoice(order, "sale", "issued", payload=data)
+        sync_sale_transaction_payment(invoice, data)
         db.session.commit()
         return jsonify({"ok": True, "created": created, "order": serialize_order(order), "shiprocket": shiprocket}), 201 if created else 200
     except (TypeError, ValueError, ShiprocketError) as error:
@@ -1734,6 +1735,29 @@ def create_order_from_integration(data):
         meta={"source": source, "external_order_id": external_order_id},
     )
     return order, True
+
+
+def sync_sale_transaction_payment(invoice, data):
+    payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+    if not payment:
+        return
+    transaction = MoneyTransaction.query.filter_by(invoice_id=invoice.id, transaction_type="sale").first()
+    if not transaction:
+        return
+    method = trim_text(payment.get("method"), 40).lower()
+    gateway = trim_text(payment.get("gateway") or method, 40).lower()
+    status = trim_text(payment.get("status") or "recorded", 40).lower()
+    reference = trim_text(
+        payment.get("paymentId")
+        or payment.get("gatewayPaymentId")
+        or payment.get("reference")
+        or payment.get("gatewayOrderId"),
+        160,
+    )
+    transaction.gateway = gateway or method
+    transaction.status = status or transaction.status
+    transaction.reference = reference
+    transaction.payload_json = json.dumps(payment, default=str, separators=(",", ":"))[:20000]
 
 
 def create_return_from_integration(data):

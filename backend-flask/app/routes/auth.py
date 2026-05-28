@@ -150,6 +150,8 @@ def endpoint_permission(endpoint):
         return "shipping_status"
     if endpoint == "finance.money_tracking":
         return "money_tracking"
+    if endpoint == "finance.warehouse_transactions":
+        return "money_tracking"
     if endpoint == "finance.cash_tracker":
         return "cash_tracker"
     if endpoint == "finance.cash_settlements":
