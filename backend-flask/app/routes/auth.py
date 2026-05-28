@@ -76,6 +76,7 @@ ADMIN_PANEL_PERMISSIONS = {
     "panel_automation": "Automation",
     "panel_inbound_customers": "Inbound Customers",
     "panel_cash_tracker": "Cash Tracker",
+    "panel_cash_settlements": "Cash Settlements",
     "panel_item_not_found": "Item Not Found",
 }
 
@@ -109,6 +110,7 @@ ADMIN_PANEL_PAGE_PERMISSIONS = {
     "panel_ops_config": {"ops_config", "settings"},
     "panel_inbound_customers": {"inbound_customers"},
     "panel_cash_tracker": {"cash_tracker", "cash_settlements"},
+    "panel_cash_settlements": {"cash_settlements"},
 }
 
 

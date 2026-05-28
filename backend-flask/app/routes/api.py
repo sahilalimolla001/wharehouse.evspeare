@@ -277,6 +277,49 @@ def api_central_panel_item_not_found():
     return jsonify({"ok": True, "reports": [serialize_item_not_found_report(report) for report in reports]})
 
 
+@api_bp.route("/central-panel/cash-settlements", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_central_panel_cash_settlements():
+    if request.method == "OPTIONS":
+        return "", 204
+    settlements = (
+        MoneyTransaction.query.filter_by(transaction_type="cash_settlement", direction="debit")
+        .order_by(MoneyTransaction.created_at.desc(), MoneyTransaction.id.desc())
+        .limit(1000)
+        .all()
+    )
+    summary_rows = (
+        db.session.query(
+            MoneyTransaction.warehouse_id,
+            func.coalesce(func.sum(MoneyTransaction.amount), 0).label("total_settled"),
+            func.count(MoneyTransaction.id).label("settlement_count"),
+            func.max(MoneyTransaction.created_at).label("last_settled_at"),
+        )
+        .filter_by(transaction_type="cash_settlement", direction="debit")
+        .group_by(MoneyTransaction.warehouse_id)
+        .all()
+    )
+    warehouses = {warehouse.id: warehouse for warehouse in Warehouse.query.all()}
+    summary = [
+        {
+            "warehouse_id": row.warehouse_id,
+            "warehouse": warehouses.get(row.warehouse_id).code if warehouses.get(row.warehouse_id) else "",
+            "warehouse_name": warehouses.get(row.warehouse_id).name if warehouses.get(row.warehouse_id) else "",
+            "total_settled": float(row.total_settled or 0),
+            "settlement_count": int(row.settlement_count or 0),
+            "last_settled_at": row.last_settled_at.isoformat() + "Z" if row.last_settled_at else None,
+        }
+        for row in summary_rows
+    ]
+    return jsonify(
+        {
+            "ok": True,
+            "summary": summary,
+            "settlements": [serialize_cash_transaction(row) for row in settlements],
+        }
+    )
+
+
 @api_bp.route("/central-panel/products", methods=["GET", "OPTIONS"])
 @integration_key_required
 def api_central_panel_products():
