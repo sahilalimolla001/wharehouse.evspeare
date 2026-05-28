@@ -338,6 +338,49 @@ def api_central_panel_orders():
     return jsonify({"ok": True, "orders": [serialize_order(order) for order in orders]})
 
 
+@api_bp.route("/order-tracking", methods=["GET", "OPTIONS"])
+@integration_key_required
+def api_order_tracking():
+    if request.method == "OPTIONS":
+        return "", 204
+    order_id = trim_text(request.args.get("orderId") or request.args.get("order_id") or request.args.get("id"), 120)
+    awb = trim_text(request.args.get("awb") or request.args.get("awb_number"), 120)
+    if not order_id and not awb:
+        return jsonify({"ok": False, "message": "orderId or awb is required"}), 400
+
+    query = Order.query
+    if order_id:
+        query = query.filter(or_(Order.order_number == order_id, Order.external_order_id == order_id))
+    if awb:
+        query = query.filter(Order.courier_awb == awb)
+    order = query.order_by(Order.created_at.desc()).first()
+    if not order:
+        return jsonify({"ok": False, "message": "Order not found"}), 404
+
+    status = order.status or "pending"
+    label = "Order cancelled" if "cancel" in status.lower() else status.replace("_", " ").title()
+    return jsonify(
+        {
+            "ok": True,
+            "orderId": order.order_number,
+            "order_id": order.order_number,
+            "website_order_id": order.external_order_id,
+            "status": status,
+            "label": label,
+            "awb": order.courier_awb or "",
+            "awbNumber": order.courier_awb or "",
+            "courier": order.courier_provider or "",
+            "updatedAt": order.updated_at.isoformat() + "Z" if order.updated_at else None,
+            "tracking": {
+                "status": status,
+                "label": label,
+                "awbNumber": order.courier_awb or "",
+                "updatedAt": order.updated_at.isoformat() + "Z" if order.updated_at else None,
+            },
+        }
+    )
+
+
 @api_bp.route("/central-panel/customers", methods=["GET", "OPTIONS"])
 @integration_key_required
 def api_central_panel_customers():
