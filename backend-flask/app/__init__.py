@@ -18,6 +18,9 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
 
     register_security_hooks(app)
+    from .utils.google_sheets import register_google_sheets_auto_sync
+
+    register_google_sheets_auto_sync(app)
 
     from .routes import register_blueprints
 

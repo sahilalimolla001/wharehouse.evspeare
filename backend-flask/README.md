@@ -113,6 +113,7 @@ GOOGLE_CLOUD_STORAGE_PUBLIC=false
 GOOGLE_SHEETS_SPREADSHEET_ID=your-sheet-id
 GOOGLE_SHEETS_RANGE=Sheet1!A:H
 GOOGLE_SHEETS_AUTO_SYNC=true
+GOOGLE_SHEETS_SYNC_MODE=full
 GOOGLE_APPS_SCRIPT_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
 GOOGLE_APPS_SCRIPT_TOKEN=change-this-token
 CUSTOMER_PRODUCT_WEBHOOK_URL=https://your-customer-website.com/api/warehouse/products
@@ -156,7 +157,7 @@ python -m flask --app run.py create-staff
 
 Set `STAFF_EMAIL`, `STAFF_PASSWORD`, `STAFF_NAME`, and `STAFF_ROLE=picker` before running it.
 
-For Google Sheet sync, `GOOGLE_APPS_SCRIPT_WEBHOOK_URL` is the simplest option. If it is empty, the app falls back to the service-account Google Sheets API setup. Use either `GOOGLE_APPLICATION_CREDENTIALS` for a local JSON key file, or `GOOGLE_APPLICATION_CREDENTIALS_JSON` for raw/base64 service-account JSON in hosted environments.
+For Google Sheet sync, `GOOGLE_APPS_SCRIPT_WEBHOOK_URL` is the simplest option. If it is empty, the app falls back to the service-account Google Sheets API setup. Use either `GOOGLE_APPLICATION_CREDENTIALS` for a local JSON key file, or `GOOGLE_APPLICATION_CREDENTIALS_JSON` for raw/base64 service-account JSON in hosted environments. With `GOOGLE_SHEETS_SYNC_MODE=full`, every warehouse data change refreshes workbook tabs for users, warehouses, suppliers, products, locations, current stock, stock movements, orders, returns, refunds, money transactions, invoices, item-not-found reports, and activity logs. Set `GOOGLE_SHEETS_SYNC_MODE=current_stock` to keep the older single-tab stock sync.
 
 ## Razorpay Refunds
 

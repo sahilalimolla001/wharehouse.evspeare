@@ -63,7 +63,7 @@ python -m flask --app run.py test-google-storage
 This is the easiest option for Google Sheet sync. It does not need a service-account JSON key.
 
 1. Open your Google Sheet.
-2. Create a tab named `Sheet1`, or change `GOOGLE_SHEETS_RANGE` to your tab name.
+2. Keep the default `GOOGLE_SHEETS_SYNC_MODE=full` to create/update all workbook tabs automatically.
 3. Go to Extensions > Apps Script.
 4. Paste this code:
 
@@ -97,7 +97,7 @@ function doPost(e) {
 
     return jsonResponse({
       ok: true,
-      updatedRange: sheetName + "!A1:H" + Math.max(rows.length, 1),
+      updatedRange: sheetName + "!A1:" + columnName(Math.max(rows[0]?.length || 1, 1)) + Math.max(rows.length, 1),
     });
   } catch (error) {
     return jsonResponse({ ok: false, message: String(error) });
@@ -108,6 +108,16 @@ function jsonResponse(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function columnName(columnNumber) {
+  let name = "";
+  while (columnNumber > 0) {
+    const remainder = (columnNumber - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    columnNumber = Math.floor((columnNumber - 1) / 26);
+  }
+  return name;
 }
 ```
 
@@ -121,10 +131,11 @@ function jsonResponse(data) {
 GOOGLE_SHEETS_SPREADSHEET_ID=your-sheet-id
 GOOGLE_SHEETS_RANGE=Sheet1!A:H
 GOOGLE_SHEETS_AUTO_SYNC=true
+GOOGLE_SHEETS_SYNC_MODE=full
 GOOGLE_APPS_SCRIPT_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
 GOOGLE_APPS_SCRIPT_TOKEN=change-this-token
 ```
 
-After stock in, stock out, or mobile location update, the app automatically refreshes that tab with the latest inventory. You can also open `/reports` and click **Sync Google Sheet Now**.
+After any warehouse data insert, update, or delete, the app automatically refreshes workbook tabs for users, warehouses, suppliers, products, locations, stock, orders, returns, refunds, money transactions, invoices, item-not-found reports, and activity logs. You can also open `/reports` and click **Sync Google Sheet Now**.
 
 If `GOOGLE_APPS_SCRIPT_WEBHOOK_URL` is empty, the app falls back to the service-account Google Sheets API setup.

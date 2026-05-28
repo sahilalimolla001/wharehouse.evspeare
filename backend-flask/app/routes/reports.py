@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Inventory, Product, StockIn, StockOut, Supplier, WarehouseLocation
-from ..utils.google_sheets import current_stock_sheet_rows, format_google_sheets_error, write_rows_to_sheet
+from ..utils.google_sheets import format_google_sheets_error, sync_google_sheets_workbook
 from .auth import role_required, selected_warehouse
 
 reports_bp = Blueprint("reports", __name__)
@@ -75,15 +75,9 @@ def current_stock_csv():
 @reports_bp.post("/reports/export-google-sheet")
 @role_required("manager")
 def export_google_sheet():
-    warehouse = selected_warehouse()
-    query = Inventory.query.join(Product).join(WarehouseLocation)
-    if warehouse:
-        query = query.filter(WarehouseLocation.warehouse_id == warehouse.id)
-    inventory_rows = query.order_by(Product.sku).all()
     try:
-        result = write_rows_to_sheet(current_stock_sheet_rows(inventory_rows))
-        updated_range = result.get("updatedRange", "Google Sheet")
-        flash(f"Current stock synced to {updated_range}.", "success")
+        result = sync_google_sheets_workbook("manual_export")
+        flash(result.get("message", "Google Sheet synced."), "success")
     except RuntimeError as error:
         flash(str(error), "danger")
     except Exception as error:

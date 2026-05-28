@@ -245,7 +245,7 @@ def pgadmin_info():
 
 @app.cli.command("sync-google-sheet")
 def sync_google_sheet():
-    """Manually sync current inventory to Google Sheets."""
+    """Manually sync warehouse data to Google Sheets."""
     result = auto_sync_current_stock_sheet("manual_cli")
     print(result["message"])
     if result.get("updated_range"):
