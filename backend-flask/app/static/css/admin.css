@@ -626,11 +626,15 @@ body {
 .embedded-app-panel {
   overflow: hidden;
   padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f5f7fb;
 }
 
 .embedded-app-frame {
   width: 100%;
-  min-height: calc(100vh - 160px);
+  height: calc(100vh - 155px);
+  min-height: 420px;
   display: block;
   border: 0;
   background: #f5f7fb;

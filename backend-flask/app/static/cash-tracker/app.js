@@ -60,11 +60,25 @@ function saveTotal() {
 
 function render() {
   els.totalCash.textContent = formatCurrency(totalCash);
+  queueHeightUpdate();
 }
 
 function showStatus(message) {
   els.statusText.textContent = message;
   els.statusText.hidden = false;
+  queueHeightUpdate();
+}
+
+function queueHeightUpdate() {
+  window.requestAnimationFrame(() => {
+    window.parent.postMessage(
+      {
+        type: "cash-tracker-height",
+        height: document.documentElement.scrollHeight,
+      },
+      window.location.origin
+    );
+  });
 }
 
 async function syncBackendCash(options = {}) {
@@ -600,6 +614,7 @@ function renderReceipt(settlement) {
   });
 
   els.receiptPanel.hidden = false;
+  queueHeightUpdate();
 }
 
 async function performSettleCash(settledAmount, bankName, breakdown) {
@@ -733,3 +748,6 @@ window.setInterval(() => {
   if (document.hidden) return;
   syncSheetCash({ automatic: true });
 }, AUTO_IMPORT_INTERVAL_MS);
+
+window.addEventListener("load", queueHeightUpdate);
+window.addEventListener("resize", queueHeightUpdate);

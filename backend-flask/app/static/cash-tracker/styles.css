@@ -1,16 +1,16 @@
 :root {
-  --bg: #f5f7fb;
+  --bg: #f6f7f4;
   --panel: #ffffff;
-  --panel-soft: #f8fafc;
-  --ink: #16201d;
-  --muted: #64726c;
-  --line: #d9e2df;
-  --green: #16754d;
-  --green-dark: #0f5e3d;
+  --panel-soft: #fbfcfb;
+  --ink: #1f2825;
+  --muted: #68746f;
+  --line: #dfe6e2;
+  --green: #0f766e;
+  --green-dark: #0c5f59;
   --blue: #2563eb;
-  --red: #bc3f37;
-  --red-soft: #fff0ee;
-  --shadow: 0 22px 60px rgba(31, 45, 51, 0.12);
+  --red: #c06b05;
+  --red-soft: #fff7e8;
+  --shadow: 0 16px 36px rgba(35, 52, 47, 0.07);
   --radius: 8px;
   --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -21,7 +21,7 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100%;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
@@ -35,13 +35,13 @@ select {
 
 .cash-app {
   display: grid;
-  min-height: 100vh;
+  min-height: 0;
   place-items: start center;
-  padding: 28px;
+  padding: 18px;
 }
 
 .cash-shell {
-  width: min(100%, 880px);
+  width: min(100%, 980px);
 }
 
 .app-header {
@@ -72,12 +72,11 @@ h1 {
   align-items: end;
   justify-content: space-between;
   gap: 18px;
-  min-height: 168px;
-  padding: 26px;
-  border: 1px solid #cfdad6;
+  min-height: 138px;
+  padding: 22px;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, #ffffff 0%, #f8fbff 54%, #eff7f3 100%);
+  background: #ffffff;
   box-shadow: var(--shadow);
 }
 
@@ -92,7 +91,7 @@ h1 {
 .balance-amount {
   margin: 0;
   color: var(--green-dark);
-  font-size: clamp(3rem, 9vw, 5.9rem);
+  font-size: clamp(2.5rem, 7vw, 4.8rem);
   font-weight: 900;
   letter-spacing: 0;
   line-height: 0.95;

@@ -1,11 +1,23 @@
 {% extends "base.html" %}
 {% block page_title %}Cash Tracker{% endblock %}
 {% block content %}
-  <section class="panel embedded-app-panel">
+  <section class="embedded-app-panel">
     <iframe
       class="embedded-app-frame"
+      id="cashTrackerFrame"
       title="Cash Tracker"
       src="{{ url_for('static', filename='cash-tracker/index.html') }}"
     ></iframe>
   </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.addEventListener("message", (event) => {
+      if (event.origin !== window.location.origin || !event.data || event.data.type !== "cash-tracker-height") return;
+      const frame = document.querySelector("#cashTrackerFrame");
+      if (!frame) return;
+      frame.style.height = `${Math.max(Number(event.data.height || 0), 420)}px`;
+    });
+  </script>
 {% endblock %}
