@@ -16,7 +16,7 @@ from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
 from ..utils.finance import ensure_invoice
-from ..utils.order_payload import order_automation_summary
+from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
 from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, verify_razorpay_webhook
 from ..utils.picker_identity import ensure_picker_code
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, picker_workload, product_pick_location, update_picker_presence
@@ -1322,6 +1322,17 @@ def dispatch_order_api_response(order, data):
         return jsonify({"ok": False, "message": "Order must be packed before dispatch"}), 400
     if not all(item.packed_quantity >= item.quantity for item in order.items):
         return jsonify({"ok": False, "message": "Pack all order items before dispatch"}), 400
+    if is_fast_delivery_order(order):
+        order.status = "dispatched"
+        db.session.commit()
+        return jsonify(
+            {
+                "ok": True,
+                "order": serialize_order(order),
+                "shiprocket": {"created": False, "skipped": True, "message": "Fast delivery orders are handled locally"},
+                "created_courier_order": False,
+            }
+        )
     try:
         result = dispatch_order_with_shiprocket(order, data, user_id=current_api_user_id())
         db.session.commit()

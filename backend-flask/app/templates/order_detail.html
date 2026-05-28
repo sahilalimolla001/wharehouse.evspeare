@@ -36,6 +36,9 @@
         {% if order.external_source == "inbound_customer" %}
           <div class="alert alert-success py-2">Inbound customer order: fixed 20% discount applied. Local dispatch only; no Shiprocket order will be created.</div>
         {% endif %}
+        {% if automation.is_express %}
+          <div class="alert alert-warning py-2">Fast delivery order: handle from the warehouse fast-delivery queue. Shiprocket will not be created.</div>
+        {% endif %}
         <div class="automation-box mb-3">
           <div>
             <span>Delivery</span>
@@ -73,20 +76,20 @@
             </select>
             <button class="btn btn-primary" type="submit">Update Status</button>
           </form>
-          {% if order.status in ["packed", "dispatched"] and order.external_source != "inbound_customer" %}
+          {% if order.status in ["packed", "dispatched"] and order.external_source != "inbound_customer" and not automation.is_express %}
             <form method="post" action="{{ url_for('orders.dispatch_order', order_id=order.id) }}" class="dispatch-package-form mt-3">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <p class="text-secondary small mb-2">Package size is temporarily handled from default courier settings.</p>
               <button class="btn btn-success mt-2 w-100" type="submit">Dispatch With Shiprocket</button>
             </form>
           {% endif %}
-          {% if order.status in ["packed", "dispatched"] and order.external_source == "inbound_customer" %}
+          {% if order.status in ["packed", "dispatched"] and (order.external_source == "inbound_customer" or automation.is_express) %}
             <form method="post" action="{{ url_for('orders.dispatch_order', order_id=order.id) }}" class="mt-3">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-success w-100" type="submit">Confirm Local Handoff</button>
             </form>
           {% endif %}
-          {% if current_user_can("manager", "staff") and order.external_source != "inbound_customer" %}
+          {% if current_user_can("manager", "staff") and order.external_source != "inbound_customer" and not automation.is_express %}
             <a class="btn btn-outline-primary mt-2 w-100" href="{{ url_for('shiprocket.create_order', order_id=order.id) }}">Create Shiprocket Courier</a>
           {% endif %}
         {% else %}

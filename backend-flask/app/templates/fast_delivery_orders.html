@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block page_title %}Fast Delivery Orders{% endblock %}
+
+{% block content %}
+  <section class="metric-grid mb-3">
+    <article class="metric-card warning"><span>Fast Delivery</span><strong>{{ orders|length }}</strong></article>
+    <article class="metric-card"><span>Pending</span><strong>{{ orders|selectattr("status", "equalto", "pending")|list|length }}</strong></article>
+    <article class="metric-card"><span>Packed</span><strong>{{ orders|selectattr("status", "equalto", "packed")|list|length }}</strong></article>
+    <article class="metric-card success"><span>Dispatched</span><strong>{{ orders|selectattr("status", "equalto", "dispatched")|list|length }}</strong></article>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Warehouse Fast Delivery Queue</h2>
+        <p class="text-secondary mb-0">These orders are handled locally from the warehouse. Shiprocket push is blocked for this queue.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Order / Customer</th><th>Warehouse</th><th>Items</th><th>Delivery</th><th>Payment</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for order in orders %}
+            {% set automation = automation_by_order.get(order.id, {}) %}
+            <tr>
+              <td>
+                <a href="{{ url_for('orders.order_detail', order_id=order.id) }}"><strong>{{ order.order_number }}</strong></a><br>
+                {{ order.customer_name }}<br><small class="text-muted">{{ order.customer_phone or "-" }}</small>
+              </td>
+              <td><code>{{ order.warehouse.code if order.warehouse else "-" }}</code></td>
+              <td>
+                {% for item in order.items %}
+                  <div><code>{{ item.product.sku }}</code> {{ item.product.name }} x {{ item.quantity }}</div>
+                {% endfor %}
+              </td>
+              <td>
+                <span class="badge text-bg-warning">{{ automation.delivery_label or "Fast Delivery" }}</span><br>
+                <small class="text-muted">{{ automation.delivery_eta or "Priority local handoff" }}</small>
+              </td>
+              <td>{{ (automation.payment_method or "-")|title }}{% if automation.payment_status %}<br><small class="text-muted">{{ automation.payment_status|title }}</small>{% endif %}</td>
+              <td><span class="badge text-bg-secondary">{{ order.status|title }}</span></td>
+              <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('orders.order_detail', order_id=order.id) }}">Open</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">No fast delivery orders yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -9,6 +9,7 @@ from flask import Blueprint, abort, current_app, flash, jsonify, render_template
 from ..extensions import db
 from ..models import Order, ShiprocketWebhookEvent
 from ..utils.customer_website import notify_shipping_status_change
+from ..utils.order_payload import is_fast_delivery_order
 from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, create_shiprocket_return_order, generate_shiprocket_label, is_shiprocket_configured
 from ..utils.stock import log_activity
 from .auth import get_current_user, role_required, selected_warehouse
@@ -70,6 +71,8 @@ def create_order():
         form_data = form_data_from_request(request.form)
         selected_order = load_order(form_data.get("local_order_id"))
         try:
+            if selected_order and is_fast_delivery_order(selected_order):
+                raise ValueError("Fast delivery orders must be handled locally and cannot be pushed to Shiprocket.")
             payload = build_shiprocket_payload(form_data)
             result = create_shiprocket_order(payload, current_app.config)
             result_summary = summarize_shiprocket_response(result)
@@ -99,7 +102,11 @@ def create_order():
     recent_query = Order.query
     if warehouse:
         recent_query = recent_query.filter(Order.warehouse_id == warehouse.id)
-    recent_orders = recent_query.order_by(Order.created_at.desc()).limit(100).all()
+    recent_orders = [
+        order
+        for order in recent_query.order_by(Order.created_at.desc()).limit(150).all()
+        if not is_fast_delivery_order(order)
+    ][:100]
     return render_template(
         "shiprocket_order.html",
         recent_orders=recent_orders,
@@ -300,13 +307,14 @@ def dispatch_order_with_shiprocket(order, package_input, user_id=None):
     result = None
     result_summary = current_shiprocket_summary(order)
     created = False
-    skipped = False
+    skipped = is_fast_delivery_order(order)
     if not order.courier_order_id and not order.courier_shipment_id and is_shiprocket_configured(current_app.config):
-        payload = build_shiprocket_payload_for_order(order, package)
-        result = create_shiprocket_order(payload, current_app.config)
-        result_summary = summarize_shiprocket_response(result)
-        save_shiprocket_response(order, result, result_summary)
-        created = True
+        if not skipped:
+            payload = build_shiprocket_payload_for_order(order, package)
+            result = create_shiprocket_order(payload, current_app.config)
+            result_summary = summarize_shiprocket_response(result)
+            save_shiprocket_response(order, result, result_summary)
+            created = True
     elif not order.courier_order_id and not order.courier_shipment_id:
         skipped = True
 
@@ -324,6 +332,8 @@ def dispatch_order_with_shiprocket(order, package_input, user_id=None):
 
 
 def ensure_shiprocket_order(order, user_id=None, package_input=None):
+    if is_fast_delivery_order(order):
+        return {"created": False, "skipped": True, "summary": current_shiprocket_summary(order), "message": "Fast delivery orders are handled locally"}
     if not is_shiprocket_configured(current_app.config):
         return {"created": False, "skipped": True, "summary": current_shiprocket_summary(order), "message": "Shiprocket is not configured"}
     if order.courier_order_id or order.courier_shipment_id:
@@ -346,6 +356,8 @@ def ensure_shiprocket_order(order, user_id=None, package_input=None):
 
 
 def ensure_shiprocket_label(order, user_id=None, package_input=None):
+    if is_fast_delivery_order(order):
+        raise ShiprocketError("Fast delivery orders are handled locally. Shiprocket label cannot be generated.")
     label_url = shiprocket_label_url(order)
     if label_url:
         return {"created": False, "label_url": label_url, "summary": current_shiprocket_summary(order)}

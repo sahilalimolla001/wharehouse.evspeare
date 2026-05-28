@@ -40,6 +40,10 @@ def order_automation_summary(order_or_payload):
     }
 
 
+def is_fast_delivery_order(order_or_payload):
+    return bool(order_automation_summary(order_or_payload)["is_express"])
+
+
 def money_number(value):
     try:
         return float(value or 0)

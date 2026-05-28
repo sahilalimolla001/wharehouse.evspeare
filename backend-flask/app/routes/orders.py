@@ -5,7 +5,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
 from ..models import Order, OrderItem, Product, User
-from ..utils.order_payload import order_automation_summary
+from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
 from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
 from .auth import accessible_warehouses, get_current_user, login_required, role_required, selected_warehouse, user_has_role
 
@@ -25,6 +25,25 @@ def orders():
     orders_list = query.order_by(Order.created_at.desc()).all()
     automation_by_order = {order.id: order_automation_summary(order) for order in orders_list}
     return render_template("orders.html", orders=orders_list, automation_by_order=automation_by_order)
+
+
+@orders_bp.route("/fast-delivery-orders")
+@role_required("manager", "staff")
+def fast_delivery_orders():
+    user = get_current_user()
+    warehouse = selected_warehouse(user)
+    query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
+    if warehouse:
+        query = query.filter(Order.warehouse_id == warehouse.id)
+    if not can_manage_all_orders(user):
+        query = query.filter(Order.assigned_to_id == user.id)
+    orders_list = [
+        order
+        for order in query.order_by(Order.created_at.desc()).limit(500).all()
+        if is_fast_delivery_order(order)
+    ]
+    automation_by_order = {order.id: order_automation_summary(order) for order in orders_list}
+    return render_template("fast_delivery_orders.html", orders=orders_list, automation_by_order=automation_by_order)
 
 
 @orders_bp.route("/add-order", methods=["GET", "POST"])
@@ -129,10 +148,13 @@ def dispatch_order(order_id):
         flash("Pack all order items before dispatch.", "warning")
         return redirect(url_for("orders.order_detail", order_id=order.id))
 
-    if order.external_source == "inbound_customer":
+    if order.external_source == "inbound_customer" or is_fast_delivery_order(order):
         order.status = "dispatched"
         db.session.commit()
-        flash("Inbound customer order handed off locally. Shiprocket was not created.", "success")
+        message = "Fast delivery order handed off locally. Shiprocket was not created."
+        if order.external_source == "inbound_customer":
+            message = "Inbound customer order handed off locally. Shiprocket was not created."
+        flash(message, "success")
         return redirect(url_for("orders.order_detail", order_id=order.id))
 
     try:

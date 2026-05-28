@@ -5,7 +5,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Inventory, Order, Product, StockIn, StockOut, WarehouseLocation
-from ..utils.order_payload import order_automation_summary
+from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
 from .auth import accessible_warehouses, get_current_user, login_required, selected_warehouse, user_has_role
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -61,7 +61,11 @@ def dashboard():
         )
         if warehouse:
             courier_pending_query = courier_pending_query.filter(Order.warehouse_id == warehouse.id)
-        courier_pending_orders = courier_pending_query.order_by(Order.updated_at.desc(), Order.created_at.desc()).limit(20).all()
+        courier_pending_orders = [
+            order
+            for order in courier_pending_query.order_by(Order.updated_at.desc(), Order.created_at.desc()).limit(50).all()
+            if not is_fast_delivery_order(order)
+        ][:20]
 
     top_selling_rows = (
         db.session.query(Product.name, Product.sku, func.coalesce(func.sum(StockOut.quantity), 0).label("sold_qty"))
