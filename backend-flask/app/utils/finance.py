@@ -6,6 +6,13 @@ from ..models import Invoice, MoneyTransaction
 
 
 def order_amount(order):
+    try:
+        payload = json.loads(order.source_payload or "{}")
+    except (TypeError, ValueError):
+        payload = {}
+    amounts = payload.get("amounts") if isinstance(payload, dict) and isinstance(payload.get("amounts"), dict) else {}
+    if amounts.get("total") not in (None, ""):
+        return float(amounts.get("total") or 0)
     return sum(float(item.unit_price or 0) * int(item.quantity or 0) for item in order.items)
 
 

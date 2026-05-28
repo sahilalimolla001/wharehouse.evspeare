@@ -19,6 +19,7 @@ def order_automation_summary(order_or_payload):
     amounts = payload.get("amounts") if isinstance(payload.get("amounts"), dict) else {}
     delivery = payload.get("delivery") if isinstance(payload.get("delivery"), dict) else {}
     promotions = payload.get("promotions") if isinstance(payload.get("promotions"), dict) else {}
+    coupon = promotions.get("coupon") if isinstance(promotions.get("coupon"), dict) else {}
     payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else {}
 
     auto_discount = money_number(amounts.get("autoDiscount") or promotions.get("autoDiscount"))
@@ -33,6 +34,8 @@ def order_automation_summary(order_or_payload):
         "delivery_eta": delivery.get("estimatedDays") or "",
         "automation": automation,
         "auto_discount": auto_discount,
+        "coupon_code": coupon.get("code") or promotions.get("couponCode") or "",
+        "coupon_discount": money_number(coupon.get("discount") or promotions.get("couponDiscount")),
         "promo_label": promotions.get("label") or ("Auto saving" if auto_discount else ""),
         "payment_method": payment.get("method") or payload.get("paymentMethod") or "",
         "payment_status": payment.get("status") or payload.get("paymentStatus") or "",

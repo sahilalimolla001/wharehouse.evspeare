@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block page_title %}Coupons{% endblock %}
+
+{% block content %}
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <section class="panel">
+        <h2>Create Coupon</h2>
+        <form method="post" class="d-grid gap-3">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input class="form-control" name="code" placeholder="Coupon code" required>
+          <input class="form-control" name="title" placeholder="Display title">
+          <div class="row g-2">
+            <div class="col-5">
+              <select class="form-select" name="discount_type">
+                <option value="fixed">Fixed Rs.</option>
+                <option value="percent">Percent</option>
+              </select>
+            </div>
+            <div class="col-7">
+              <input class="form-control" name="discount_value" type="number" min="1" step="0.01" placeholder="Discount" required>
+            </div>
+          </div>
+          <input class="form-control" name="min_order_amount" type="number" min="0" step="0.01" placeholder="Minimum order amount">
+          <input class="form-control" name="max_discount_amount" type="number" min="0" step="0.01" placeholder="Max discount for percent coupon">
+          <input class="form-control" name="max_redemptions" type="number" min="1" step="1" placeholder="Total usage limit">
+          <label class="form-label mb-0">Starts</label>
+          <input class="form-control" name="starts_at" type="datetime-local">
+          <label class="form-label mb-0">Expires</label>
+          <input class="form-control" name="expires_at" type="datetime-local">
+          <textarea class="form-control" name="notes" rows="2" placeholder="Internal note"></textarea>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" name="is_active" value="1" checked>
+            <span class="form-check-label">Active</span>
+          </label>
+          <button class="btn btn-primary" type="submit">Save Coupon</button>
+        </form>
+      </section>
+    </div>
+    <div class="col-lg-8">
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Coupon Rules</h2>
+            <p class="text-secondary mb-0">Each coupon can be used once per customer mobile number.</p>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead><tr><th>Coupon</th><th>Discount</th><th>Min Order</th><th>Usage</th><th>Validity</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {% for coupon in coupons %}
+                <tr>
+                  <td><strong>{{ coupon.code }}</strong><br><small class="text-muted">{{ coupon.title }}</small></td>
+                  <td>
+                    {% if coupon.discount_type == "percent" %}
+                      {{ coupon.discount_value|round(2) }}%{% if coupon.max_discount_amount %}<br><small class="text-muted">Max {{ coupon.max_discount_amount|money }}</small>{% endif %}
+                    {% else %}
+                      {{ coupon.discount_value|money }}
+                    {% endif %}
+                  </td>
+                  <td>{{ coupon.min_order_amount|money }}</td>
+                  <td>{{ coupon.redemptions|length }}{% if coupon.max_redemptions %} / {{ coupon.max_redemptions }}{% endif %}</td>
+                  <td>
+                    <small>
+                      {{ coupon.starts_at.strftime("%d %b %Y") if coupon.starts_at else "Now" }}<br>
+                      {{ coupon.expires_at.strftime("%d %b %Y") if coupon.expires_at else "No expiry" }}
+                    </small>
+                  </td>
+                  <td><span class="badge text-bg-{{ 'success' if coupon.is_active else 'secondary' }}">{{ "Active" if coupon.is_active else "Paused" }}</span></td>
+                  <td class="text-end">
+                    <form method="post" action="{{ url_for('coupons.toggle_coupon', coupon_id=coupon.id) }}">
+                      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                      <button class="btn btn-sm btn-outline-primary" type="submit">{{ "Pause" if coupon.is_active else "Activate" }}</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-4">No coupons created yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

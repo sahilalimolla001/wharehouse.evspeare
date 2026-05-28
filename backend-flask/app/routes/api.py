@@ -15,6 +15,7 @@ from ..models import Barcode, CentralPanelSetting, CustomerReturnItem, CustomerR
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
+from ..utils.coupons import redeem_order_coupon, validate_coupon
 from ..utils.finance import ensure_invoice
 from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
 from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, verify_razorpay_webhook
@@ -901,11 +902,36 @@ def api_import_order():
         order, created = create_order_from_integration(data)
         shiprocket = {"created": False, "skipped": True, "message": "Courier creation deferred until dispatch"}
         invoice = ensure_invoice(order, "sale", "issued", payload=data)
+        if created:
+            redeem_order_coupon(order, data)
         sync_sale_transaction_payment(invoice, data)
         db.session.commit()
         return jsonify({"ok": True, "created": created, "order": serialize_order(order), "shiprocket": shiprocket}), 201 if created else 200
     except (TypeError, ValueError, ShiprocketError) as error:
         db.session.rollback()
+        return jsonify({"ok": False, "message": str(error)}), 400
+
+
+@api_bp.post("/coupons/validate")
+@integration_key_required
+def api_validate_coupon():
+    data = request.get_json(silent=True) or {}
+    try:
+        result = validate_coupon(data.get("code"), data.get("customer_phone") or data.get("phone"), data.get("subtotal"))
+        return jsonify(
+            {
+                "ok": True,
+                "coupon": {
+                    "code": result["code"],
+                    "title": result["title"],
+                    "discount_type": result["discount_type"],
+                    "discount_value": result["discount_value"],
+                    "discount": result["discount"],
+                    "subtotal": result["subtotal"],
+                },
+            }
+        )
+    except ValueError as error:
         return jsonify({"ok": False, "message": str(error)}), 400
 
 
@@ -2475,8 +2501,8 @@ def resolve_warehouse(identifier):
 def role_permissions(role):
     permissions = {
         "admin": list(ADMIN_PANEL_PERMISSIONS.keys()),
-        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "money_tracking", "cash_tracker", "cash_settlements", "invoices", "reports"],
-        "staff": ["dashboard", "products", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns"],
+        "manager": ["dashboard", "products", "suppliers", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "refunds", "coupons", "money_tracking", "cash_tracker", "cash_settlements", "invoices", "reports"],
+        "staff": ["dashboard", "products", "stock_in", "stock_out", "inventory", "locations", "orders", "picker_ops", "pick_transfer", "shiprocket", "shipping_status", "returns", "coupons"],
         "picker": list(PICKER_APP_PERMISSIONS.keys()),
         "packer": ["dashboard", "orders", "stock_out", "shiprocket", "shipping_status"],
         "delivery": ["dashboard", "orders", "shipping_status"],

@@ -49,6 +49,7 @@ PAGE_PERMISSIONS = {
     "shipping_status": "Shipping Status",
     "returns": "Customer Returns",
     "refunds": "Payment Refunds",
+    "coupons": "Coupons",
     "money_tracking": "Money Tracking",
     "cash_tracker": "Cash Tracker",
     "cash_settlements": "Cash Settlements",
@@ -66,6 +67,7 @@ ADMIN_PANEL_PERMISSIONS = {
     "panel_customers": "Customers",
     "panel_pickers": "Pickers",
     "panel_returns": "Returns",
+    "panel_coupons": "Coupons",
     "panel_inventory": "Inventory",
     "panel_user_create": "User Creating",
     "panel_shiprocket": "Shiprocket",
@@ -103,6 +105,7 @@ ADMIN_PANEL_PAGE_PERMISSIONS = {
     "panel_orders": {"orders"},
     "panel_pickers": {"picker_ops", "pick_transfer"},
     "panel_returns": {"returns", "refunds"},
+    "panel_coupons": {"coupons"},
     "panel_inventory": {"products", "stock_in", "stock_out", "inventory", "locations", "reports"},
     "panel_user_create": {"users"},
     "panel_shiprocket": {"shiprocket", "shipping_status"},
@@ -160,6 +163,8 @@ def endpoint_permission(endpoint):
         return "invoices"
     if endpoint and endpoint.startswith("inbound."):
         return "inbound_customers"
+    if endpoint and endpoint.startswith("coupons."):
+        return "coupons"
     prefix = endpoint.split(".", 1)[0]
     return prefix if prefix in PAGE_PERMISSIONS else ""
 

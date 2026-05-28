@@ -31,6 +31,7 @@
           <a class="nav-link {% if request.endpoint in ['shiprocket.shipping_status', 'shiprocket.webhook_updates'] %}active{% endif %}" href="{{ url_for('shiprocket.shipping_status') }}">Shipping Status</a>
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('returns.') %}active{% endif %}" href="{{ url_for('returns.customer_returns') }}">Customer Returns</a>
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('refunds.') %}active{% endif %}" href="{{ url_for('refunds.payment_refunds') }}">Payment Refunds</a>
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('coupons.') %}active{% endif %}" href="{{ url_for('coupons.coupons') }}">Coupons</a>
           <a class="nav-link {% if request.endpoint == 'finance.money_tracking' %}active{% endif %}" href="{{ url_for('finance.money_tracking') }}">Money Tracking</a>
           <a class="nav-link {% if request.endpoint == 'finance.warehouse_transactions' %}active{% endif %}" href="{{ url_for('finance.warehouse_transactions') }}">Warehouse Transactions</a>
           <a class="nav-link {% if request.endpoint == 'finance.cash_tracker' %}active{% endif %}" href="{{ url_for('finance.cash_tracker') }}">Cash Tracker</a>

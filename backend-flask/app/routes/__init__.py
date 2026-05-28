@@ -1,6 +1,7 @@
 def register_blueprints(app):
     from .api import api_bp
     from .auth import auth_bp
+    from .coupons import coupons_bp
     from .dashboard import dashboard_bp
     from .finance import finance_bp
     from .inbound import inbound_bp
@@ -15,6 +16,7 @@ def register_blueprints(app):
     from .users import users_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(coupons_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(finance_bp)
     app.register_blueprint(inbound_bp)

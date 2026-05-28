@@ -53,6 +53,10 @@
             <strong>{{ automation.auto_discount|money }}</strong>
           </div>
           <div>
+            <span>Coupon</span>
+            <strong>{% if automation.coupon_code %}{{ automation.coupon_code }} / -{{ automation.coupon_discount|money }}{% else %}-{% endif %}</strong>
+          </div>
+          <div>
             <span>Payment</span>
             <strong>{{ (automation.payment_method or "-")|title }}{% if automation.payment_status %} / {{ automation.payment_status|title }}{% endif %}</strong>
           </div>

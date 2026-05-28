@@ -400,6 +400,47 @@ class PaymentRefund(TimestampMixin, db.Model):
         return f"<PaymentRefund {self.refund_number}>"
 
 
+class Coupon(TimestampMixin, db.Model):
+    __tablename__ = "coupons"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(40), unique=True, nullable=False, index=True)
+    title = db.Column(db.String(120), nullable=False)
+    discount_type = db.Column(db.String(20), default="fixed", nullable=False)
+    discount_value = db.Column(db.Numeric(12, 2), nullable=False)
+    min_order_amount = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    max_discount_amount = db.Column(db.Numeric(12, 2))
+    max_redemptions = db.Column(db.Integer)
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    starts_at = db.Column(db.DateTime)
+    expires_at = db.Column(db.DateTime)
+    notes = db.Column(db.Text)
+
+    redemptions = db.relationship("CouponRedemption", back_populates="coupon")
+
+    def __repr__(self):
+        return f"<Coupon {self.code}>"
+
+
+class CouponRedemption(TimestampMixin, db.Model):
+    __tablename__ = "coupon_redemptions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    coupon_id = db.Column(db.Integer, db.ForeignKey("coupons.id"), nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
+    customer_phone = db.Column(db.String(30), nullable=False, index=True)
+    discount_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    redeemed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    source_payload = db.Column(db.Text)
+
+    coupon = db.relationship("Coupon", back_populates="redemptions")
+    order = db.relationship("Order")
+
+    __table_args__ = (
+        db.UniqueConstraint("coupon_id", "customer_phone", name="uq_coupon_redemption_phone"),
+    )
+
+
 class MoneyTransaction(TimestampMixin, db.Model):
     __tablename__ = "money_transactions"
 
