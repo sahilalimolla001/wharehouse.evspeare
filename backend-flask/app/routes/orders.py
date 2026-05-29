@@ -1,11 +1,11 @@
 import json
-from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from ..extensions import db
 from ..models import Order, OrderItem, Product, User
 from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
+from ..utils.time import india_now
 from .shiprocket import ShiprocketError, dispatch_order_with_shiprocket
 from .auth import accessible_warehouses, get_current_user, login_required, role_required, selected_warehouse, user_has_role
 
@@ -72,7 +72,7 @@ def add_order():
             flash("At least one order item is required.", "danger")
             return redirect(url_for("orders.add_order"))
         order = Order(
-            order_number=request.form.get("order_number", "").strip() or f"ORD-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            order_number=request.form.get("order_number", "").strip() or f"ORD-{india_now().strftime('%Y%m%d%H%M%S')}",
             customer_name=request.form.get("customer_name", "").strip(),
             customer_phone=request.form.get("customer_phone", "").strip(),
             customer_address=request.form.get("customer_address", "").strip(),
@@ -128,7 +128,7 @@ def update_order_status(order_id):
 
     order.status = requested_status
     if order.status == "completed":
-        order.completed_at = datetime.utcnow()
+        order.completed_at = india_now()
     db.session.commit()
     flash("Order status updated.", "success")
     return redirect(url_for("orders.order_detail", order_id=order.id))

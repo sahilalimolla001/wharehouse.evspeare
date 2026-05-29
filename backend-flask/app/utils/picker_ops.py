@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import case
 
 from ..models import Inventory, Order, User, WarehouseLocation
+from .time import india_now
 
 
 ONLINE_PICKER_WINDOW_SECONDS = 45
@@ -19,12 +20,12 @@ def picker_online_from_request(request):
 def update_picker_presence(user, request):
     if not user or user.role != "picker" or "X-Picker-Online" not in request.headers:
         return False
-    user.last_online_at = datetime.utcnow() if picker_online_from_request(request) else None
+    user.last_online_at = india_now() if picker_online_from_request(request) else None
     return True
 
 
 def online_pickers_for_warehouse(warehouse=None):
-    cutoff = datetime.utcnow() - timedelta(seconds=ONLINE_PICKER_WINDOW_SECONDS)
+    cutoff = india_now() - timedelta(seconds=ONLINE_PICKER_WINDOW_SECONDS)
     query = User.query.filter(
         User.role == "picker",
         User.is_active.is_(True),

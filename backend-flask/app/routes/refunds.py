@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, url_for
 from sqlalchemy import or_
@@ -9,6 +8,7 @@ from ..models import Order, PaymentRefund
 from ..utils.razorpay import RazorpayRefundError, initiate_razorpay_refund, razorpay_refund_enabled
 from ..utils.finance import record_money_transaction
 from ..utils.stock import log_activity
+from ..utils.time import india_now
 from .auth import get_current_user, role_required, selected_warehouse
 
 
@@ -41,7 +41,7 @@ def approve_payment_refund(refund_id):
         token = ensure_refund_token(refund)
         payload = initiate_razorpay_refund(payment_id=refund.gateway_payment_id, receipt=token, amount=refund.amount)
         refund.status = "refunded" if str(payload.get("status") or "").lower() == "processed" else "approved"
-        refund.approved_at = datetime.utcnow()
+        refund.approved_at = india_now()
         user = get_current_user()
         refund.approved_by_id = user.id if user else None
         refund.gateway_transaction_id = payload.get("id")
@@ -90,5 +90,5 @@ def reject_payment_refund(refund_id):
 def ensure_refund_token(refund):
     if refund.refund_token:
         return refund.refund_token
-    refund.refund_token = f"RF{refund.id}{datetime.utcnow().strftime('%H%M%S%f')}"[:23]
+    refund.refund_token = f"RF{refund.id}{india_now().strftime('%H%M%S%f')}"[:23]
     return refund.refund_token

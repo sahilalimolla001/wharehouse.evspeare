@@ -9,6 +9,7 @@ from sqlalchemy import event
 
 from ..extensions import db
 from .google_credentials import load_google_credentials
+from .time import india_now
 
 
 SHEETS_SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -190,7 +191,7 @@ def auto_sync_current_stock_sheet(reason="inventory_update"):
 
 
 def current_stock_sheet_rows(inventory_rows):
-    exported_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    exported_at = india_now().strftime("%Y-%m-%d %H:%M:%S IST")
     rows = [["Exported At", "SKU", "Product", "Location", "Quantity", "Reserved", "Available", "Stock Value"]]
     for row in inventory_rows:
         rows.append(
@@ -276,7 +277,7 @@ def google_sheets_workbook_rows():
 
 
 def exported_at():
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    return india_now().strftime("%Y-%m-%d %H:%M:%S IST")
 
 
 def dt(value):

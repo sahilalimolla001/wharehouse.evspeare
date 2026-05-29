@@ -12,6 +12,7 @@ from ..utils.customer_website import notify_shipping_status_change
 from ..utils.order_payload import is_fast_delivery_order
 from ..utils.shiprocket import ShiprocketError, create_shiprocket_order, create_shiprocket_return_order, generate_shiprocket_label, is_shiprocket_configured
 from ..utils.stock import log_activity
+from ..utils.time import india_now
 from .auth import get_current_user, role_required, selected_warehouse
 
 
@@ -235,7 +236,7 @@ def receive_webhook():
 
 
 def default_form_data(order=None):
-    now = datetime.now()
+    now = india_now()
     source = order_source_payload(order)
     billing_address = source_address(source, "billing", order)
     shipping_address = source_address(source, "shipping", order, fallback=billing_address)
@@ -775,7 +776,7 @@ def apply_webhook_to_order(order, summary, payload):
         if mapped_status and order.status not in {"completed", "cancelled"}:
             order.status = mapped_status
             if mapped_status == "completed":
-                order.completed_at = datetime.utcnow()
+                order.completed_at = india_now()
     order.courier_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
 
 
@@ -1317,7 +1318,7 @@ def split_name(name):
 
 def datetime_input(value):
     if not value:
-        value = datetime.now()
+        value = india_now()
     return value.strftime("%Y-%m-%dT%H:%M")
 
 

@@ -1,8 +1,8 @@
 import json
-from datetime import datetime
 
 from ..extensions import db
 from ..models import Invoice, MoneyTransaction
+from .time import india_timestamp
 
 
 def order_amount(order):
@@ -17,7 +17,7 @@ def order_amount(order):
 
 
 def next_number(prefix):
-    return f"{prefix}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+    return f"{prefix}-{india_timestamp()}"
 
 
 def ensure_invoice(order, invoice_type="sale", status="issued", payload=None):

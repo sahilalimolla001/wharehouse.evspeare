@@ -1,22 +1,22 @@
-from datetime import datetime
 from decimal import Decimal
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db
+from .utils.time import india_now
 
 
 user_warehouses = db.Table(
     "user_warehouses",
     db.Column("user_id", db.Integer, db.ForeignKey("users.id"), primary_key=True),
     db.Column("warehouse_id", db.Integer, db.ForeignKey("warehouses.id"), primary_key=True),
-    db.Column("created_at", db.DateTime, default=datetime.utcnow, nullable=False),
+    db.Column("created_at", db.DateTime, default=india_now, nullable=False),
 )
 
 
 class TimestampMixin:
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=india_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=india_now, onupdate=india_now, nullable=False)
 
 
 class User(TimestampMixin, db.Model):
@@ -207,7 +207,7 @@ class StockIn(TimestampMixin, db.Model):
     invoice_number = db.Column(db.String(120))
     received_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     notes = db.Column(db.Text)
-    received_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    received_at = db.Column(db.DateTime, default=india_now, nullable=False)
 
     product = db.relationship("Product", back_populates="stock_ins")
     supplier = db.relationship("Supplier", back_populates="stock_ins")
@@ -229,7 +229,7 @@ class StockOut(TimestampMixin, db.Model):
     reason = db.Column(db.String(40), default="sale", nullable=False)
     dispatched_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     notes = db.Column(db.Text)
-    dispatched_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    dispatched_at = db.Column(db.DateTime, default=india_now, nullable=False)
 
     product = db.relationship("Product", back_populates="stock_outs")
     order = db.relationship("Order", back_populates="stock_outs")
@@ -330,7 +330,7 @@ class CustomerReturnOrder(TimestampMixin, db.Model):
     status = db.Column(db.String(40), default="requested", nullable=False, index=True)
     refund_status = db.Column(db.String(40), default="pending", nullable=False)
     notes = db.Column(db.Text)
-    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    requested_at = db.Column(db.DateTime, default=india_now, nullable=False)
     resolved_at = db.Column(db.DateTime)
     approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
@@ -386,7 +386,7 @@ class PaymentRefund(TimestampMixin, db.Model):
     currency = db.Column(db.String(8), default="INR", nullable=False)
     reason = db.Column(db.String(160))
     status = db.Column(db.String(40), default="requested", nullable=False, index=True)
-    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    requested_at = db.Column(db.DateTime, default=india_now, nullable=False)
     approved_at = db.Column(db.DateTime)
     approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     gateway_response = db.Column(db.Text)
@@ -430,7 +430,7 @@ class CouponRedemption(TimestampMixin, db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), index=True)
     customer_phone = db.Column(db.String(30), nullable=False, index=True)
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False)
-    redeemed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    redeemed_at = db.Column(db.DateTime, default=india_now, nullable=False)
     source_payload = db.Column(db.Text)
 
     coupon = db.relationship("Coupon", back_populates="redemptions")
@@ -480,7 +480,7 @@ class Invoice(TimestampMixin, db.Model):
     customer_phone = db.Column(db.String(30))
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     currency = db.Column(db.String(8), default="INR", nullable=False)
-    issued_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    issued_at = db.Column(db.DateTime, default=india_now, nullable=False)
     payload_json = db.Column(db.Text)
 
     order = db.relationship("Order")

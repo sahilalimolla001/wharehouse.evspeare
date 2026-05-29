@@ -1,12 +1,12 @@
 import json
 import re
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
 from ..models import Coupon, CouponRedemption
+from .time import india_now
 
 
 def normalize_coupon_code(value):
@@ -61,7 +61,7 @@ def validate_coupon(code, customer_phone, subtotal):
     coupon = Coupon.query.filter_by(code=code).first()
     if not coupon:
         raise ValueError("Coupon not found")
-    now = datetime.utcnow()
+    now = india_now()
     if not coupon.is_active:
         raise ValueError("Coupon is inactive")
     if coupon.starts_at and coupon.starts_at > now:

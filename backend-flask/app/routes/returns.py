@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from sqlalchemy import or_
 
@@ -7,6 +5,7 @@ from ..extensions import db
 from ..models import CustomerReturnItem, CustomerReturnOrder, Inventory, Order, WarehouseLocation
 from ..utils.picker_ops import online_pickers_for_warehouse
 from ..utils.stock import log_activity
+from ..utils.time import india_now
 from .api import ensure_virtual_return_bins
 from .auth import get_current_user, role_required, selected_warehouse
 
@@ -85,7 +84,7 @@ def update_customer_return(return_id):
     return_order.status = request.form.get("status", return_order.status).strip() or return_order.status
     return_order.refund_status = request.form.get("refund_status", return_order.refund_status).strip() or return_order.refund_status
     if return_order.status in {"received", "rejected", "refunded"} and not return_order.resolved_at:
-        return_order.resolved_at = datetime.utcnow()
+        return_order.resolved_at = india_now()
     db.session.commit()
     flash("Return order updated.", "success")
     return redirect(url_for("returns.customer_returns"))
@@ -163,4 +162,4 @@ def find_original_order(value):
 
 
 def next_return_number():
-    return f"RET-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    return f"RET-{india_now().strftime('%Y%m%d%H%M%S')}"

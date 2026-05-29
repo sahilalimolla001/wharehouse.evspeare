@@ -1,6 +1,6 @@
 import json
 import secrets
-from datetime import datetime, time
+from datetime import datetime
 
 from functools import wraps
 from urllib.parse import urlparse
@@ -23,6 +23,7 @@ from ..utils.picker_identity import ensure_picker_code
 from ..utils.picker_ops import auto_assign_order_to_picker, order_bin_analysis, picker_online_from_request, pickable_statuses, picker_workload, product_pick_location, update_picker_presence
 from ..utils.sku import normalize_sku, sku_lookup_candidates
 from ..utils.stock import get_or_create_inventory, issue_stock, log_activity, receive_stock
+from ..utils.time import india_iso, india_now, india_timestamp, india_today_start
 from .auth import ADMIN_PANEL_PERMISSIONS, PAGE_PERMISSIONS, PICKER_APP_PERMISSIONS, user_has_role, user_page_permissions
 from .shiprocket import ShiprocketError, create_shiprocket_return_for_customer_return, ensure_shiprocket_label, dispatch_order_with_shiprocket
 from ..utils.shiprocket import cancel_shiprocket_order
@@ -308,7 +309,7 @@ def api_central_panel_cash_settlements():
             "warehouse_name": warehouses.get(row.warehouse_id).name if warehouses.get(row.warehouse_id) else "",
             "total_settled": float(row.total_settled or 0),
             "settlement_count": int(row.settlement_count or 0),
-            "last_settled_at": row.last_settled_at.isoformat() + "Z" if row.last_settled_at else None,
+            "last_settled_at": india_iso(row.last_settled_at),
         }
         for row in summary_rows
     ]
@@ -371,12 +372,12 @@ def api_order_tracking():
             "awb": order.courier_awb or "",
             "awbNumber": order.courier_awb or "",
             "courier": order.courier_provider or "",
-            "updatedAt": order.updated_at.isoformat() + "Z" if order.updated_at else None,
+            "updatedAt": india_iso(order.updated_at),
             "tracking": {
                 "status": status,
                 "label": label,
                 "awbNumber": order.courier_awb or "",
-                "updatedAt": order.updated_at.isoformat() + "Z" if order.updated_at else None,
+                "updatedAt": india_iso(order.updated_at),
             },
         }
     )
@@ -399,7 +400,7 @@ def api_central_panel_customers():
                 "status": "active",
                 "orders": 0,
                 "value": 0.0,
-                "created_at": order.created_at.isoformat() + "Z" if order.created_at else None,
+                "created_at": india_iso(order.created_at),
             },
         )
         customer["orders"] += 1
@@ -479,7 +480,7 @@ def api_central_panel_update():
 @api_login_required
 @picker_permission_required("picker_home")
 def api_dashboard():
-    today_start = datetime.combine(datetime.utcnow().date(), time.min)
+    today_start = india_today_start()
     warehouse = current_api_warehouse()
     products = Product.query.filter_by(is_active=True).all()
     inventory_query = Inventory.query.join(WarehouseLocation)
@@ -630,7 +631,7 @@ def api_public_products():
         {
             "ok": True,
             "count": len(products),
-            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": india_iso(india_now()),
             "products": [serialize_public_product(product) for product in products],
         }
     )
@@ -808,7 +809,7 @@ def prepare_inbound_order_payload(data, user):
     payment_method = trim_text(payment.get("method") or "cod", 20).lower()
     if payment_method not in {"cod", "upi", "bank_transfer", "card"}:
         raise ValueError("Supported payments are COD, UPI, bank transfer or card")
-    order_id = trim_text(data.get("order_id") or data.get("orderId"), 120) or f"INB-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+    order_id = trim_text(data.get("order_id") or data.get("orderId"), 120) or f"INB-{india_timestamp()}"
     address = trim_text(data.get("customer_address") or data.get("address"), 2000)
     if not address:
         raise ValueError("Delivery address is required")
@@ -1278,7 +1279,7 @@ def api_return_item_stock_in(return_id, item_id):
         )
         if all(row.remaining_stock_in_quantity == 0 for row in return_order.items):
             return_order.status = "received"
-            return_order.resolved_at = datetime.utcnow()
+            return_order.resolved_at = india_now()
         log_activity("return_stock_in", f"Stocked return item {item.product.sku} to {location.barcode or location.id}", user_id=current_api_user_id(), entity_type="CustomerReturnItem", entity_id=item.id)
         db.session.commit()
         sync_result = auto_sync_current_stock_sheet("customer_return_stock_in")
@@ -1309,7 +1310,7 @@ def api_order_status(order_id):
         order.assigned_to_id = current_api_user_id()
     order.status = status
     if status == "completed":
-        order.completed_at = datetime.utcnow()
+        order.completed_at = india_now()
     log_activity("order_status", f"Order {order.order_number} marked {status}", user_id=current_api_user_id(), entity_type="Order", entity_id=order.id)
     db.session.commit()
     return jsonify({"ok": True, "order": serialize_order(order)})
@@ -2043,12 +2044,12 @@ def create_cancel_stock_in_order(order, data):
 
 
 def next_refund_number():
-    return f"RF-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+    return f"RF-{india_timestamp()}"
 
 
 def next_transaction_number(prefix="MT"):
     while True:
-        number = f"{prefix}-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')[:17]}"
+        number = f"{prefix}-{india_timestamp()}"
         if not MoneyTransaction.query.filter_by(transaction_number=number).first():
             return number
 
@@ -2061,7 +2062,7 @@ def summary_warehouse_id():
 def refund_token(refund):
     if refund.refund_token:
         return refund.refund_token
-    token = f"RF{refund.id}{datetime.utcnow().strftime('%H%M%S%f')}"[:23]
+    token = f"RF{refund.id}{india_now().strftime('%H%M%S%f')}"[:23]
     refund.refund_token = token
     return token
 
@@ -2071,7 +2072,7 @@ def approve_payment_refund(refund):
         raise ValueError("Only Razorpay refunds can be approved from this panel")
     payload = initiate_razorpay_refund(payment_id=refund.gateway_payment_id, receipt=refund_token(refund), amount=refund.amount)
     refund.status = "refunded" if str(payload.get("status") or "").lower() == "processed" else "approved"
-    refund.approved_at = datetime.utcnow()
+    refund.approved_at = india_now()
     refund.approved_by_id = current_api_user_id()
     refund.gateway_transaction_id = trim_text(payload.get("id"), 120)
     refund.gateway_response = json.dumps(payload, default=str, separators=(",", ":"))[:20000]
@@ -2599,7 +2600,7 @@ def serialize_public_product(product):
         "available_quantity": product.available_quantity,
         "in_stock": product.available_quantity > 0,
         "image_url": url_for("api.api_public_product_image", product_id=product.id, _external=True) if product.image_url else None,
-        "updated_at": product.updated_at.isoformat() + "Z" if product.updated_at else None,
+        "updated_at": india_iso(product.updated_at),
     }
 
 
@@ -2626,7 +2627,7 @@ def serialize_order(order):
         } if order.assigned_to else None,
         "amount": float(order.total_value),
         "total_items": order.total_items,
-        "created_at": order.created_at.isoformat() + "Z" if order.created_at else None,
+        "created_at": india_iso(order.created_at),
         "awb": order.courier_awb or "",
         "label_url": label_url,
         "courier": {
@@ -2678,7 +2679,7 @@ def serialize_inbound_order(order):
                 "invoice_number": invoice.invoice_number,
                 "amount": float(invoice.amount or 0),
                 "currency": invoice.currency,
-                "issued_at": invoice.issued_at.isoformat() + "Z" if invoice.issued_at else None,
+                "issued_at": india_iso(invoice.issued_at),
             } if invoice else None,
             "payment": {
                 "method": payment.gateway,
@@ -2707,8 +2708,8 @@ def serialize_cash_transaction(transaction):
         "reference": transaction.reference or "",
         "amount": float(transaction.amount or 0),
         "currency": transaction.currency or "INR",
-        "createdAt": transaction.created_at.isoformat() + "Z" if transaction.created_at else None,
-        "updatedAt": transaction.updated_at.isoformat() + "Z" if transaction.updated_at else None,
+        "createdAt": india_iso(transaction.created_at),
+        "updatedAt": india_iso(transaction.updated_at),
     }
 
 
@@ -2730,7 +2731,7 @@ def serialize_item_not_found_report(report):
         "picker_id": report.picker_id,
         "picker": report.picker.full_name if report.picker else "",
         "notes": report.notes or "",
-        "created_at": report.created_at.isoformat() + "Z" if report.created_at else None,
+        "created_at": india_iso(report.created_at),
     }
 
 
@@ -2743,7 +2744,7 @@ def serialize_central_panel_setting(setting):
         "id": setting.id,
         "section": setting.section,
         "updates": updates if isinstance(updates, dict) else {},
-        "updated_at": setting.updated_at.isoformat() + "Z" if setting.updated_at else None,
+        "updated_at": india_iso(setting.updated_at),
     }
 
 
@@ -2789,8 +2790,8 @@ def serialize_return_order(return_order):
             "full_name": return_order.assigned_to.full_name,
             "picker_code": return_order.assigned_to.picker_code,
         } if return_order.assigned_to else None,
-        "requested_at": return_order.requested_at.isoformat() + "Z" if return_order.requested_at else None,
-        "created_at": return_order.requested_at.isoformat() + "Z" if return_order.requested_at else None,
+        "requested_at": india_iso(return_order.requested_at),
+        "created_at": india_iso(return_order.requested_at),
         "items": [
             {
                 "id": item.id,
@@ -2854,7 +2855,7 @@ def serialize_payment_refund(refund):
         "currency": refund.currency,
         "reason": refund.reason,
         "status": refund.status,
-        "requested_at": refund.requested_at.isoformat() + "Z" if refund.requested_at else None,
-        "approved_at": refund.approved_at.isoformat() + "Z" if refund.approved_at else None,
+        "requested_at": india_iso(refund.requested_at),
+        "approved_at": india_iso(refund.approved_at),
         "approved_by": refund.approved_by.full_name if refund.approved_by else "",
     }

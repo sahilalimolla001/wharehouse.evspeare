@@ -1,11 +1,10 @@
-from datetime import datetime, time
-
 from flask import Blueprint, render_template
 from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Inventory, Order, Product, StockIn, StockOut, WarehouseLocation
 from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
+from ..utils.time import india_today_start
 from .auth import accessible_warehouses, get_current_user, login_required, selected_warehouse, user_has_role
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -14,7 +13,7 @@ dashboard_bp = Blueprint("dashboard", __name__)
 @dashboard_bp.route("/dashboard")
 @login_required
 def dashboard():
-    today_start = datetime.combine(datetime.utcnow().date(), time.min)
+    today_start = india_today_start()
     user = get_current_user()
     warehouses = accessible_warehouses(user)
     warehouse = selected_warehouse(user)
