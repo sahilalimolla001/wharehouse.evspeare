@@ -192,7 +192,7 @@ def auto_sync_current_stock_sheet(reason="inventory_update"):
 
 def current_stock_sheet_rows(inventory_rows):
     exported_at = india_now().strftime("%Y-%m-%d %H:%M:%S IST")
-    rows = [["Exported At", "SKU", "Product", "Location", "Quantity", "Reserved", "Available", "Stock Value"]]
+    rows = [["Sheet Push Time", "SKU", "Product", "Location", "Quantity", "Reserved", "Available", "Stock Value"]]
     for row in inventory_rows:
         rows.append(
             [
@@ -293,7 +293,7 @@ def money_value(value):
 
 
 def users_sheet_rows(rows):
-    data = [["Exported At", "ID", "Name", "Email", "Phone", "Role", "Picker Code", "Active", "Warehouses", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Name", "Email", "Phone", "Role", "Picker Code", "Active", "Warehouses", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.full_name, row.email, row.phone or "", row.role, row.picker_code or "", row.is_active, ", ".join(warehouse.code for warehouse in row.warehouses), dt(row.created_at), dt(row.updated_at)])
@@ -301,7 +301,7 @@ def users_sheet_rows(rows):
 
 
 def warehouses_sheet_rows(rows):
-    data = [["Exported At", "ID", "Code", "Name", "Pincode", "Address", "Active", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Code", "Name", "Pincode", "Address", "Active", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.code, row.name, row.pincode, row.address or "", row.is_active, dt(row.created_at), dt(row.updated_at)])
@@ -309,7 +309,7 @@ def warehouses_sheet_rows(rows):
 
 
 def suppliers_sheet_rows(rows):
-    data = [["Exported At", "ID", "Name", "Phone", "Email", "GST", "Address", "Notes", "Active", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Name", "Phone", "Email", "GST", "Address", "Notes", "Active", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.name, row.phone or "", row.email or "", row.gst_number or "", row.address or "", row.notes or "", row.is_active, dt(row.created_at), dt(row.updated_at)])
@@ -317,7 +317,7 @@ def suppliers_sheet_rows(rows):
 
 
 def categories_sheet_rows(rows):
-    data = [["Exported At", "ID", "Name", "Description", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Name", "Description", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.name, row.description or "", dt(row.created_at), dt(row.updated_at)])
@@ -325,7 +325,7 @@ def categories_sheet_rows(rows):
 
 
 def products_sheet_rows(rows):
-    data = [["Exported At", "ID", "SKU", "Name", "Brand", "Unit", "Category", "Supplier", "Purchase Price", "Selling Price", "Minimum Stock", "Total Quantity", "Available Quantity", "Stock Value", "Image URL", "Active", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "SKU", "Name", "Brand", "Unit", "Category", "Supplier", "Purchase Price", "Selling Price", "Minimum Stock", "Total Quantity", "Available Quantity", "Stock Value", "Image URL", "Active", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.sku, row.name, row.brand or "", row.unit, row.category.name if row.category else "", row.supplier.name if row.supplier else "", money_value(row.purchase_price), money_value(row.selling_price), row.minimum_stock, row.total_quantity, row.available_quantity, money_value(row.stock_value), row.image_url or "", row.is_active, dt(row.created_at), dt(row.updated_at)])
@@ -333,7 +333,7 @@ def products_sheet_rows(rows):
 
 
 def barcodes_sheet_rows(rows):
-    data = [["Exported At", "ID", "Product ID", "SKU", "Product", "Code", "Type", "Active", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Product ID", "SKU", "Product", "Code", "Type", "Active", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.product_id, row.product.sku if row.product else "", row.product.name if row.product else "", row.code, row.barcode_type, row.is_active, dt(row.created_at), dt(row.updated_at)])
@@ -341,7 +341,7 @@ def barcodes_sheet_rows(rows):
 
 
 def locations_sheet_rows(rows):
-    data = [["Exported At", "ID", "Warehouse", "Warehouse Name", "Zone", "Rack", "Shelf", "Bin", "Full Code", "Barcode", "Virtual", "Active", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Warehouse", "Warehouse Name", "Zone", "Rack", "Shelf", "Bin", "Full Code", "Barcode", "Virtual", "Active", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.warehouse.code if row.warehouse else "", row.warehouse.name if row.warehouse else "", row.zone, row.rack, row.shelf, row.bin_code, row.full_code, row.barcode or "", row.is_virtual, row.is_active, dt(row.created_at), dt(row.updated_at)])
@@ -349,7 +349,7 @@ def locations_sheet_rows(rows):
 
 
 def stock_in_sheet_rows(rows):
-    data = [["Exported At", "ID", "Received At", "SKU", "Product", "Supplier", "Warehouse", "Location", "Quantity", "Unit Cost", "Invoice Number", "Received By", "Notes", "Created At"]]
+    data = [["Sheet Push Time", "ID", "Received At", "SKU", "Product", "Supplier", "Warehouse", "Location", "Quantity", "Unit Cost", "Invoice Number", "Received By", "Notes", "Created At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, dt(row.received_at), row.product.sku if row.product else "", row.product.name if row.product else "", row.supplier.name if row.supplier else "", row.location.warehouse.code if row.location and row.location.warehouse else "", row.location.full_code if row.location else "", row.quantity, money_value(row.unit_cost), row.invoice_number or "", row.received_by.full_name if row.received_by else "", row.notes or "", dt(row.created_at)])
@@ -357,7 +357,7 @@ def stock_in_sheet_rows(rows):
 
 
 def stock_out_sheet_rows(rows):
-    data = [["Exported At", "ID", "Dispatched At", "SKU", "Product", "Order Number", "Warehouse", "Location", "Quantity", "Reason", "Dispatched By", "Notes", "Created At"]]
+    data = [["Sheet Push Time", "ID", "Dispatched At", "SKU", "Product", "Order Number", "Warehouse", "Location", "Quantity", "Reason", "Dispatched By", "Notes", "Created At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, dt(row.dispatched_at), row.product.sku if row.product else "", row.product.name if row.product else "", row.order.order_number if row.order else "", row.location.warehouse.code if row.location and row.location.warehouse else "", row.location.full_code if row.location else "", row.quantity, row.reason, row.dispatched_by.full_name if row.dispatched_by else "", row.notes or "", dt(row.created_at)])
@@ -365,7 +365,7 @@ def stock_out_sheet_rows(rows):
 
 
 def orders_sheet_rows(rows):
-    data = [["Exported At", "ID", "Order Number", "External Source", "External Order ID", "Warehouse", "Customer", "Phone", "Address", "Status", "Priority", "Assigned To", "Created By", "Expected Dispatch", "Completed At", "Courier", "Courier Order ID", "Shipment ID", "AWB", "Courier Status", "Total Items", "Total Value", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Order Number", "External Source", "External Order ID", "Warehouse", "Customer", "Phone", "Address", "Status", "Priority", "Assigned To", "Created By", "Expected Dispatch", "Completed At", "Courier", "Courier Order ID", "Shipment ID", "AWB", "Courier Status", "Total Items", "Total Value", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.order_number, row.external_source or "", row.external_order_id or "", row.warehouse.code if row.warehouse else "", row.customer_name, row.customer_phone or "", row.customer_address or "", row.status, row.priority, row.assigned_to.full_name if row.assigned_to else "", row.created_by.full_name if row.created_by else "", date_value(row.expected_dispatch_date), dt(row.completed_at), row.courier_provider or "", row.courier_order_id or "", row.courier_shipment_id or "", row.courier_awb or "", row.courier_status or "", row.total_items, money_value(row.total_value), dt(row.created_at), dt(row.updated_at)])
@@ -373,7 +373,7 @@ def orders_sheet_rows(rows):
 
 
 def order_items_sheet_rows(rows):
-    data = [["Exported At", "ID", "Order Number", "SKU", "Product", "Quantity", "Picked", "Packed", "Unit Price", "Line Total", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Order Number", "SKU", "Product", "Quantity", "Picked", "Packed", "Unit Price", "Line Total", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.order.order_number if row.order else "", row.product.sku if row.product else "", row.product.name if row.product else "", row.quantity, row.picked_quantity, row.packed_quantity, money_value(row.unit_price), money_value(row.unit_price) * row.quantity, dt(row.created_at), dt(row.updated_at)])
@@ -381,7 +381,7 @@ def order_items_sheet_rows(rows):
 
 
 def shiprocket_events_sheet_rows(rows):
-    data = [["Exported At", "ID", "Order Number", "Event Type", "Shiprocket Order ID", "Shipment ID", "AWB", "Current Status", "Previous Status", "Status Code", "Courier", "Location", "Event Time", "Received IP", "Created At"]]
+    data = [["Sheet Push Time", "ID", "Order Number", "Event Type", "Shiprocket Order ID", "Shipment ID", "AWB", "Current Status", "Previous Status", "Status Code", "Courier", "Location", "Event Time", "Received IP", "Created At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.order.order_number if row.order else "", row.event_type or "", row.shiprocket_order_id or "", row.shipment_id or "", row.awb or "", row.current_status or "", row.previous_status or "", row.status_code or "", row.courier_name or "", row.location or "", dt(row.event_time), row.received_ip or "", dt(row.created_at)])
@@ -389,7 +389,7 @@ def shiprocket_events_sheet_rows(rows):
 
 
 def returns_sheet_rows(rows):
-    data = [["Exported At", "ID", "Return Number", "Order Number", "Website Order ID", "Customer", "Phone", "Reason", "Status", "Refund Status", "Assigned To", "Approved By", "Notes", "Requested At", "Resolved At", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Return Number", "Order Number", "Website Order ID", "Customer", "Phone", "Reason", "Status", "Refund Status", "Assigned To", "Approved By", "Notes", "Requested At", "Resolved At", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.return_number, row.order.order_number if row.order else "", row.website_order_id or "", row.customer_name, row.customer_phone or "", row.reason, row.status, row.refund_status, row.assigned_to.full_name if row.assigned_to else "", row.approved_by.full_name if row.approved_by else "", row.notes or "", dt(row.requested_at), dt(row.resolved_at), dt(row.created_at), dt(row.updated_at)])
@@ -397,7 +397,7 @@ def returns_sheet_rows(rows):
 
 
 def return_items_sheet_rows(rows):
-    data = [["Exported At", "ID", "Return Number", "SKU", "Product", "Expected", "Picked", "Stocked", "Issue Qty", "Status", "Notes", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Return Number", "SKU", "Product", "Expected", "Picked", "Stocked", "Issue Qty", "Status", "Notes", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.return_order.return_number if row.return_order else "", row.product.sku if row.product else "", row.product.name if row.product else "", row.expected_quantity, row.picked_quantity, row.stocked_quantity, row.issue_quantity, row.status, row.notes or "", dt(row.created_at), dt(row.updated_at)])
@@ -405,7 +405,7 @@ def return_items_sheet_rows(rows):
 
 
 def refunds_sheet_rows(rows):
-    data = [["Exported At", "ID", "Refund Number", "Order Number", "Website Order ID", "Request ID", "Customer", "Phone", "Gateway", "Gateway Payment ID", "Gateway Transaction ID", "Amount", "Currency", "Reason", "Status", "Requested At", "Approved At", "Approved By", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Refund Number", "Order Number", "Website Order ID", "Request ID", "Customer", "Phone", "Gateway", "Gateway Payment ID", "Gateway Transaction ID", "Amount", "Currency", "Reason", "Status", "Requested At", "Approved At", "Approved By", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.refund_number, row.order.order_number if row.order else "", row.website_order_id or "", row.request_id or "", row.customer_name, row.customer_phone or "", row.gateway, row.gateway_payment_id or "", row.gateway_transaction_id or "", money_value(row.amount), row.currency, row.reason or "", row.status, dt(row.requested_at), dt(row.approved_at), row.approved_by.full_name if row.approved_by else "", dt(row.created_at), dt(row.updated_at)])
@@ -413,7 +413,7 @@ def refunds_sheet_rows(rows):
 
 
 def money_sheet_rows(rows):
-    data = [["Exported At", "ID", "Transaction Number", "Warehouse", "Order Number", "Refund Number", "Invoice Number", "Type", "Direction", "Status", "Gateway", "Reference", "Amount", "Currency", "Customer", "Phone", "Notes", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Transaction Number", "Warehouse", "Order Number", "Refund Number", "Invoice Number", "Type", "Direction", "Status", "Gateway", "Reference", "Amount", "Currency", "Customer", "Phone", "Notes", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.transaction_number, row.warehouse.code if row.warehouse else "", row.order.order_number if row.order else "", row.refund.refund_number if row.refund else "", row.invoice.invoice_number if row.invoice else "", row.transaction_type, row.direction, row.status, row.gateway or "", row.reference or "", money_value(row.amount), row.currency, row.customer_name or "", row.customer_phone or "", row.notes or "", dt(row.created_at), dt(row.updated_at)])
@@ -421,7 +421,7 @@ def money_sheet_rows(rows):
 
 
 def invoices_sheet_rows(rows):
-    data = [["Exported At", "ID", "Invoice Number", "Order Number", "Type", "Status", "Customer", "Phone", "Amount", "Currency", "Issued At", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Invoice Number", "Order Number", "Type", "Status", "Customer", "Phone", "Amount", "Currency", "Issued At", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.invoice_number, row.order.order_number if row.order else "", row.invoice_type, row.status, row.customer_name, row.customer_phone or "", money_value(row.amount), row.currency, dt(row.issued_at), dt(row.created_at), dt(row.updated_at)])
@@ -429,7 +429,7 @@ def invoices_sheet_rows(rows):
 
 
 def item_not_found_sheet_rows(rows):
-    data = [["Exported At", "ID", "Order Number", "SKU", "Product", "Warehouse", "Location", "Picker", "Quantity", "Stock Deducted", "Unit Price", "Amount", "Notes", "Created At", "Updated At"]]
+    data = [["Sheet Push Time", "ID", "Order Number", "SKU", "Product", "Warehouse", "Location", "Picker", "Quantity", "Stock Deducted", "Unit Price", "Amount", "Notes", "Created At", "Updated At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.order.order_number if row.order else "", row.product.sku if row.product else "", row.product.name if row.product else "", row.warehouse.code if row.warehouse else "", row.location.full_code if row.location else "", row.picker.full_name if row.picker else "", row.quantity, row.stock_deducted_quantity, money_value(row.unit_price), money_value(row.unit_price) * row.quantity, row.notes or "", dt(row.created_at), dt(row.updated_at)])
@@ -437,7 +437,7 @@ def item_not_found_sheet_rows(rows):
 
 
 def activity_sheet_rows(rows):
-    data = [["Exported At", "ID", "User", "Action", "Entity Type", "Entity ID", "Message", "Meta JSON", "Created At"]]
+    data = [["Sheet Push Time", "ID", "User", "Action", "Entity Type", "Entity ID", "Message", "Meta JSON", "Created At"]]
     stamp = exported_at()
     for row in rows:
         data.append([stamp, row.id, row.user.full_name if row.user else "", row.action, row.entity_type or "", row.entity_id or "", row.message, row.meta_json or "", dt(row.created_at)])
