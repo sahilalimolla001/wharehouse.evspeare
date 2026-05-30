@@ -1,4 +1,4 @@
-const CACHE_NAME = "evsphere-picker-v17";
+const CACHE_NAME = "evsphere-picker-v18";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {

@@ -191,7 +191,9 @@ function automationDefaults(saved = {}) {
 function bindConnectivity() {
   window.addEventListener("online", () => {
     renderConnectionState();
-    retryOfflineQueue().catch(() => {});
+    if (store.offlineQueue.length) {
+      toast(`${store.offlineQueue.length} offline action pending. Sync manually karein.`);
+    }
   });
   window.addEventListener("offline", renderConnectionState);
 }
@@ -2234,10 +2236,13 @@ function clearScanFillTarget() {
 async function submitStock(event, endpoint) {
   event.preventDefault();
   const form = event.target;
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton?.disabled) return;
   const payload = Object.fromEntries(new FormData(form).entries());
   payload.quantity = Number(payload.quantity);
 
   try {
+    if (submitButton) submitButton.disabled = true;
     await apiFetch(`/${endpoint}`, { method: "POST", body: payload });
     form.reset();
     resetStockProductPreview();
@@ -2245,6 +2250,8 @@ async function submitStock(event, endpoint) {
     await refreshAll();
   } catch (error) {
     toast(error.message);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
   }
 }
 
