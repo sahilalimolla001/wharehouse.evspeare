@@ -143,6 +143,25 @@ def integration_key_or_staff_session_required(view):
     return wrapped
 
 
+def support_query_key_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return "", 204
+        allowed_keys = [
+            current_app.config.get("SUPPORT_QUERY_TOKEN", ""),
+            current_app.config.get("INTEGRATION_API_KEY", ""),
+        ]
+        supplied_key = integration_request_key()
+        if supplied_key and any(key and secrets.compare_digest(key, supplied_key) for key in allowed_keys):
+            return view(*args, **kwargs)
+        if not any(allowed_keys):
+            return jsonify({"ok": False, "message": "Support query API is not configured"}), 503
+        return jsonify({"ok": False, "message": "Invalid support query token"}), 401
+
+    return wrapped
+
+
 def integration_request_key():
     authorization = request.headers.get("Authorization", "")
     if authorization.lower().startswith("bearer "):
@@ -151,7 +170,7 @@ def integration_request_key():
 
 
 @api_bp.route("/support-queries", methods=["POST", "OPTIONS"])
-@integration_key_required
+@support_query_key_required
 def receive_support_query():
     if request.method == "OPTIONS":
         return "", 204
