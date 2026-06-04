@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..extensions import db
-from ..models import Barcode, CentralPanelSetting, CustomerReturnItem, CustomerReturnOrder, Inventory, Invoice, ItemNotFoundReport, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
+from ..models import Barcode, CentralPanelSetting, CustomerReturnItem, CustomerReturnOrder, CustomerSupportQuery, Inventory, Invoice, ItemNotFoundReport, MoneyTransaction, Order, OrderItem, PaymentRefund, Product, StockIn, StockOut, User, Warehouse, WarehouseLocation
 from ..utils.customer_website import notify_product_change
 from ..utils.google_sheets import auto_sync_current_stock_sheet
 from ..utils.google_storage import get_storage_client, upload_product_image
@@ -148,6 +148,38 @@ def integration_request_key():
     if authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
     return request.headers.get("X-Integration-Key", "").strip()
+
+
+@api_bp.route("/support-queries", methods=["POST", "OPTIONS"])
+@integration_key_required
+def receive_support_query():
+    if request.method == "OPTIONS":
+        return "", 204
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or data.get("customer_name") or "").strip()
+    phone = "".join(ch for ch in str(data.get("phone") or data.get("customer_phone") or "") if ch.isdigit())[-10:]
+    message = str(data.get("message") or data.get("query") or "").strip()
+    external_id = str(data.get("id") or data.get("external_id") or "").strip()
+
+    if not name:
+        return jsonify({"ok": False, "message": "Customer name is required"}), 400
+    if len(phone) != 10:
+        return jsonify({"ok": False, "message": "Valid customer phone is required"}), 400
+    if len(message) < 5:
+        return jsonify({"ok": False, "message": "Support message is required"}), 400
+
+    query = CustomerSupportQuery.query.filter_by(external_id=external_id).first() if external_id else None
+    if not query:
+        query = CustomerSupportQuery(external_id=external_id or None)
+        db.session.add(query)
+    query.customer_name = name[:160]
+    query.customer_phone = phone
+    query.message = message
+    query.source = str(data.get("source") or "mobile_app")[:80]
+    query.raw_payload_json = json.dumps(data, ensure_ascii=True)
+    db.session.commit()
+
+    return jsonify({"ok": True, "id": query.id, "external_id": query.external_id, "status": query.status})
 
 
 @api_bp.post("/login")

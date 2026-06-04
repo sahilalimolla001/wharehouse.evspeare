@@ -541,6 +541,26 @@ class CentralPanelSetting(TimestampMixin, db.Model):
         return f"<CentralPanelSetting {self.section}>"
 
 
+class CustomerSupportQuery(TimestampMixin, db.Model):
+    __tablename__ = "customer_support_queries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    external_id = db.Column(db.String(80), unique=True, index=True)
+    customer_name = db.Column(db.String(160), nullable=False)
+    customer_phone = db.Column(db.String(30), nullable=False, index=True)
+    message = db.Column(db.Text, nullable=False)
+    source = db.Column(db.String(80), default="mobile_app", nullable=False)
+    status = db.Column(db.String(30), default="new", nullable=False, index=True)
+    raw_payload_json = db.Column(db.Text)
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    resolved_at = db.Column(db.DateTime)
+
+    assigned_to = db.relationship("User")
+
+    def __repr__(self):
+        return f"<CustomerSupportQuery {self.external_id or self.id}>"
+
+
 class Barcode(TimestampMixin, db.Model):
     __tablename__ = "barcodes"
 

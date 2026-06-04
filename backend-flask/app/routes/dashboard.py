@@ -2,7 +2,7 @@ from flask import Blueprint, render_template
 from sqlalchemy import func
 
 from ..extensions import db
-from ..models import Inventory, Order, Product, StockIn, StockOut, WarehouseLocation
+from ..models import CustomerSupportQuery, Inventory, Order, Product, StockIn, StockOut, WarehouseLocation
 from ..utils.order_payload import is_fast_delivery_order, order_automation_summary
 from ..utils.time import india_today_start
 from .auth import accessible_warehouses, get_current_user, login_required, selected_warehouse, user_has_role
@@ -50,6 +50,7 @@ def dashboard():
     express_orders = sum(1 for item in active_order_summaries if item["is_express"])
     auto_discount_orders = sum(1 for item in active_order_summaries if item["auto_discount"] > 0)
     auto_discount_total = sum(item["auto_discount"] for item in active_order_summaries)
+    open_support_queries = CustomerSupportQuery.query.filter(CustomerSupportQuery.status != "resolved").count()
     courier_pending_orders = []
     if user_has_role(user, "manager", "staff"):
         courier_pending_query = Order.query.filter(
@@ -95,6 +96,7 @@ def dashboard():
         express_orders=express_orders,
         auto_discount_orders=auto_discount_orders,
         auto_discount_total=auto_discount_total,
+        open_support_queries=open_support_queries,
         courier_pending_orders=courier_pending_orders,
         top_selling_rows=top_selling_rows,
         recent_inventory=recent_inventory,

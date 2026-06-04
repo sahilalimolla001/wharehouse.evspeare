@@ -24,6 +24,7 @@
           <a class="nav-link {% if request.endpoint == 'stock.inventory' %}active{% endif %}" href="{{ url_for('stock.inventory') }}">Inventory</a>
           <a class="nav-link {% if request.endpoint in ['stock.warehouse_locations', 'stock.add_location'] %}active{% endif %}" href="{{ url_for('stock.warehouse_locations') }}">Locations</a>
           <a class="nav-link {% if request.endpoint in ['orders.orders', 'orders.add_order', 'orders.order_detail'] %}active{% endif %}" href="{{ url_for('orders.orders') }}">Orders</a>
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('support.') %}active{% endif %}" href="{{ url_for('support.support_queries') }}">Support Queries</a>
           <a class="nav-link {% if request.endpoint == 'orders.fast_delivery_orders' %}active{% endif %}" href="{{ url_for('orders.fast_delivery_orders') }}">Fast Delivery</a>
           <a class="nav-link {% if request.endpoint == 'users.picker_ops' %}active{% endif %}" href="{{ url_for('users.picker_ops') }}">Picker Ops</a>
           <a class="nav-link {% if request.endpoint and request.endpoint.startswith('users.pick_transfer') %}active{% endif %}" href="{{ url_for('users.pick_transfer') }}">Pick Transfer</a>

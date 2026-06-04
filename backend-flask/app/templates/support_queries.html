@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block page_title %}Support Queries{% endblock %}
+
+{% block content %}
+  <section class="metric-grid mb-3">
+    <a class="metric-card text-decoration-none text-reset {% if active_status == 'open' %}express{% endif %}" href="{{ url_for('support.support_queries') }}">
+      <span>Open</span>
+      <strong>{{ counts.open }}</strong>
+    </a>
+    <a class="metric-card text-decoration-none text-reset {% if active_status == 'new' %}warning{% endif %}" href="{{ url_for('support.support_queries', status='new') }}">
+      <span>New</span>
+      <strong>{{ counts.new }}</strong>
+    </a>
+    <a class="metric-card text-decoration-none text-reset {% if active_status == 'in_progress' %}express{% endif %}" href="{{ url_for('support.support_queries', status='in_progress') }}">
+      <span>In Progress</span>
+      <strong>{{ counts.in_progress }}</strong>
+    </a>
+    <a class="metric-card text-decoration-none text-reset {% if active_status == 'resolved' %}success{% endif %}" href="{{ url_for('support.support_queries', status='resolved') }}">
+      <span>Resolved</span>
+      <strong>{{ counts.resolved }}</strong>
+    </a>
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Customer Support Inbox</h2>
+        <p class="text-secondary mb-0">Queries submitted from the Ev Speare customer app.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Query</th>
+            <th>Source</th>
+            <th>Received</th>
+            <th>Status</th>
+            <th class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for query in queries %}
+            <tr>
+              <td>
+                <strong>{{ query.customer_name }}</strong>
+                <div><a href="tel:+91{{ query.customer_phone }}">+91 {{ query.customer_phone }}</a></div>
+                {% if query.external_id %}<code>{{ query.external_id }}</code>{% endif %}
+              </td>
+              <td style="min-width: 280px;">{{ query.message }}</td>
+              <td><span class="badge text-bg-light">{{ query.source|replace("_", " ")|title }}</span></td>
+              <td>{{ query.created_at.strftime("%d %b %Y, %I:%M %p") if query.created_at else "-" }}</td>
+              <td>
+                {% set badge = "success" if query.status == "resolved" else "warning" if query.status == "new" else "primary" %}
+                <span class="badge text-bg-{{ badge }}">{{ query.status|replace("_", " ")|title }}</span>
+              </td>
+              <td class="text-end">
+                <form method="post" action="{{ url_for('support.update_support_query_status', query_id=query.id, status=active_status) }}" class="d-inline-flex gap-2">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <select class="form-select form-select-sm" name="status" aria-label="Update query status">
+                    <option value="new" {% if query.status == "new" %}selected{% endif %}>New</option>
+                    <option value="in_progress" {% if query.status == "in_progress" %}selected{% endif %}>In progress</option>
+                    <option value="resolved" {% if query.status == "resolved" %}selected{% endif %}>Resolved</option>
+                  </select>
+                  <button class="btn btn-sm btn-primary" type="submit">Save</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="text-secondary">No support query found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

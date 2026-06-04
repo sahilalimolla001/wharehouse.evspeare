@@ -13,6 +13,7 @@ def register_blueprints(app):
     from .shiprocket import shiprocket_bp
     from .stock import stock_bp
     from .suppliers import suppliers_bp
+    from .support import support_bp
     from .users import users_bp
 
     app.register_blueprint(auth_bp)
@@ -23,6 +24,7 @@ def register_blueprints(app):
     app.register_blueprint(products_bp)
     app.register_blueprint(suppliers_bp)
     app.register_blueprint(stock_bp)
+    app.register_blueprint(support_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(shiprocket_bp)
     app.register_blueprint(returns_bp)
