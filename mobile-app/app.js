@@ -70,10 +70,41 @@ document.addEventListener("DOMContentLoaded", async () => {
   await autoConnectApi();
   initializeSession();
 
-  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  initializeAppUpdates();
 });
+
+function initializeAppUpdates() {
+  $("#reload-update")?.addEventListener("click", applyAppUpdate);
+  if (!("serviceWorker" in navigator) || !location.protocol.startsWith("http")) return;
+  navigator.serviceWorker.register("sw.js").then((registration) => {
+    if (registration.waiting) showAppUpdateBanner();
+    registration.addEventListener("updatefound", () => {
+      const worker = registration.installing;
+      if (!worker) return;
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "installed" && navigator.serviceWorker.controller) showAppUpdateBanner();
+      });
+    });
+  }).catch(() => {});
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+}
+
+function showAppUpdateBanner() {
+  const banner = $("#update-banner");
+  if (banner) banner.hidden = false;
+}
+
+function applyAppUpdate() {
+  navigator.serviceWorker?.getRegistration?.().then((registration) => {
+    if (registration?.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    else window.location.reload();
+  }).catch(() => window.location.reload());
+}
 
 function bindNavigation() {
   $("#menu-btn")?.addEventListener("click", openDrawer);
@@ -792,10 +823,36 @@ function renderOrderQueue() {
     return;
   }
 
-  target.innerHTML = orders.map(orderCardHtml).join("");
+  target.innerHTML = `${queueSummaryHtml(orders)}${orders.map(orderCardHtml).join("")}`;
   target.querySelectorAll("[data-start-order]").forEach((card) => {
     card.addEventListener("click", () => startOrder(Number(card.dataset.startOrder)));
   });
+}
+
+function queueSummaryHtml(orders) {
+  const urgent = orders.filter((order) => isUrgentOrder(order)).length;
+  const due = orders.filter((order) => slaMinutesLeft(order) <= 0).length;
+  const next = orders[0];
+  const nextItem = nextPickItem(next);
+  return `
+    <article class="queue-summary">
+      <div>
+        <span>Next action</span>
+        <strong>${next ? escapeHtml(orderShortCode(next)) : "--"}</strong>
+        <small>${nextItem ? escapeHtml(itemLabel(nextItem)) : "Route ready"}</small>
+      </div>
+      <div>
+        <span>Urgent</span>
+        <strong>${urgent}</strong>
+        <small>${due ? `${due} due now` : "SLA ok"}</small>
+      </div>
+      <div>
+        <span>Route</span>
+        <strong>${escapeHtml(routeKey(next) || "--")}</strong>
+        <small>${orders.length} open picks</small>
+      </div>
+    </article>
+  `;
 }
 
 function filteredPickOrders() {
@@ -872,7 +929,7 @@ function saveAutomationSettings() {
 }
 
 function renderQuickOps() {
-  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status));
+  const pickOrders = store.orders.filter((order) => ["pending", "picking"].includes(order.status)).filter(orderBelongsToCurrentPicker);
   const next = filteredPickOrders()[0];
   const exceptions = exceptionOrders();
   const slaRisk = pickOrders.filter((order) => slaMinutesLeft(order) <= 10).length;
@@ -887,6 +944,7 @@ function maybeNotifySlaRisk(count, nextOrder) {
   if (!store.automationSettings.slaAlerts || !count || !("Notification" in window) || Notification.permission !== "granted") return;
   if (Date.now() - lastSlaAlertAt < 120000) return;
   lastSlaAlertAt = Date.now();
+  if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
   new Notification("Picker SLA alert", {
     body: `${count} order SLA risk me hai. Next: ${nextOrder ? orderShortCode(nextOrder) : "open queue"}`,
   });
@@ -1313,6 +1371,11 @@ function orderPriorityScore(order) {
   return statusBoost + urgentBoost + slaBoost + sizeBoost + routeBoost;
 }
 
+function isUrgentOrder(order) {
+  const priority = String(order?.priority || "").toLowerCase();
+  return priority === "urgent" || priority === "high" || order?.automation?.is_express || slaMinutesLeft(order) <= 10;
+}
+
 function slaMinutesLeft(order) {
   const candidates = [
     order.sla_at,
@@ -1658,24 +1721,36 @@ function orderCardHtml(order) {
   const progress = totalQty ? Math.round((pickedQty / totalQty) * 100) : 0;
   const sla = slaMinutesLeft(order);
   const auto = order.automation || {};
+  const urgent = isUrgentOrder(order);
   return `
-    <article class="order-card tappable" data-start-order="${order.id}">
+    <article class="order-card tappable ${urgent ? "urgent-order" : ""}" data-start-order="${order.id}">
       <div class="order-top">
         <div>
           <strong>${escapeHtml(order.order_number)}</strong>
           <span>${escapeHtml(order.customer_name)} · ${escapeHtml(routeKey(order) || "bin pending")}</span>
         </div>
-        <span class="badge ${order.priority === "urgent" || auto.is_express ? "warn" : ""}">${escapeHtml(auto.is_express ? "Express" : order.priority)}</span>
+        <span class="badge ${urgent ? "warn" : ""}">${escapeHtml(auto.is_express ? "Express" : order.priority || order.status)}</span>
       </div>
       <div class="progress-line"><span style="width:${progress}%"></span></div>
       <div class="order-meta">
         <span>${items.length} SKUs</span>
         <span>${pickedQty}/${totalQty} picked</span>
         <span>${sla <= 0 ? "SLA due" : `${sla} min left`}</span>
+        <span>${escapeHtml(order.pincode || "PIN NA")}</span>
+        <span>${escapeHtml(paymentLabel(order))}</span>
+        <span>${escapeHtml(addressLabel(order))}</span>
       </div>
       <div class="order-cta">${order.status === "pending" ? "Start pick route" : "Continue pick route"}</div>
     </article>
   `;
+}
+
+function paymentLabel(order) {
+  return order.payment_method || order.payment_status || order.paymentMode || "Payment";
+}
+
+function addressLabel(order) {
+  return order.customer_phone || order.phone || order.address_line || order.address || "Customer";
 }
 
 async function startOrder(orderId, options = {}) {
@@ -1784,7 +1859,9 @@ function renderActiveOrder() {
     renderActiveOrder();
     toast("Scan another bin.");
   });
-  $("#mark-packed").disabled = !order.items.every((item) => item.picked_quantity >= item.quantity);
+  const readyToPack = orderFullyPicked(order);
+  $("#mark-packed").disabled = !readyToPack;
+  $("#mark-packed").textContent = readyToPack ? "Mark Packed" : "Pick all items";
 }
 
 function renderPickBinCard(order) {
@@ -1932,6 +2009,11 @@ async function autoPackActiveOrder() {
 async function markActiveOrderPacked(options = {}) {
   const order = activeOrder();
   if (!order) return;
+  if (!orderFullyPicked(order)) {
+    toast("All items pick hone ke baad hi pack hoga.");
+    renderActiveOrder();
+    return;
+  }
   try {
     for (const item of order.items) {
       await apiFetch(`/orders/${order.id}/items/${item.id}/pack`, { method: "POST", body: { quantity: item.quantity } });
