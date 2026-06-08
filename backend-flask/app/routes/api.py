@@ -2305,8 +2305,39 @@ def find_product_from_payload(data, required=False):
 
     identifier = None
     if isinstance(data, dict):
-        identifier = data.get("product") or data.get("sku") or data.get("product_sku") or data.get("barcode")
-    return find_product(identifier=identifier, required=required)
+        identifier = data.get("sku") or data.get("product_sku") or data.get("barcode")
+        product = find_product(identifier=identifier, required=False)
+        if product:
+            return product
+
+        product_payload = data.get("product") if isinstance(data.get("product"), dict) else {}
+        title = (
+            data.get("product")
+            if isinstance(data.get("product"), str)
+            else data.get("title")
+            or data.get("name")
+            or data.get("productName")
+            or data.get("product_name")
+            or product_payload.get("name")
+            or product_payload.get("title")
+        )
+        product = find_product_by_name(title)
+        if product:
+            return product
+
+    if required:
+        raise ValueError("Product not found")
+    return None
+
+
+def find_product_by_name(name):
+    value = trim_text(name, 180)
+    if not value:
+        return None
+    product = Product.query.filter(Product.name.ilike(value)).first()
+    if product:
+        return product
+    return Product.query.filter(Product.name.ilike(f"%{value}%")).order_by(Product.id).first()
 
 
 def find_product(identifier=None, required=False):
