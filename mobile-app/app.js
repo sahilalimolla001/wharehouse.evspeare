@@ -29,6 +29,7 @@ const store = {
   stockTakes: JSON.parse(localStorage.getItem("warehouseStockTakes") || "[]"),
   preferences: JSON.parse(localStorage.getItem("warehousePickerPreferences") || "{}"),
   breakMode: localStorage.getItem("warehouseBreakMode") === "true",
+  lastSyncAt: localStorage.getItem("warehouseLastSyncAt") || "",
 };
 
 let videoStream = null;
@@ -66,6 +67,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindActions();
   bindConnectivity();
   renderConnectionState();
+  renderSyncStatus();
   initializeBackNavigation();
   await autoConnectApi();
   initializeSession();
@@ -257,6 +259,25 @@ function renderConnectionState() {
   button.classList.toggle("offline", !online);
   button.setAttribute("aria-pressed", online ? "true" : "false");
   document.body.classList.toggle("offline-mode", !online);
+  renderSyncStatus();
+}
+
+function markSynced() {
+  store.lastSyncAt = new Date().toISOString();
+  localStorage.setItem("warehouseLastSyncAt", store.lastSyncAt);
+  renderSyncStatus();
+}
+
+function renderSyncStatus() {
+  const node = $("#sync-pill");
+  if (!node) return;
+  if (!isOnlineMode() || !isPickerOnline()) {
+    node.textContent = "Offline cache";
+    node.classList.add("warn");
+    return;
+  }
+  node.classList.toggle("warn", !store.lastSyncAt);
+  node.textContent = store.lastSyncAt ? `Sync ${timeAgo(store.lastSyncAt)}` : "Sync pending";
 }
 
 function beginScanFill(target) {
@@ -568,6 +589,7 @@ async function refreshAll() {
   renderTools();
   renderStockTakes();
   if (canOpenPickerScreen("orders-screen")) await runAutoPilot();
+  markSynced();
 }
 
 function startAutoRefresh() {
@@ -615,6 +637,7 @@ async function loadOrders() {
     renderOrderQueue();
     renderQuickOps();
     renderBatchGroups();
+    renderOrdersRoutePlan();
     renderOpsAutomation();
     renderHub();
     renderDispatchQueue();
@@ -817,6 +840,7 @@ function currentWarehouseName() {
 function renderOrderQueue() {
   const orders = filteredPickOrders();
   const target = $("#order-queue");
+  renderOrdersRoutePlan();
   $("#orders-screen")?.classList.toggle("no-picks", !orders.length);
   if (!orders.length) {
     target.innerHTML = `<div class="empty-state">No picks assigned. Online raho, next order auto assign hoga.</div>`;
@@ -937,7 +961,34 @@ function renderQuickOps() {
   $("#m-next-pick").textContent = next ? orderShortCode(next) : "--";
   $("#m-route-score").textContent = routeScore(pickOrders);
   $("#m-exceptions").textContent = exceptions.length;
+  renderOrdersRoutePlan();
   maybeNotifySlaRisk(slaRisk, next);
+}
+
+function renderOrdersRoutePlan() {
+  const target = $("#orders-route-plan");
+  if (!target) return;
+  const stops = routeStops().slice(0, 5);
+  if (!stops.length) {
+    target.innerHTML = `
+      <div>
+        <span>Route plan</span>
+        <strong>Bin data pending</strong>
+        <small>Order items me location aate hi sequence banega.</small>
+      </div>
+      <button type="button" disabled>Copy</button>
+    `;
+    return;
+  }
+  target.innerHTML = `
+    <div>
+      <span>Route plan</span>
+      <strong>${stops.length} bin stops</strong>
+      <small>${escapeHtml(stops.map((stop) => stop.bin).join(" -> "))}</small>
+    </div>
+    <button type="button" id="copy-orders-route">Copy</button>
+  `;
+  $("#copy-orders-route")?.addEventListener("click", copyRoutePlan);
 }
 
 function maybeNotifySlaRisk(count, nextOrder) {

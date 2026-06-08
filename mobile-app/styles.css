@@ -148,6 +148,24 @@ h2 {
   font-weight: 950;
 }
 
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin-left: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e6eee5;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 950;
+}
+
+.sync-pill.warn {
+  background: #fff1d6;
+  color: #9a4d00;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -626,6 +644,37 @@ input[type="file"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
+}
+
+.route-plan-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(16, 37, 30, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.route-plan-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.route-plan-card span,
+.route-plan-card small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.route-plan-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-list,
@@ -1283,6 +1332,7 @@ input[type="file"] {
   .shift-card,
   .shift-actions,
   .ops-toolbar,
+  .route-plan-card,
   .automation-hero,
   .handoff-banner,
   .handoff-checklist {
