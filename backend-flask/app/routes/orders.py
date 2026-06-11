@@ -1,6 +1,7 @@
 import json
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
+from sqlalchemy import or_
 
 from ..extensions import db
 from ..models import Order, OrderItem, Product, User
@@ -32,14 +33,37 @@ def orders():
 def fast_delivery_orders():
     user = get_current_user()
     warehouse = selected_warehouse(user)
-    query = Order.query.filter(Order.status.in_(["pending", "picking", "packed", "dispatched"]))
+    fast_delivery_statuses = [
+        "pending",
+        "picking",
+        "packed",
+        "dispatched",
+        "ready_to_dispatch",
+        "dispatch_ready",
+        "confirmed",
+        "processing",
+        "paid",
+        "pending_cod",
+        "payment_initiated",
+    ]
+    query = Order.query.filter(Order.status.in_(fast_delivery_statuses))
     if warehouse:
         query = query.filter(Order.warehouse_id == warehouse.id)
     if not can_manage_all_orders(user):
         query = query.filter(Order.assigned_to_id == user.id)
+    query = query.filter(
+        or_(
+            Order.priority == "urgent",
+            Order.source_payload.ilike('%"mode":"fast"%'),
+            Order.source_payload.ilike("%express%"),
+            Order.source_payload.ilike("%Fast delivery%"),
+            Order.source_payload.ilike("%fastDelivery%"),
+            Order.source_payload.ilike("%fast_delivery%"),
+        )
+    )
     orders_list = [
         order
-        for order in query.order_by(Order.created_at.desc()).limit(500).all()
+        for order in query.order_by(Order.created_at.desc()).limit(2000).all()
         if is_fast_delivery_order(order)
     ]
     automation_by_order = {order.id: order_automation_summary(order) for order in orders_list}
