@@ -1888,6 +1888,7 @@ def create_order_from_integration(data):
 
     existing = Order.query.filter_by(external_source=source, external_order_id=external_order_id).first()
     if existing:
+        apply_fast_delivery_metadata(existing, data)
         return existing, False
 
     order_number = trim_text(
@@ -1951,6 +1952,16 @@ def create_order_from_integration(data):
         meta={"source": source, "external_order_id": external_order_id},
     )
     return order, True
+
+
+def apply_fast_delivery_metadata(order, data):
+    automation = order_automation_summary(data)
+    if not automation["is_express"]:
+        return
+    order.priority = "urgent"
+    if order.status not in {"picking", "packed", "dispatched", "completed", "delivered", "cancelled", "cancel"}:
+        order.status = "pending"
+    order.source_payload = json.dumps(data, default=str, separators=(",", ":"))[:20000]
 
 
 def sync_sale_transaction_payment(invoice, data):
