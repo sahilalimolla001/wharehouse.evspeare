@@ -3050,8 +3050,8 @@ def integration_delivery_orders():
         limit = min(int(request.args.get("limit") or 100), 500)
     except (TypeError, ValueError):
         limit = 100
-    statuses = request.args.get("statuses") or "pending,picking,packed,ready_to_dispatch,dispatch_ready,confirmed,processing,paid,pending_cod,payment_initiated"
-    status_list = [item.strip() for item in statuses.split(",") if item.strip()]
+    statuses = str(request.args.get("statuses") or "pending,picking,packed,ready_to_dispatch,dispatch_ready,confirmed,processing,paid,pending_cod,payment_initiated").lower()
+    status_list = [] if statuses in {"all", "*", "any"} else [item.strip() for item in statuses.split(",") if item.strip()]
 
     query = Order.query.order_by(Order.created_at.desc())
     if status_list:
