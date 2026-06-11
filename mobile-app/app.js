@@ -2647,11 +2647,15 @@ function resetMoveSelection() {
 
 function productImageSrc(product) {
   const raw = product?.image_display_url || product?.image_url || "";
-  if (!raw || raw.startsWith("gs://")) return "";
+  if (!raw) return "";
   if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
 
   try {
     const apiUrl = new URL(store.apiBase);
+    if (raw.startsWith("gs://") && product?.id) {
+      return new URL(`/api/products/${encodeURIComponent(product.id)}/image`, `${apiUrl.protocol}//${apiUrl.host}`).href;
+    }
+    if (raw.startsWith("gs://")) return "";
     return new URL(raw, `${apiUrl.protocol}//${apiUrl.host}`).href;
   } catch {
     return raw;

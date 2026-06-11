@@ -1461,6 +1461,15 @@ def api_order_label(order_id):
     order = Order.query.get_or_404(order_id)
     if not can_access_order(current_api_user(), order):
         return jsonify({"ok": False, "message": "Permission denied for this order"}), 403
+    if is_fast_delivery_order(order):
+        return jsonify(
+            {
+                "ok": True,
+                "label_url": "",
+                "order": serialize_order(order),
+                "shiprocket": {"created": False, "skipped": True, "message": "Fast delivery orders are handled locally"},
+            }
+        )
     try:
         result = ensure_shiprocket_label(order, user_id=current_api_user_id(), package_input=data)
         db.session.commit()
