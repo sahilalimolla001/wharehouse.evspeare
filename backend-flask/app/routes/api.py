@@ -31,6 +31,81 @@ from ..utils.shiprocket import cancel_shiprocket_order
 api_bp = Blueprint("api", __name__)
 
 
+def serialize_delivery_order(order):
+    payload = {}
+    if order.source_payload:
+        try:
+            payload = json.loads(order.source_payload)
+        except (TypeError, ValueError):
+            payload = {}
+    summary = order_automation_summary(payload)
+    payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else {}
+    amounts = payload.get("amounts") if isinstance(payload.get("amounts"), dict) else {}
+    billing_address = payload.get("billing_address") or payload.get("billingAddress") or {}
+    shipping_address = payload.get("shipping_address") or payload.get("shippingAddress") or {}
+    warehouse = order.warehouse
+
+    return {
+        "source": "warehouse",
+        "external_order_id": str(order.id),
+        "order_number": order.order_number,
+        "customer_name": order.customer_name,
+        "customer_phone": order.customer_phone,
+        "customer_address": order.customer_address,
+        "billing_address": billing_address,
+        "shipping_address": shipping_address,
+        "payment_method": order_payment_method(order, payment, payload),
+        "payment_status": payment.get("status") or payload.get("paymentStatus") or "",
+        "cod_amount": order_cod_amount(order, payment, amounts),
+        "total_amount": float(order.total_value or 0),
+        "delivery": {
+            "mode": summary["delivery_mode"],
+            "label": summary["delivery_label"],
+            "eta": summary["delivery_eta"],
+            "automation": summary["automation"],
+        },
+        "warehouse": {
+            "id": warehouse.id if warehouse else None,
+            "code": warehouse.code if warehouse else "",
+            "name": warehouse.name if warehouse else "Warehouse",
+            "phone": "",
+            "address": warehouse.address if warehouse else "",
+            "pincode": warehouse.pincode if warehouse else "",
+        },
+        "items": [
+            {
+                "sku": item.product.sku if item.product else "",
+                "name": item.product.name if item.product else "Item",
+                "quantity": item.quantity,
+                "unit_price": float(item.unit_price or 0),
+                "unit": item.product.unit if item.product else "pcs",
+                "image_url": item.product.image_url if item.product else "",
+            }
+            for item in order.items
+        ],
+        "raw": payload,
+    }
+
+
+def order_payment_method(order, payment, payload):
+    method = order.source_payload and (payment.get("method") or payload.get("paymentMethod"))
+    if method:
+        return str(method)
+    return str(payload.get("payment_method") or "")
+
+
+def order_cod_amount(order, payment, amounts):
+    method = str(payment.get("method") or "").lower()
+    if method != "cod":
+        return 0
+    try:
+        return float(payment.get("collectAmount") or amounts.get("total") or order.total_value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+
+
 @api_bp.after_request
 def add_api_headers(response):
     origin = request.headers.get("Origin")
@@ -2941,3 +3016,29 @@ def serialize_payment_refund(refund):
         "approved_at": india_iso(refund.approved_at),
         "approved_by": refund.approved_by.full_name if refund.approved_by else "",
     }
+
+
+@api_bp.route("/integrations/delivery-orders", methods=["GET", "OPTIONS"])
+@integration_key_required
+def integration_delivery_orders():
+    delivery_filter = str(request.args.get("delivery") or "fast").lower()
+    try:
+        limit = min(int(request.args.get("limit") or 100), 500)
+    except (TypeError, ValueError):
+        limit = 100
+    statuses = request.args.get("statuses") or "packed,ready_to_dispatch,dispatch_ready,pending"
+    status_list = [item.strip() for item in statuses.split(",") if item.strip()]
+
+    query = Order.query.order_by(Order.created_at.desc())
+    if status_list:
+        query = query.filter(Order.status.in_(status_list))
+    orders = query.limit(limit).all()
+
+    if delivery_filter in {"fast", "express"}:
+        orders = [order for order in orders if is_fast_delivery_order(order)]
+
+    return jsonify({
+        "ok": True,
+        "count": len(orders),
+        "orders": [serialize_delivery_order(order) for order in orders],
+    })
