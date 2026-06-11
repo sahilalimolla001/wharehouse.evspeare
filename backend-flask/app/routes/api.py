@@ -3035,16 +3035,29 @@ def integration_delivery_orders():
         limit = min(int(request.args.get("limit") or 100), 500)
     except (TypeError, ValueError):
         limit = 100
-    statuses = request.args.get("statuses") or "packed,ready_to_dispatch,dispatch_ready,pending"
+    statuses = request.args.get("statuses") or "pending,picking,packed,ready_to_dispatch,dispatch_ready,confirmed,processing,paid,pending_cod,payment_initiated"
     status_list = [item.strip() for item in statuses.split(",") if item.strip()]
 
     query = Order.query.order_by(Order.created_at.desc())
     if status_list:
         query = query.filter(Order.status.in_(status_list))
-    orders = query.limit(limit).all()
-
     if delivery_filter in {"fast", "express"}:
+        query = query.filter(
+            or_(
+                Order.priority == "urgent",
+                Order.source_payload.ilike('%"mode":"fast"%'),
+                Order.source_payload.ilike("%express%"),
+                Order.source_payload.ilike("%Fast delivery%"),
+                Order.source_payload.ilike("%fastDelivery%"),
+                Order.source_payload.ilike("%fast_delivery%"),
+            )
+        )
+        candidate_limit = min(max(limit * 5, 500), 2000)
+        orders = query.limit(candidate_limit).all()
         orders = [order for order in orders if is_fast_delivery_order(order)]
+        orders = orders[:limit]
+    else:
+        orders = query.limit(limit).all()
 
     return jsonify({
         "ok": True,

@@ -23,14 +23,36 @@ def order_automation_summary(order_or_payload):
     payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else {}
 
     auto_discount = money_number(amounts.get("autoDiscount") or promotions.get("autoDiscount"))
-    delivery_mode = str(delivery.get("mode") or "").lower()
-    automation = str(delivery.get("automation") or "").lower()
-    is_express = delivery_mode == "fast" or "express" in automation
+    delivery_mode = clean_text(
+        delivery.get("mode")
+        or delivery.get("type")
+        or delivery.get("speed")
+        or payload.get("deliveryMode")
+        or payload.get("delivery_mode")
+    )
+    delivery_label = str(
+        delivery.get("label")
+        or payload.get("deliveryLabel")
+        or payload.get("delivery_label")
+        or ""
+    ).strip()
+    automation = clean_text(
+        delivery.get("automation")
+        or payload.get("deliveryAutomation")
+        or payload.get("delivery_automation")
+    )
+    delivery_text = " ".join([delivery_mode, clean_text(delivery_label), automation])
+    is_express = (
+        delivery_mode in {"fast", "express", "quick", "same_day", "same-day"}
+        or any(token in delivery_text for token in ["fast", "express", "quick", "same day", "same-day"])
+        or payload.get("fastDelivery") is True
+        or payload.get("fast_delivery") is True
+    )
 
     return {
         "is_express": is_express,
         "delivery_mode": delivery_mode or "standard",
-        "delivery_label": delivery.get("label") or ("Fast delivery" if is_express else "Standard delivery"),
+        "delivery_label": delivery_label or ("Fast delivery" if is_express else "Standard delivery"),
         "delivery_eta": delivery.get("estimatedDays") or "",
         "automation": automation,
         "auto_discount": auto_discount,
@@ -52,3 +74,7 @@ def money_number(value):
         return float(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def clean_text(value):
+    return str(value or "").strip().lower()
